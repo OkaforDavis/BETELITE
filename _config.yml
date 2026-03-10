@@ -1,0 +1,10 @@
+theme: null
+plugins: []
+
+# GitHub Pages Configuration
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+# Tell GitHub Pages to use docs folder
