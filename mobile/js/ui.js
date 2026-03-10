@@ -89,6 +89,46 @@ class UIController {
         const listEl = document.getElementById('tournamentsList');
         listEl.innerHTML = '<div class="spinner"></div>';
 
+        // Check for demo mode
+        if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+            const demoTournaments = JSON.parse(sessionStorage.getItem('demoTournaments') || '[]');
+            if (demoTournaments.length === 0) {
+                listEl.innerHTML = '<div class="empty-state">No tournaments available</div>';
+                return;
+            }
+
+            // Filter by current game if needed
+            const filtered = demoTournaments.filter(t => !this.currentGame || t.game === this.currentGame);
+
+            listEl.innerHTML = filtered.map(t => `
+                <div class="tournament-item" onclick="ui.joinTournament('${t.id}')">
+                    <div class="match-header">
+                        <span class="match-status">${t.status.toUpperCase()}</span>
+                        <span>${t.entrants} players</span>
+                    </div>
+                    <div class="match-teams">
+                        <div class="team-info">
+                            <span class="team-logo">${t.teams.team1.logo}</span>
+                            <div class="team-name">${t.teams.team1.name}</div>
+                            <div class="team-score">${t.teams.team1.score}</div>
+                        </div>
+                        <div class="vs">VS</div>
+                        <div class="team-info">
+                            <span class="team-logo">${t.teams.team2.logo}</span>
+                            <div class="team-name">${t.teams.team2.name}</div>
+                            <div class="team-score">${t.teams.team2.score}</div>
+                        </div>
+                    </div>
+                    <div class="match-meta">
+                        <span>₦${t.minBet}-₦${t.maxBet}</span>
+                        <span>Prize: ${t.prize}</span>
+                        <span class="time-remaining">${t.timeRemaining}</span>
+                    </div>
+                </div>
+            `).join('');
+            return;
+        }
+
         const gameModule = this.currentGame === CONFIG.GAMES.EFOOTBALL ? eFootball : dls;
         const result = await gameModule.getTournaments();
 
@@ -129,6 +169,38 @@ class UIController {
         const poolsEl = document.getElementById('bettingPools');
         poolsEl.innerHTML = '<div class="spinner"></div>';
 
+        // Check for demo mode
+        if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+            const demoBets = JSON.parse(sessionStorage.getItem('demoBets') || '[]');
+            if (demoBets.length === 0) {
+                poolsEl.innerHTML = '<div class="empty-state">No active betting pools</div>';
+                return;
+            }
+
+            poolsEl.innerHTML = demoBets.map(b => `
+                <div class="bet-item">
+                    <div class="match-header">
+                        <span class="match-status">${b.status.toUpperCase()}</span>
+                        <span>${b.tournament}</span>
+                    </div>
+                    <div class="match-teams">
+                        <div class="team-info">
+                            <div class="team-name">${b.team}</div>
+                        </div>
+                    </div>
+                    <div class="match-meta">
+                        <span>Bet: ₦${b.amount}</span>
+                        <span>Odds: ${b.odds}</span>
+                        <span>Potential: ₦${b.potential}</span>
+                    </div>
+                    <button class="btn btn-primary" onclick="ui.openBettingModal('${b.id}')">
+                        Details
+                    </button>
+                </div>
+            `).join('');
+            return;
+        }
+
         const result = await api.getActiveBets();
 
         if (result.error) {
@@ -166,6 +238,43 @@ class UIController {
     async loadSpectators() {
         const listEl = document.getElementById('spectatorList');
         listEl.innerHTML = '<div class="spinner"></div>';
+
+        // Check for demo mode
+        if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+            const demoTournaments = JSON.parse(sessionStorage.getItem('demoTournaments') || '[]');
+            const liveMatches = demoTournaments.filter(t => t.status === 'live');
+
+            if (liveMatches.length === 0) {
+                listEl.innerHTML = '<div class="empty-state">No live matches to watch</div>';
+                return;
+            }
+
+            listEl.innerHTML = liveMatches.map(m => `
+                <div class="spectator-item" onclick="ui.startWatching('${m.id}')">
+                    <div class="match-header">
+                        <span>${m.name}</span>
+                        <span class="time-remaining">${m.timeRemaining}</span>
+                    </div>
+                    <div class="match-teams">
+                        <div class="team-info">
+                            <span class="team-logo">${m.teams.team1.logo}</span>
+                            <div class="team-name">${m.teams.team1.name}</div>
+                            <div class="team-score">${m.teams.team1.score}</div>
+                        </div>
+                        <div class="vs">VS</div>
+                        <div class="team-info">
+                            <span class="team-logo">${m.teams.team2.logo}</span>
+                            <div class="team-name">${m.teams.team2.name}</div>
+                            <div class="team-score">${m.teams.team2.score}</div>
+                        </div>
+                    </div>
+                    <div class="match-meta">
+                        <span>👁️ ${Math.floor(Math.random() * 500) + 50} watching</span>
+                    </div>
+                </div>
+            `).join('');
+            return;
+        }
 
         // Load live matches available to spectate
         const gameModule = this.currentGame === CONFIG.GAMES.EFOOTBALL ? eFootball : dls;

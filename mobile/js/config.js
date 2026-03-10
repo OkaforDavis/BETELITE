@@ -11,7 +11,10 @@ const CONFIG = {
     RECONNECT_DELAY: 3000,
     CHAT_MAX_LENGTH: 150,
     MATCH_UPDATE_INTERVAL: 1000,
-    HEARTBEAT_INTERVAL: 30000
+    HEARTBEAT_INTERVAL: 30000,
+    // Demo mode for GitHub Pages
+    DEMO_MODE: !window.location.hostname.includes('localhost'),
+    IS_GITHUB_PAGES: window.location.hostname.includes('github.io')
 };
 
 // Expose globally
