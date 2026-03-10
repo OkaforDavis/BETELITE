@@ -12,10 +12,12 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=*
+      - ALLOWED_ORIGINS=*
       - DATABASE_URL=postgresql://betelite:password@postgres:5432/betelite
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-secret-key-change-in-production
+      - CORS_ORIGIN=*
     depends_on:
       - postgres
       - redis
