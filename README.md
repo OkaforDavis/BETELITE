@@ -1,456 +1,186 @@
-# BETELITE - Mobile Gaming & Betting Platform
+# ⚽ BETELITE
 
-<div align="center">
+**Mobile Gaming & Betting Platform**
 
-![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue)
-
-⚽ **Real-time gaming tournaments with AI-powered detection, live betting, spectating, and instant chat**
-
-[🚀 Launch App](#quick-start) • [📖 Full Docs](MOBILE_README.md) • [🏗️ Architecture](ARCHITECTURE.md) • [📊 GitHub](https://github.com/OkaforDavis/BETELITE)
-
-</div>
+Real-time gaming tournaments with AI-powered detection, live betting, spectating, and instant chat.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### Docker (Recommended)
+### Using Docker (Recommended)
+
 ```bash
 git clone https://github.com/OkaforDavis/BETELITE.git
 cd BETELITE
 docker-compose up
 ```
 
-**Access:**
-- 📱 Mobile App: http://localhost:3000/mobile/
-- 🔗 API: http://localhost:3000/api/
-- 🤖 Detection: http://localhost:5000/
+Then open your browser:
+- **Mobile App**: http://localhost:3000/mobile/
+- **API**: http://localhost:3000/api/
+- **Detection**: http://localhost:5000/
 
-### Local Setup
+### Manual Setup
+
+**Terminal 1 - Backend:**
 ```bash
-# Terminal 1
-cd backend && npm install && npm run dev
-
-# Terminal 2
-cd detection_service && pip install -r requirements.txt && python app.py
-
-# Open browser
-http://localhost:3000/mobile/
+cd backend
+npm install
+npm run dev
 ```
+
+**Terminal 2 - Detection Service:**
+```bash
+cd detection_service
+pip install -r requirements.txt
+python app.py
+```
+
+**Open**: http://localhost:3000/mobile/
 
 ---
 
 ## ✨ Features
 
-## TECHNOLOGY STACK
-
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| **Backend** | PHP | 8.2+ |
-| **Database** | MySQL | 8.0+ |
-| **Web Server** | Apache/Nginx | Latest |
-| **Frontend** | HTML5/CSS3/JS | ES6+ |
-| **Payments** | Paystack/Flutterwave | Latest |
-| **Streaming** | Cloudflare/Mux | Latest |
+- 📱 **Mobile-First Design** - Optimized for phones, tablets, and desktop
+- ⚽ **Multi-Game Support** - eFootball, Dream League Soccer (more coming)
+- 💬 **Live Chat** - Real-time WebSocket communication
+- 💰 **Betting Pools** - Place bets on tournaments
+- 👁️ **Spectator Mode** - Watch live matches
+- 🤖 **AI Detection** - Python-powered goal/offside detection
+- 🔐 **Secure** - JWT authentication, rate limiting, CORS protection
 
 ---
 
-## PROJECT STRUCTURE
+## 📁 Project Structure
 
 ```
-betelite/
-├── index.php                    # Main entry point
-├── config.php                   # Configuration loader
-├── version.php                  # VERSION_GATE controller
-├── .env.example                 # Environment template
+BETELITE/
+├── mobile/              # Frontend web app
+│   ├── index.html      # Main app
+│   ├── css/            # Responsive styles
+│   └── js/             # Game logic
 │
-├── core/                        # CORE_LOCK: Foundation
-│   ├── bootstrap.php            # App initialization
-│   ├── security.php             # ZERO_TRUST layer
-│   ├── logger.php               # AUDIT_TRACE
-│   ├── validator.php            # Input validation
-│   ├── database.php             # PDO wrapper
-│   ├── router.php               # REST routing
-│   └── errors.php               # FAIL_SOFT
+├── backend/            # Node.js API
+│   ├── src/
+│   │   ├── server.ts   # Express server
+│   │   └── services/
+│   └── package.json
 │
-├── services/                    # Business logic
-│   ├── AuthService.php
-│   ├── WalletService.php        # Financial operations
-│   ├── TournamentService.php
-│   ├── PaymentService.php       # SAFE_SWAP
-│   └── BettingService.php       # VERSION 2.0+
+├── detection_service/  # Python AI
+│   ├── app.py
+│   └── requirements.txt
 │
-├── api/                         # REST endpoints
-│   ├── router.php
-│   └── [endpoint handlers]
+├── database/           # Schema
+│   └── schema.sql
 │
-├── admin/                       # Admin panel
-├── user/                        # User dashboard
-├── auth/                        # Auth pages
-│
-├── database/
-│   ├── schema.sql               # CORE_LOCK
-│   ├── seeds.sql
-│   └── migrations.sql
-│
-├── tests/                       # Test suite
-│   ├── TestFramework.php
-│   ├── unit/
-│   ├── integration/
-│   ├── security/
-│   └── penetration/
-│
-├── logs/                        # AUDIT_TRACE
-│   ├── betelite.log
-│   ├── audit.log
-│   └── errors.log
-│
-└── docs/
-    ├── ARCHITECTURE.md
-    ├── API.md
-    ├── DEPLOYMENT.md
-    ├── SECURITY.md
-    └── TESTING.md
+└── docker-compose.yml  # All services
 ```
 
 ---
 
-## QUICK START
+## 🎮 How to Use
 
-### 1. Prerequisites
+### Launch App
+Visit: http://localhost:3000/mobile/
 
-```bash
-# Check PHP version
-php -v  # Need 8.2+
+### Games
+- Select **eFootball** or **Dream League Soccer**
+- Join a tournament
+- Watch real-time matches with AI detection
 
-# Check MySQL version
-mysql --version  # Need 8.0+
+### Betting
+- Place bets on match outcomes
+- View odds and predictions
+- Track your winnings
 
-# Extensions needed
-php -m | grep pdo_mysql
+### Spectating
+- Watch live matches
+- Chat with other spectators
+- See AI detection events (goals, offsides)
+
+---
+
+## 🛠️ Technology Stack
+
+- **Frontend**: HTML5, CSS3, JavaScript (Vanilla)
+- **Backend**: Node.js, Express, TypeScript
+- **Real-time**: WebSocket (Socket.IO)
+- **Database**: PostgreSQL, Prisma ORM
+- **Cache**: Redis
+- **Detection**: Python, Flask, OpenCV
+- **Deployment**: Docker, Docker Compose
+
+---
+
+## 📱 Mobile Access
+
+### On Your Phone
+
+**Same Network (WiFi):**
+```
+Find your computer IP, then visit:
+http://<YOUR_IP>:3000/mobile/
 ```
 
-### 2. Install
+**Add to Home Screen:**
+- iOS: Safari → Share → Add to Home Screen
+- Android: Chrome → Menu → Install app
 
-```bash
-# Clone
-git clone https://github.com/betelite/betelite.git
-cd betelite
-
-# Configure
-cp .env.example .env
-nano .env  # Edit with your values
-
-# Setup database
-mysql < database/schema.sql
-
-# Create tables
-mysql -u betelite_user -p betelite_db < database/schema.sql
-```
-
-### 3. Configure Web Server
-
-**Nginx:**
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.betelite.example.com;
-    root /var/www/betelite;
-    index index.php;
-    
-    location ~ \.php$ {
-        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
-```
-
-### 4. Verify Installation
-
-```bash
-curl https://api.betelite.example.com/api/health
-
-# Expected response:
-# {"status":"ok","version":"1.0.0","timestamp":"2026-01-13T..."}
-```
+### Over Internet
+Use ngrok or deploy to a server
 
 ---
 
-## API QUICK REFERENCE
+## 📖 Documentation
 
-### Authentication
-
-```bash
-# Register
-curl -X POST https://api.betelite.example.com/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "username": "playerone",
-    "password": "SecureP@ss123",
-    "confirm_password": "SecureP@ss123"
-  }'
-
-# Login
-curl -X POST https://api.betelite.example.com/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecureP@ss123"
-  }'
-```
-
-### Wallet Operations
-
-```bash
-# Get wallet
-curl -H "Authorization: Bearer TOKEN" \
-  https://api.betelite.example.com/api/wallet
-
-# Deposit
-curl -X POST \
-  -H "Authorization: Bearer TOKEN" \
-  https://api.betelite.example.com/api/wallet/deposit \
-  -d '{"amount": 10000}'
-
-# Withdraw
-curl -X POST \
-  -H "Authorization: Bearer TOKEN" \
-  https://api.betelite.example.com/api/wallet/withdraw \
-  -d '{
-    "amount": 5000,
-    "method": "bank_transfer"
-  }'
-```
-
-### Tournaments
-
-```bash
-# Create
-curl -X POST \
-  -H "Authorization: Bearer TOKEN" \
-  https://api.betelite.example.com/api/tournaments \
-  -d '{
-    "game_id": 1,
-    "name": "FIFA Championship",
-    "max_participants": 64,
-    "entry_fee": 5000
-  }'
-
-# Register
-curl -X POST \
-  -H "Authorization: Bearer TOKEN" \
-  https://api.betelite.example.com/api/tournaments/1/register
-```
-
-See [API.md](API.md) for complete reference.
+- [Mobile README](MOBILE_README.md) - Full setup & features guide
+- [Architecture](ARCHITECTURE.md) - System design details
+- [GitHub](https://github.com/OkaforDavis/BETELITE) - Source code
 
 ---
 
-## ROADMAP
+## 🔐 Security
 
-### ✅ Version 1.0 (Current)
-- User authentication
-- Tournaments & matches
-- Streaming integration
-- Basic wallet system
-
-### 🔄 Version 1.5 (Q2 2026)
-- Full wallet operations
-- Deposit/withdrawal
-- Escrow management
-
-### ⏳ Version 2.0 (Q3 2026)
-- Betting engine
-- Live betting
-- Odds calculation
-
-### ⏳ Version 3.0 (Q4 2026)
-- Mobile API
-- Push notifications
-- Offline support
-
-### ⏳ Version 4.0 (Q1 2027)
-- AI anti-cheat
-- Advanced analytics
-- Sponsorship system
+- ✅ HTTPS in production
+- ✅ JWT token authentication
+- ✅ WebSocket token validation
+- ✅ Input sanitization
+- ✅ Rate limiting
+- ✅ CORS protection
+- ✅ SQL injection prevention
 
 ---
 
-## SECURITY
+## 🚀 Next Phase
 
-🔒 **BETELITE prioritizes security:**
-
-- ✅ ZERO_TRUST: All input validated
-- ✅ SQL Injection Prevention: Prepared statements only
-- ✅ XSS Prevention: HTML encoding
-- ✅ CSRF Protection: Token validation
-- ✅ Password Security: Argon2id hashing
-- ✅ Session Hardening: Secure cookies, regeneration
-- ✅ Rate Limiting: Brute force protection
-- ✅ Audit Logging: Immutable event trail
-- ✅ HTTPS Enforced: TLS 1.3+
-- ✅ Regular Audits: Monthly security reviews
-
-See [SECURITY.md](SECURITY.md) for details.
+- [ ] Live video streaming (Ant Media Server)
+- [ ] Screen sharing for spectators
+- [ ] Admin dashboard
+- [ ] Advanced AI detection
+- [ ] In-app payments
+- [ ] Native mobile apps
+- [ ] More games (FIFA, PES, etc.)
 
 ---
 
-## TESTING
+## 📊 Status
 
-**Comprehensive test suite included:**
-
-```bash
-# Run all tests
-php tests/TestFramework.php
-
-# Results:
-# Passed: 50+
-# Failed: 0
-# Coverage: 97%
-```
-
-Test categories:
-- ✅ Unit tests
-- ✅ Integration tests
-- ✅ Security tests
-- ✅ Penetration tests
-
-See [TESTING.md](TESTING.md) for test guide.
+- ✅ Version: 1.0.0
+- ✅ Status: Production Ready
+- ✅ License: MIT
+- ✅ Last Updated: March 2026
 
 ---
 
-## DEPLOYMENT
+## 💡 Support
 
-**Production-ready deployment:**
-
-```bash
-# 1. Prepare server
-apt-get install php8.2 mysql-server nginx
-
-# 2. Clone & configure
-git clone ...
-cp .env.example .env
-
-# 3. Setup database
-mysql < database/schema.sql
-
-# 4. Configure web server
-nano /etc/nginx/sites-available/betelite
-
-# 5. Enable HTTPS
-certbot certonly -d api.betelite.example.com
-
-# 6. Start services
-systemctl start nginx php8.2-fpm mysql
-
-# 7. Verify
-curl https://api.betelite.example.com/api/health
-```
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full guide.
+- GitHub Issues: [Report Bugs](https://github.com/OkaforDavis/BETELITE/issues)
+- Documentation: [Full Docs](MOBILE_README.md)
 
 ---
 
-## MONITORING
+**Made with ⚽ for gamers, by gamers**
 
-**Built-in monitoring:**
-
-```bash
-# Health check endpoint
-curl https://api.betelite.example.com/api/health
-
-# Check logs
-tail -f logs/betelite.log
-tail -f logs/audit.log
-
-# Database status
-mysqladmin status
-
-# Disk usage
-df -h
-```
-
----
-
-## DOCUMENTATION
-
-📚 **Complete documentation included:**
-
-| Document | Purpose |
-|----------|---------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System design & principles |
-| [API.md](API.md) | Complete API reference |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment & operations |
-| [SECURITY.md](SECURITY.md) | Security architecture & best practices |
-| [TESTING.md](TESTING.md) | Test suite & strategy |
-
----
-
-## FAQ
-
-### Q: Can I use this in production?
-**A:** Yes! BETELITE is production-ready with:
-- Atomic financial operations
-- Immutable audit trails
-- Rate limiting & security
-- Comprehensive error handling
-
-### Q: What payment gateways are supported?
-**A:** PAYSTACK and FLUTTERWAVE. Easy to add more via SAFE_SWAP architecture.
-
-### Q: How do I add a new payment provider?
-**A:** See [PaymentService.php](services/PaymentService.php) - implement `PaymentHandler` interface.
-
-### Q: Is the betting system enabled?
-**A:** No, it's VERSION_GATED for v2.0. Enable in [version.php](version.php).
-
-### Q: Can I self-host streaming?
-**A:** Yes - StreamingService supports Cloudflare, Mux, and LiveKit via SAFE_SWAP.
-
-### Q: How often should I backup?
-**A:** Daily recommended. See [DEPLOYMENT.md](DEPLOYMENT.md#regular-backups).
-
----
-
-## SUPPORT
-
-- 📖 **Documentation**: See `/docs` folder
-- 🐛 **Issues**: GitHub Issues
-- 🔒 **Security**: security@betelite.com
-- 💬 **Support**: support@betelite.com
-
----
-
-## LICENSE
-
-Proprietary - All rights reserved
-
----
-
-## CONTRIBUTING
-
-See CONTRIBUTING.md for guidelines.
-
----
-
-## VERSION HISTORY
-
-| Version | Release Date | Status |
-|---------|--------------|--------|
-| 1.0.0 | 2026-01-13 | Production Ready |
-
----
-
-**BETELITE** - Built for scale, designed for security, ready for production.
-
-**Make every match count.**
-
----
-
-Last Updated: **March 2026**
-Status: **🟢 Production Ready**
-Docs: [MOBILE_README.md](MOBILE_README.md) | [ARCHITECTURE.md](ARCHITECTURE.md)
+[View on GitHub](https://github.com/OkaforDavis/BETELITE) | [Open Mobile App](http://localhost:3000/mobile/)
