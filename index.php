@@ -2,27 +2,48 @@
 /**
  * BETELITE MAIN ENTRY POINT
  * =========================
- * Redirect to mobile app or serve landing page
  */
 
-// Check if this is a direct file access or web request
-$isWebRequest = php_sapi_name() !== 'cli';
+// Get request path
+$requestUri = $_SERVER['REQUEST_URI'] ?? '/';
+$requestPath = parse_url($requestUri, PHP_URL_PATH);
 
-// If mobile path, serve static files
-if (strpos($_SERVER['REQUEST_URI'] ?? '', '/mobile') === 0) {
-    // Serve mobile app
-    $file = __DIR__ . $_SERVER['REQUEST_URI'];
-    if (is_file($file)) {
-        // Serve the file
-        header('Content-Type: ' . mime_content_type($file));
-        readfile($file);
+// Serve mobile app static files
+if (strpos($requestPath, '/mobile') === 0) {
+    $filePath = __DIR__ . $requestPath;
+    
+    // If it's a directory, serve index.html
+    if (is_dir($filePath)) {
+        $filePath = rtrim($filePath, '/') . '/index.html';
+    }
+    
+    if (is_file($filePath)) {
+        // Determine content type
+        $ext = pathinfo($filePath, PATHINFO_EXTENSION);
+        $mimeTypes = [
+            'html' => 'text/html',
+            'css' => 'text/css',
+            'js' => 'application/javascript',
+            'json' => 'application/json',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'svg' => 'image/svg+xml',
+            'ico' => 'image/x-icon'
+        ];
+        
+        header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
+        header('Cache-Control: public, max-age=3600');
+        readfile($filePath);
         exit;
     }
-    if (is_dir($file) && is_file($file . '/index.html')) {
-        header('Content-Type: text/html');
-        readfile($file . '/index.html');
-        exit;
-    }
+}
+
+// Serve landing page
+if ($requestPath === '/' || $requestPath === '/index.php' || $requestPath === '/index.html') {
+    header('Content-Type: text/html');
+    readfile(__DIR__ . '/landing.html');
+    exit;
 }
 
 // If trying to access API, bootstrap application
