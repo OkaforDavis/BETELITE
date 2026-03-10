@@ -1,27 +1,48 @@
 # BETELITE - Mobile Gaming & Betting Platform
 
-⚽ Real-time gaming tournaments with AI-powered detection, live betting, and spectating.
+<div align="center">
+
+![License](https://img.shields.io/badge/License-MIT-green)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.0.0-blue)
+
+⚽ **Real-time gaming tournaments with AI-powered detection, live betting, spectating, and instant chat**
+
+[🚀 Launch App](#quick-start) • [📖 Full Docs](MOBILE_README.md) • [🏗️ Architecture](ARCHITECTURE.md) • [📊 GitHub](https://github.com/OkaforDavis/BETELITE)
+
+</div>
+
+---
 
 ## Quick Start
 
+### Docker (Recommended)
 ```bash
-# Clone
 git clone https://github.com/OkaforDavis/BETELITE.git
 cd BETELITE
-
-# Run with Docker
 docker-compose up
+```
 
-# Or local setup
+**Access:**
+- 📱 Mobile App: http://localhost:3000/mobile/
+- 🔗 API: http://localhost:3000/api/
+- 🤖 Detection: http://localhost:5000/
+
+### Local Setup
+```bash
+# Terminal 1
 cd backend && npm install && npm run dev
-# In another terminal
+
+# Terminal 2
 cd detection_service && pip install -r requirements.txt && python app.py
 
-# Open on mobile
+# Open browser
 http://localhost:3000/mobile/
 ```
 
-## Features
+---
+
+## ✨ Features
 
 ## TECHNOLOGY STACK
 

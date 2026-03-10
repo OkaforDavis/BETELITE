@@ -2,16 +2,30 @@
 /**
  * BETELITE MAIN ENTRY POINT
  * =========================
- * CORE_LOCK: Application bootstrap
- * All requests route through here
+ * Redirect to mobile app or serve landing page
  */
 
-// Prevent direct access to files
-if (basename(__FILE__) !== 'index.php') {
-    http_response_code(403);
-    exit('Access Denied');
+// Check if this is a direct file access or web request
+$isWebRequest = php_sapi_name() !== 'cli';
+
+// If mobile path, serve static files
+if (strpos($_SERVER['REQUEST_URI'] ?? '', '/mobile') === 0) {
+    // Serve mobile app
+    $file = __DIR__ . $_SERVER['REQUEST_URI'];
+    if (is_file($file)) {
+        // Serve the file
+        header('Content-Type: ' . mime_content_type($file));
+        readfile($file);
+        exit;
+    }
+    if (is_dir($file) && is_file($file . '/index.html')) {
+        header('Content-Type: text/html');
+        readfile($file . '/index.html');
+        exit;
+    }
 }
 
+// If trying to access API, bootstrap application
 try {
     // 1. Bootstrap application
     require_once __DIR__ . '/core/bootstrap.php';
