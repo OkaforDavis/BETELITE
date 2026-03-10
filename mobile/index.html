@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>BETELITE - Mobile Gaming & Betting</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Header with Ads -->
+        <header class="mobile-header">
+            <div class="header-top">
+                <h1 class="logo">⚽ BETELITE</h1>
+                <div class="user-menu">
+                    <span id="userBalance" class="balance">₦0.00</span>
+                    <button id="profileBtn" class="profile-btn">👤</button>
+                </div>
+            </div>
+            <div class="ads-carousel" id="adsCarousel">
+                <div class="ad-item">
+                    <span class="game-tag">eFootball</span>
+                </div>
+                <div class="ad-item">
+                    <span class="game-tag">Dream League</span>
+                </div>
+                <div class="ad-item">
+                    <span class="game-tag">FIFA Mobile (Coming)</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="mobile-nav">
+            <button class="nav-btn active" data-tab="live">🔴 Live</button>
+            <button class="nav-btn" data-tab="tournaments">🏆 Tournaments</button>
+            <button class="nav-btn" data-tab="bets">💰 Bets</button>
+            <button class="nav-btn" data-tab="spectate">👁️ Watch</button>
+            <button class="nav-btn" data-tab="account">⚙️ Account</button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="mobile-content">
+            <!-- Live Matches Tab -->
+            <section id="live-tab" class="tab-content active">
+                <div class="live-matches">
+                    <h2>Live Matches</h2>
+                    <div id="liveMatchesList" class="matches-list">
+                        <div class="empty-state">No live matches right now</div>
+                    </div>
+                </div>
+                
+                <!-- Live Game Viewer -->
+                <div id="liveGameViewer" class="live-viewer hidden">
+                    <div class="video-container">
+                        <video id="liveStream" playsinline autoplay></video>
+                        <div class="game-overlay">
+                            <div class="match-info">
+                                <span class="team" id="team1">-</span>
+                                <span class="score" id="matchScore">0 - 0</span>
+                                <span class="team" id="team2">-</span>
+                            </div>
+                            <div class="detection-stats">
+                                <div class="stat"><span class="label">Goals</span><span id="goalsDetected">0</span></div>
+                                <div class="stat"><span class="label">Offsides</span><span id="offsidesDetected">0</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Chat -->
+                    <div class="live-chat">
+                        <div class="chat-messages" id="chatMessages"></div>
+                        <div class="chat-input-wrapper">
+                            <input type="text" id="chatInput" class="chat-input" placeholder="Say something...">
+                            <button id="chatSendBtn" class="chat-send">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tournaments Tab -->
+            <section id="tournaments-tab" class="tab-content">
+                <h2>Active Tournaments</h2>
+                <div class="game-selector">
+                    <button class="game-btn active" data-game="efootball">⚽ eFootball</button>
+                    <button class="game-btn" data-game="dls">🏟️ Dream League</button>
+                </div>
+                <div id="tournamentsList" class="tournaments-list">
+                    <div class="empty-state">Loading tournaments...</div>
+                </div>
+            </section>
+
+            <!-- Betting Tab -->
+            <section id="bets-tab" class="tab-content">
+                <h2>Betting Pools</h2>
+                <div id="bettingPools" class="betting-pools">
+                    <div class="empty-state">No active bets</div>
+                </div>
+                <div id="userBets" class="user-bets">
+                    <h3>Your Bets</h3>
+                    <div class="bets-list" id="betsList">
+                        <div class="empty-state">No bets placed yet</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Spectate Tab -->
+            <section id="spectate-tab" class="tab-content">
+                <h2>Watch Tournament</h2>
+                <div id="spectatorList" class="spectator-list">
+                    <div class="empty-state">No games to watch</div>
+                </div>
+            </section>
+
+            <!-- Account Tab -->
+            <section id="account-tab" class="tab-content">
+                <h2>Account</h2>
+                <div class="account-info">
+                    <div class="info-item">
+                        <label>Username</label>
+                        <span id="username">Guest</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Wallet Balance</label>
+                        <span id="walletBalance">₦0.00</span>
+                    </div>
+                    <div class="info-item">
+                        <label>Total Winnings</label>
+                        <span id="totalWinnings">₦0.00</span>
+                    </div>
+                </div>
+                <div class="account-actions">
+                    <button id="depositBtn" class="btn btn-primary">Deposit</button>
+                    <button id="withdrawBtn" class="btn btn-secondary">Withdraw</button>
+                    <button id="logoutBtn" class="btn btn-danger">Logout</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal for Game Selection -->
+    <div id="gameModal" class="modal hidden">
+        <div class="modal-content">
+            <button class="modal-close">✕</button>
+            <h2>Select Game</h2>
+            <div class="game-options">
+                <button class="game-option" data-game="efootball">
+                    <span class="icon">⚽</span>
+                    <span class="name">eFootball</span>
+                </button>
+                <button class="game-option" data-game="dls">
+                    <span class="icon">🏟️</span>
+                    <span class="name">Dream League Soccer</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/socket.js"></script>
+    <script src="js/games/efootball.js"></script>
+    <script src="js/games/dls.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

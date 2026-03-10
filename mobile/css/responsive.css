@@ -1,0 +1,157 @@
+/* Tablet and larger devices */
+@media (min-width: 768px) {
+    .logo {
+        font-size: 28px;
+    }
+    
+    .tab-content {
+        padding: 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .matches-list,
+    .tournaments-list,
+    .betting-pools,
+    .spectator-list {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .mobile-nav .nav-btn {
+        min-width: 120px;
+    }
+    
+    .game-options {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .matches-list,
+    .tournaments-list,
+    .betting-pools,
+    .spectator-list {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .live-viewer {
+        flex-direction: row;
+        gap: 16px;
+    }
+    
+    .video-container {
+        flex: 2;
+    }
+    
+    .live-chat {
+        flex: 1;
+        height: auto;
+    }
+    
+    .chat-messages {
+        height: 300px;
+    }
+    
+    .modal {
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-content {
+        width: 90%;
+        max-width: 500px;
+        border-radius: 12px;
+        padding: 24px;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+    .mobile-header {
+        padding: 8px 16px;
+    }
+    
+    .mobile-nav .nav-btn {
+        padding: 8px 6px;
+        font-size: 11px;
+    }
+    
+    .mobile-content {
+        max-height: calc(100vh - 120px);
+    }
+    
+    .match-item {
+        padding: 8px;
+    }
+    
+    .live-chat {
+        height: 150px;
+    }
+}
+
+/* Foldable/Multi-display support */
+@media (fold-left: 0px) {
+    .app-container {
+        flex-direction: row;
+        gap: env(viewport-segment-width 0 0);
+    }
+    
+    .mobile-header,
+    .mobile-nav {
+        flex-direction: column;
+        width: env(viewport-segment-width 0 0);
+    }
+    
+    .mobile-content {
+        flex: 1;
+        width: env(viewport-segment-width 1 0);
+    }
+}
+
+/* High DPI displays */
+@media (min-resolution: 192dpi) {
+    .match-item,
+    .tournament-item,
+    .bet-item {
+        border-width: 0.5px;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) {
+    .nav-btn,
+    .game-btn,
+    .btn,
+    .match-item {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .chat-send {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* Dark mode system preference */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --light: #1a1a1a;
+        --border: #333;
+    }
+}
+
+/* Print styles (for receipts, etc) */
+@media print {
+    .mobile-header,
+    .mobile-nav,
+    .account-actions,
+    .btn {
+        display: none;
+    }
+    
+    .mobile-content {
+        overflow: visible;
+        padding: 0;
+    }
+}

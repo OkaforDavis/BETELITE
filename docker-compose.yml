@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # Backend API & WebSocket Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - FRONTEND_URL=http://localhost:3000
+      - DATABASE_URL=postgresql://betelite:password@postgres:5432/betelite
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-secret-key-change-in-production
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: npm run dev
+    networks:
+      - betelite_network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: betelite_postgres
+    environment:
+      - POSTGRES_USER=betelite
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=betelite
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - betelite_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: betelite_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - betelite_network
+
+  # Python Detection Service
+  detection:
+    build:
+      context: ./detection_service
+      dockerfile: Dockerfile
+    container_name: betelite_detection
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./detection_service:/app
+    command: python app.py
+    networks:
+      - betelite_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  betelite_network:
+    driver: bridge
+      dockerfile: Dockerfile
+    container_name: betelite_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_WS_URL: ws://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - betelite_network
+    command: npm run dev
+
+volumes:
+  mysql_data:
+
+networks:
+  betelite_network:
+    driver: bridge

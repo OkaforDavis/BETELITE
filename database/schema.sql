@@ -1,13 +1,19 @@
+-- ============================================================
 -- BETELITE DATABASE SCHEMA
--- CORE_LOCK: Critical tables with immutable audit trails
--- Version: 1.0
--- Date: 2025-12-30
+-- ============================================================
+-- CORE_LOCK: Critical database structure
+-- Strict Mode: YES
+-- Transactions: REQUIRED for financial operations
+-- Audit: YES - All modifications logged
+-- Version: 1.0.0
+-- Date: 2026-01-13
+-- ============================================================
 
-SET SQL_MODE = 'STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO';
+SET SQL_MODE = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 SET time_zone = '+00:00';
 
-CREATE DATABASE IF NOT EXISTS betelite CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE betelite;
+CREATE DATABASE IF NOT EXISTS betelite_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE betelite_db;
 
 -- ============================================
 -- CORE USER SYSTEM
