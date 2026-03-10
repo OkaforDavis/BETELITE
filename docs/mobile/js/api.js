@@ -41,10 +41,20 @@ class APIService {
     }
 
     async getTournaments(game) {
+        // In demo mode, return demo tournaments
+        if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+            const demoTournaments = JSON.parse(sessionStorage.getItem('demoTournaments') || '[]');
+            return { tournaments: demoTournaments.filter(t => !game || t.game === game) };
+        }
         return this.request(`/tournaments?game=${game}`);
     }
 
     async getActiveBets() {
+        // In demo mode, return demo bets
+        if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+            const demoBets = JSON.parse(sessionStorage.getItem('demoBets') || '[]');
+            return { bets: demoBets };
+        }
         return this.request('/bets/active');
     }
 

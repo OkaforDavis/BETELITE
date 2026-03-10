@@ -9,6 +9,13 @@ class SocketService {
 
     connect(userId) {
         return new Promise((resolve, reject) => {
+            // In demo mode, skip WebSocket connection
+            if (CONFIG.DEMO_MODE || sessionStorage.getItem('demoMode')) {
+                console.log('Demo mode: WebSocket connection skipped');
+                resolve();
+                return;
+            }
+
             try {
                 this.socket = new WebSocket(`${CONFIG.WS_URL}?token=${localStorage.getItem('auth_token')}`);
 
