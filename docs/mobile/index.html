@@ -5,168 +5,777 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#1a1a1a">
+    <meta name="theme-color" content="#0a0e27">
     <title>BETELITE - Mobile Gaming & Betting</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="css/mobile.css">
-    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        /* Professional Gaming Design - BETELITE */
+        :root {
+            --dark-bg: #0a0e27;
+            --dark-card: #1a1a2e;
+            --gold: #FFD700;
+            --gold-light: #FFF44F;
+            --gold-dark: #DAA520;
+            --cyan: #00D9FF;
+            --cyan-dark: #00A8CC;
+            --red: #FF4757;
+            --red-dark: #CC1F2C;
+            --green: #2ECC71;
+            --green-light: #27AE60;
+            --white: #FFFFFF;
+            --text-light: #B0B8D4;
+            --border-dark: #2D2E47;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        body {
+            background: var(--dark-bg);
+            color: var(--white);
+            font-family: 'Segoe UI', 'Tahoma', 'Geneva', 'Verdana', sans-serif;
+            font-size: 15px;
+            line-height: 1.5;
+            -webkit-user-select: none;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        /* ===== HEADER ===== */
+        .mobile-header {
+            background: linear-gradient(135deg, var(--dark-card) 0%, #131523 100%);
+            border-bottom: 2px solid var(--gold);
+            padding: 12px 16px;
+            z-index: 100;
+            flex-shrink: 0;
+            box-shadow: 0 4px 20px rgba(255, 215, 0, 0.15);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .logo img {
+            height: 40px;
+            width: auto;
+            filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.4));
+        }
+
+        .logo-text {
+            color: var(--white);
+            font-weight: 800;
+            font-size: 18px;
+            letter-spacing: 2px;
+            margin-left: 8px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .balance {
+            background: linear-gradient(135deg, var(--gold), var(--gold-light));
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-weight: 800;
+            font-size: 13px;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .profile-btn {
+            background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+            border: 2px solid var(--gold);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.2);
+        }
+
+        .profile-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Game Filter Tabs */
+        .game-filter {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-top: 10px;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .game-filter::-webkit-scrollbar {
+            display: none;
+        }
+
+        .game-filter-btn {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            color: var(--gold);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.3s ease;
+        }
+
+        .game-filter-btn.active {
+            background: var(--gold);
+            color: #000;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+        }
+
+        /* ===== NAVIGATION ===== */
+        .mobile-nav {
+            display: flex;
+            background: linear-gradient(180deg, var(--dark-card), var(--dark-bg));
+            border-top: 2px solid var(--gold);
+            z-index: 50;
+            flex-shrink: 0;
+        }
+
+        .nav-btn {
+            flex: 1;
+            padding: 12px 8px;
+            background: none;
+            border: none;
+            color: var(--text-light);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+
+        .nav-btn.active {
+            color: var(--gold);
+            border-bottom-color: var(--gold);
+        }
+
+        /* ===== CONTENT ===== */
+        .mobile-content {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 16px;
+            padding-bottom: 20px;
+        }
+
+        .mobile-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .mobile-content::-webkit-scrollbar-thumb {
+            background: var(--gold);
+            border-radius: 2px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Game Cards */
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .game-card {
+            background: linear-gradient(135deg, var(--dark-card), rgba(26, 26, 46, 0.8));
+            border: 1px solid var(--border-dark);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .game-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--gold);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.15);
+        }
+
+        .game-badge {
+            background: var(--gold);
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+
+        .game-badge.coming {
+            background: var(--red);
+            color: white;
+        }
+
+        .game-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .game-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .game-subtitle {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
+        /* Sections */
+        .section-title {
+            color: var(--gold);
+            font-size: 16px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .live-badge {
+            background: var(--red);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 800;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .match-card {
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.9), rgba(15, 15, 30, 0.8));
+            border: 2px solid var(--border-dark);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .match-card:hover {
+            border-color: var(--gold);
+            box-shadow: 0 8px 25px rgba(255, 215, 0, 0.1);
+        }
+
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .match-game {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .match-time {
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--red);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .match-info {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .match-team {
+            text-align: center;
+        }
+
+        .match-team-name {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .match-team-stats {
+            font-size: 11px;
+            color: var(--text-light);
+        }
+
+        .match-score {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--gold);
+        }
+
+        .match-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            padding: 12px 0;
+            border-top: 1px solid var(--border-dark);
+            border-bottom: 1px solid var(--border-dark);
+            margin-bottom: 12px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--gold);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-light);
+            text-transform: uppercase;
+        }
+
+        .betting-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .bet-btn {
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.6), rgba(15, 15, 30, 0.4));
+            border: 1px solid var(--border-dark);
+            color: var(--white);
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .bet-btn.win {
+            border-left: 3px solid var(--gold);
+        }
+
+        .bet-btn.draw {
+            border-left: 3px solid var(--cyan);
+        }
+
+        .bet-btn.lose {
+            border-left: 3px solid var(--red);
+        }
+
+        .bet-btn:hover {
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.8), rgba(15, 15, 30, 0.6));
+        }
+
+        .bet-team {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .bet-odds {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--gold);
+        }
+
+        .bet-odds.cyan { color: var(--cyan); }
+        .bet-odds.red { color: var(--red); }
+
+        /* AI Detector */
+        .ai-detector {
+            background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), rgba(0, 217, 255, 0.05));
+            border: 2px dashed var(--cyan);
+            border-radius: 12px;
+            padding: 24px 16px;
+            text-align: center;
+            margin: 16px 0;
+            cursor: pointer;
+        }
+
+        .ai-detector-icon {
+            font-size: 40px;
+            margin-bottom: 8px;
+        }
+
+        .ai-detector-title {
+            color: var(--cyan);
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .ai-detector-text {
+            color: var(--text-light);
+            font-size: 12px;
+        }
+
+        .ai-result {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(46, 204, 113, 0.05));
+            border: 2px solid var(--green);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .ai-result-title {
+            color: var(--green);
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .ai-result-match {
+            color: var(--white);
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .ai-result-details {
+            color: var(--text-light);
+            font-size: 12px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .ai-apply-btn {
+            background: linear-gradient(135deg, var(--green), var(--green-light));
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .anti-cheat {
+            color: var(--green);
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .winner-banner {
+            background: linear-gradient(135deg, var(--gold), var(--gold-light));
+            color: #000;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 8px;
+            font-weight: 800;
+            font-size: 13px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-light);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-text {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        @media (max-width: 480px) {
+            .games-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     <div id="app" class="app-container">
-        <!-- Header with Ads -->
+        <!-- Header -->
         <header class="mobile-header">
             <div class="header-top">
-                <div class="logo"><img src="../../../BETELITELOGO.png" alt="BETELITE"></div>
-                <div class="user-menu">
-                    <span id="userBalance" class="balance">₦0.00</span>
-                    <button id="profileBtn" class="profile-btn">👤</button>
+                <div style="display: flex; align-items: center;">
+                    <div class="logo"><img src="../../../BETELITELOGO.png" alt="BETELITE"></div>
+                    <div class="logo-text">BETELITE</div>
+                </div>
+                <div class="header-actions">
+                    <span class="balance">💰 ₦5,000</span>
+                    <button class="profile-btn">👤</button>
                 </div>
             </div>
-            <div class="ads-carousel" id="adsCarousel">
-                <div class="ad-item">
-                    <span class="game-tag">eFootball</span>
-                </div>
-                <div class="ad-item">
-                    <span class="game-tag">Dream League</span>
-                </div>
-                <div class="ad-item">
-                    <span class="game-tag">FIFA Mobile (Coming)</span>
-                </div>
+            <div class="game-filter">
+                <button class="game-filter-btn active">🎮 All</button>
+                <button class="game-filter-btn">⚽ eFootball</button>
+                <button class="game-filter-btn">🏟️ Dream League</button>
+                <button class="game-filter-btn">🎯 COD</button>
             </div>
         </header>
 
-        <!-- Navigation Tabs -->
+        <!-- Navigation -->
         <nav class="mobile-nav">
-            <button class="nav-btn active" data-tab="live">🔴 Live</button>
-            <button class="nav-btn" data-tab="tournaments">🏆 Tournaments</button>
-            <button class="nav-btn" data-tab="bets">💰 Bets</button>
-            <button class="nav-btn" data-tab="spectate">👁️ Watch</button>
-            <button class="nav-btn" data-tab="account">⚙️ Account</button>
+            <button class="nav-btn active" data-tab="live">🔴 LIVE</button>
+            <button class="nav-btn" data-tab="tournaments">🏆 TOURNAMENTS</button>
+            <button class="nav-btn" data-tab="bets">💰 BETS</button>
+            <button class="nav-btn" data-tab="watch">👁️ WATCH</button>
+            <button class="nav-btn" data-tab="account">⚙️ ACCOUNT</button>
         </nav>
 
-        <!-- Main Content Area -->
+        <!-- Content -->
         <main class="mobile-content">
-            <!-- Live Matches Tab -->
-            <section id="live-tab" class="tab-content active">
-                <div class="live-matches">
-                    <h2>Live Matches</h2>
-                    <div id="liveMatchesList" class="matches-list">
-                        <div class="empty-state">No live matches right now</div>
-                    </div>
-                </div>
-                
-                <!-- Live Game Viewer -->
-                <div id="liveGameViewer" class="live-viewer hidden">
-                    <div class="video-container">
-                        <video id="liveStream" playsinline autoplay></video>
-                        <div class="game-overlay">
-                            <div class="match-info">
-                                <span class="team" id="team1">-</span>
-                                <span class="score" id="matchScore">0 - 0</span>
-                                <span class="team" id="team2">-</span>
-                            </div>
-                            <div class="detection-stats">
-                                <div class="stat"><span class="label">Goals</span><span id="goalsDetected">0</span></div>
-                                <div class="stat"><span class="label">Offsides</span><span id="offsidesDetected">0</span></div>
-                            </div>
+            <!-- Live Tab -->
+            <section class="tab-content active" id="live-tab" data-tab="live">
+                <!-- Featured Games -->
+                <div style="margin-bottom: 20px;">
+                    <div class="section-title">Featured Games</div>
+                    <div class="games-grid">
+                        <div class="game-card">
+                            <span class="game-badge">SOON</span>
+                            <div class="game-icon">🏆</div>
+                            <div class="game-title">FIFA Mobile</div>
+                            <div class="game-subtitle">Ultimate Tournament Series</div>
                         </div>
-                    </div>
-
-                    <!-- Live Chat -->
-                    <div class="live-chat">
-                        <div class="chat-messages" id="chatMessages"></div>
-                        <div class="chat-input-wrapper">
-                            <input type="text" id="chatInput" class="chat-input" placeholder="Say something...">
-                            <button id="chatSendBtn" class="chat-send">Send</button>
+                        <div class="game-card">
+                            <span class="game-badge coming">COMING</span>
+                            <div class="game-icon">🎮</div>
+                            <div class="game-title">Mobile Legends</div>
+                            <div class="game-subtitle">MOBA Pro League</div>
                         </div>
                     </div>
                 </div>
-            </section>
 
-            <!-- Tournaments Tab -->
-            <section id="tournaments-tab" class="tab-content">
-                <h2>Active Tournaments</h2>
-                <div class="game-selector">
-                    <button class="game-btn active" data-game="efootball">⚽ eFootball</button>
-                    <button class="game-btn" data-game="dls">🏟️ Dream League</button>
-                </div>
-                <div id="tournamentsList" class="tournaments-list">
-                    <div class="empty-state">Loading tournaments...</div>
-                </div>
-            </section>
+                <!-- Live Matches -->
+                <div style="margin-bottom: 20px;">
+                    <div class="section-title">
+                        <span class="live-badge">● LIVE</span>
+                        Active Tournaments
+                    </div>
 
-            <!-- Betting Tab -->
-            <section id="bets-tab" class="tab-content">
-                <h2>Betting Pools</h2>
-                <div id="bettingPools" class="betting-pools">
-                    <div class="empty-state">No active bets</div>
+                    <!-- eFootball Match -->
+                    <div class="match-card">
+                        <div class="match-header">
+                            <div class="match-game">⚽ eFootball</div>
+                            <div class="match-time">⏱️ 67'</div>
+                        </div>
+
+                        <div class="match-info">
+                            <div class="match-team">
+                                <div class="match-team-name">Lagos</div>
+                                <div class="match-team-stats">Goals: 4</div>
+                            </div>
+                            <div class="match-score">4 - 2</div>
+                            <div class="match-team">
+                                <div class="match-team-name">Seoul</div>
+                                <div class="match-team-stats">Goals: 2</div>
+                            </div>
+                        </div>
+
+                        <div class="match-stats">
+                            <div class="stat">
+                                <div class="stat-value">4</div>
+                                <div class="stat-label">Goals</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">2</div>
+                                <div class="stat-label">Shots</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">58%</div>
+                                <div class="stat-label">Possession</div>
+                            </div>
+                        </div>
+
+                        <div class="betting-options">
+                            <button class="bet-btn win">
+                                <span class="bet-team">Lagos</span>
+                                <span class="bet-odds">+2.56</span>
+                            </button>
+                            <button class="bet-btn draw">
+                                <span class="bet-team">Draw</span>
+                                <span class="bet-odds cyan">+3.74</span>
+                            </button>
+                            <button class="bet-btn lose">
+                                <span class="bet-team">Seoul</span>
+                                <span class="bet-odds red">+3.19</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- COD Match -->
+                    <div class="match-card">
+                        <div class="match-header">
+                            <div class="match-game">🎯 COD Mobile Pro</div>
+                            <div class="match-time">⏱️ 90'</div>
+                        </div>
+
+                        <div class="match-info">
+                            <div class="match-team">
+                                <div class="match-team-name">Reaper</div>
+                                <div class="match-team-stats">Kills: 1</div>
+                            </div>
+                            <div class="match-score">5 - 5</div>
+                            <div class="match-team">
+                                <div class="match-team-name">Dark Ops</div>
+                                <div class="match-team-stats">Shots: 8</div>
+                            </div>
+                        </div>
+
+                        <div class="match-stats">
+                            <div class="stat">
+                                <div class="stat-value">1</div>
+                                <div class="stat-label">Kills</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">0</div>
+                                <div class="stat-label">Assists</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">8</div>
+                                <div class="stat-label">Shots</div>
+                            </div>
+                        </div>
+
+                        <div class="betting-options">
+                            <button class="bet-btn win">
+                                <span class="bet-team">Reaper</span>
+                                <span class="bet-odds">+3.08</span>
+                            </button>
+                            <button class="bet-btn draw">
+                                <span class="bet-team">Draw</span>
+                                <span class="bet-odds cyan">+2.45</span>
+                            </button>
+                            <button class="bet-btn lose">
+                                <span class="bet-team">Dark</span>
+                                <span class="bet-odds red">+3.71</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div id="userBets" class="user-bets">
-                    <h3>Your Bets</h3>
-                    <div class="bets-list" id="betsList">
-                        <div class="empty-state">No bets placed yet</div>
+
+                <!-- AI Score Detector -->
+                <div>
+                    <div class="section-title">🤖 AI Score Detector</div>
+                    
+                    <div class="ai-detector">
+                        <div class="ai-detector-icon">📸</div>
+                        <div class="ai-detector-title">Upload Match Screenshot</div>
+                        <div class="ai-detector-text">Supports eFootball, COD, Free Fire, FIFA</div>
+                    </div>
+
+                    <div class="ai-result">
+                        <div class="ai-result-title">✓ Score Detected — Dream League</div>
+                        <div class="ai-result-match">Barns 3 - 0 Cremonese ⏱️ 90:00</div>
+                        <div class="ai-result-details">
+                            Confidence: 98% · Full time match. Barns dominated with 89% possession, 14 shots. Player: Haaland (9.7 rating, 2 goals).
+                        </div>
+                        <button class="ai-apply-btn">✨ Apply to Live Board</button>
+                        <div class="anti-cheat">✓ Anti-Cheat Active</div>
+                    </div>
+
+                    <div class="winner-banner">
+                        🏆 Amara just won ₦41,000!
                     </div>
                 </div>
             </section>
 
-            <!-- Spectate Tab -->
-            <section id="spectate-tab" class="tab-content">
-                <h2>Watch Tournament</h2>
-                <div id="spectatorList" class="spectator-list">
-                    <div class="empty-state">No games to watch</div>
+            <!-- Other Tabs -->
+            <section class="tab-content" id="tournaments-tab" data-tab="tournaments">
+                <div class="empty-state">
+                    <div class="empty-icon">🏆</div>
+                    <div class="empty-text">Active Tournaments</div>
                 </div>
             </section>
 
-            <!-- Account Tab -->
-            <section id="account-tab" class="tab-content">
-                <h2>Account</h2>
-                <div class="account-info">
-                    <div class="info-item">
-                        <label>Username</label>
-                        <span id="username">Guest</span>
-                    </div>
-                    <div class="info-item">
-                        <label>Wallet Balance</label>
-                        <span id="walletBalance">₦0.00</span>
-                    </div>
-                    <div class="info-item">
-                        <label>Total Winnings</label>
-                        <span id="totalWinnings">₦0.00</span>
-                    </div>
+            <section class="tab-content" id="bets-tab" data-tab="bets">
+                <div class="empty-state">
+                    <div class="empty-icon">💰</div>
+                    <div class="empty-text">Your Bets</div>
                 </div>
-                <div class="account-actions">
-                    <button id="depositBtn" class="btn btn-primary">Deposit</button>
-                    <button id="withdrawBtn" class="btn btn-secondary">Withdraw</button>
-                    <button id="logoutBtn" class="btn btn-danger">Logout</button>
+            </section>
+
+            <section class="tab-content" id="watch-tab" data-tab="watch">
+                <div class="empty-state">
+                    <div class="empty-icon">👁️</div>
+                    <div class="empty-text">Spectate Matches</div>
+                </div>
+            </section>
+
+            <section class="tab-content" id="account-tab" data-tab="account">
+                <div class="empty-state">
+                    <div class="empty-icon">⚙️</div>
+                    <div class="empty-text">Account Settings</div>
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- Modal for Game Selection -->
-    <div id="gameModal" class="modal hidden">
-        <div class="modal-content">
-            <button class="modal-close">✕</button>
-            <h2>Select Game</h2>
-            <div class="game-options">
-                <button class="game-option" data-game="efootball">
-                    <span class="icon">⚽</span>
-                    <span class="name">eFootball</span>
-                </button>
-                <button class="game-option" data-game="dls">
-                    <span class="icon">🏟️</span>
-                    <span class="name">Dream League Soccer</span>
-                </button>
-            </div>
-        </div>
-    </div>
+    <script>
+        // Tab Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.getAttribute('data-tab');
+                
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                document.getElementById(tab + '-tab').classList.add('active');
+            });
+        });
 
-    <script src="js/config.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/socket.js"></script>
-    <script src="js/games/efootball.js"></script>
-    <script src="js/games/dls.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/main.js"></script>
+        // Game Filter
+        document.querySelectorAll('.game-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.game-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+    </script>
 </body>
 </html>
