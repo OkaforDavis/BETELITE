@@ -68,9 +68,15 @@ body {
 }
 
 .logo {
-    font-size: 24px;
-    font-weight: bold;
-    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    height: 32px;
+}
+
+.logo img {
+    max-height: 32px;
+    width: auto;
+    display: block;
 }
 
 .user-menu {
