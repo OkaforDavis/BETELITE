@@ -17,6 +17,7 @@ const io     = new Server(server, {
 });
 
 // ── Routes
+const authRoutes       = require('./routes/auth');
 const matchRoutes      = require('./routes/matches');
 const tournamentRoutes = require('./routes/tournaments');
 const betRoutes        = require('./routes/bets');
@@ -43,6 +44,7 @@ const limiter = rateLimit({ windowMs: 60000, max: 200 });
 app.use('/api/', limiter);
 
 // ── API Routes
+app.use('/api/auth',        authRoutes(io, engine));
 app.use('/api/matches',     matchRoutes(io, engine));
 app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));
