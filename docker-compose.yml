@@ -1,98 +1,24 @@
 version: '3.8'
 
 services:
-  # Backend API & WebSocket Server
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: betelite_backend
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=development
       - PORT=3000
-      - FRONTEND_URL=*
-      - ALLOWED_ORIGINS=*
-      - DATABASE_URL=postgresql://betelite:password@postgres:5432/betelite
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your-secret-key-change-in-production
-      - CORS_ORIGIN=*
-    depends_on:
-      - postgres
-      - redis
+    env_file:
+      - ./backend/.env
     volumes:
       - ./backend:/app
+      - ./mobile:/app/../mobile
       - /app/node_modules
-    command: npm run dev
-    networks:
-      - betelite_network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: betelite_postgres
-    environment:
-      - POSTGRES_USER=betelite
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=betelite
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    networks:
-      - betelite_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U betelite"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: betelite_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - betelite_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Python AI Detection Service
-  detection:
-    build:
-      context: ./detection_service
-      dockerfile: Dockerfile
-    container_name: betelite_detection
-    ports:
-      - "5000:5000"
-    environment:
-      - FLASK_ENV=development
-      - PYTHONUNBUFFERED=1
-    volumes:
-      - ./detection_service:/app
-    command: python app.py
-    networks:
-      - betelite_network
-    depends_on:
-      - backend
-
-volumes:
-  postgres_data:
-  redis_data:
-
-networks:
-  betelite_network:
-    driver: bridge
+      interval: 30s
+      timeout: 10s
+      retries: 3
