@@ -290,8 +290,9 @@
 
 <script>
 const API_BASE='http://localhost:3000/api';
-let state={user:null,token:null,currency:'NGN',authScreen:true};
-document.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('betelite_token');if(t)verifyToken(t)});
+let state={user:null,token:null,currency:'NGN',authScreen:true,paymentConfig:{paystack:false,flutterwave:false}};
+document.addEventListener('DOMContentLoaded',()=>{const t=localStorage.getItem('betelite_token');if(t)verifyToken(t);fetchPaymentConfig()});
+async function fetchPaymentConfig(){try{const e=await fetch(API_BASE+'/admin/config'),a=await e.json();a.ok&&(state.paymentConfig=a.config.paymentMethods||{paystack:false,flutterwave:false})}catch(e){console.error('Failed to fetch payment config',e)}}
 function switchToRegister(){document.getElementById('login-form').style.display='none';document.getElementById('register-form').style.display='block';document.getElementById('forgot-form').style.display='none'}
 function switchToLogin(){document.getElementById('login-form').style.display='block';document.getElementById('register-form').style.display='none';document.getElementById('forgot-form').style.display='none'}
 function showForgotPassword(){document.getElementById('login-form').style.display='none';document.getElementById('forgot-form').style.display='block'}
@@ -308,7 +309,7 @@ function navTo(e){document.querySelectorAll('.page').forEach(e=>e.classList.remo
 function openModal(e){document.getElementById('modal-'+e).classList.add('on'),'deposit'===e&&loadDepositModal()}
 function closeModal(e){document.getElementById('modal-'+e).classList.remove('on')}
 function closeModalOutside(e){e.target.classList.contains('modal-wrap')&&e.target.classList.remove('on')}
-function loadDepositModal(){const e=localStorage.getItem('betelite_payment_keys'),a=document.getElementById('deposit-body');e?a.innerHTML='<label class="form-label">Amount</label><input type="number" id="dep-amt" class="form-input" placeholder="Enter amount"><button class="cta" onclick="doDeposit()">Proceed</button>':a.innerHTML='<div class="errmsg"> Payment not yet available</div>'}
+function loadDepositModal(){const e=(state.paymentConfig?.paystack||state.paymentConfig?.flutterwave),a=document.getElementById('deposit-body');e?a.innerHTML='<label class="form-label">Amount</label><input type="number" id="dep-amt" class="form-input" placeholder="Enter amount"><button class="cta" onclick="doDeposit()">Proceed</button>':a.innerHTML='<div class="errmsg">Payment not yet available</div>'}
 async function doDeposit(){const e=document.getElementById('dep-amt').value;e&&e>=100?toast('Connecting...'):toast('Minimum: 100')}
 async function doWithdraw(){const e=document.getElementById('wth-amt').value;e&&e>=100?(toast('Request submitted!'),closeModal('withdraw')):toast('Minimum: 100')}
 function loadGameHistory(){const e=document.getElementById('ghistory-body'),a=state.user?.gameHistory||[];0===a.length?e.innerHTML='<div class="empty"><div class="empty-ico"></div><div class="empty-txt">No games</div></div>':e.innerHTML=a.map(a=>'<div class="card"><div style="padding:10px 12px;"><div style="font-weight:700; margin-bottom:4px;">'+a.game+'</div><div style="font-size:12px; color:var(--text2);">Win: '+(a.win?'':'')+'  '+new Date(a.date).toLocaleDateString()+'</div></div></div>').join('')}

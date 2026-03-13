@@ -18,6 +18,7 @@ const io     = new Server(server, {
 
 // ── Routes
 const authRoutes       = require('./routes/auth');
+const adminRoutes      = require('./routes/admin');
 const matchRoutes      = require('./routes/matches');
 const tournamentRoutes = require('./routes/tournaments');
 const betRoutes        = require('./routes/bets');
@@ -45,6 +46,7 @@ app.use('/api/', limiter);
 
 // ── API Routes
 app.use('/api/auth',        authRoutes(io, engine));
+app.use('/api/admin',       adminRoutes(io, engine));
 app.use('/api/matches',     matchRoutes(io, engine));
 app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));
