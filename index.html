@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07080F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>BETELITE</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<!-- Socket.io -->
+<script src="/socket.io/socket.io.js" onerror="window._noSocket=true"></script>
+<style>
+/* ═══════════════════════════════════
+   ROOT VARIABLES
+═══════════════════════════════════ */
+:root {
+  --bg:    #07080F;
+  --bg2:   #0D0F1C;
+  --bg3:   #131629;
+  --bg4:   #1A1E35;
+  --gold:  #F5C518;
+  --gold2: #C9A010;
+  --gf:    rgba(245,197,24,.1);
+  --red:   #FF3B3B;
+  --green: #00D46A;
+  --blue:  #00AFFF;
+  --orange:#FF7A00;
+  --text:  #EEF0F8;
+  --text2: #7A86A0;
+  --text3: #4A5470;
+  --border: rgba(245,197,24,.12);
+  --border2:rgba(255,255,255,.07);
+  --r: 12px;
+  --fd: 'Barlow Condensed', sans-serif;
+  --fb: 'Barlow', sans-serif;
+  --fn: 'Oswald', sans-serif;
+  /* Safe area for bottom nav on notch/chin phones */
+  --nav-h: 56px;
+  --sab: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+html { height: 100%; overflow: hidden; }
+body {
+  height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: var(--fb); font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+input, select, textarea { font-family: inherit; color: var(--text); }
+img { display: block; }
+::-webkit-scrollbar { width: 2px; height: 2px; }
+::-webkit-scrollbar-thumb { background: var(--gold2); border-radius: 1px; }
+
+/* ═══════════════════════════════════
+   AUTH SCREEN
+═══════════════════════════════════ */
+#auth-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; z-index: 1000; padding: 24px;
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(245,197,24,.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0,175,255,.04) 0%, transparent 50%);
+}
+#auth-screen.hidden { display: none; }
+
+.auth-logo {
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: 36px;
+}
+.auth-logo-svg { width: 64px; height: 64px; margin-bottom: 10px; }
+.auth-logo-wm {
+  font-family: var(--fd); font-size: 36px; font-weight: 900;
+  letter-spacing: 3px; line-height: 1;
+}
+.auth-logo-wm em { color: var(--gold); font-style: normal; }
+.auth-logo-tag {
+  font-family: var(--fd); font-size: 11px; font-weight: 600;
+  letter-spacing: 3px; color: var(--text2); margin-top: 4px;
+}
+
+.auth-card {
+  width: 100%; max-width: 380px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 16px; padding: 24px; position: relative; overflow: hidden;
+}
+.auth-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold2), var(--gold), var(--gold2));
+}
+
+.auth-tabs {
+  display: flex; background: var(--bg3); border-radius: 8px;
+  padding: 3px; margin-bottom: 20px; border: 1px solid var(--border2);
+}
+.auth-tab {
+  flex: 1; padding: 8px; border-radius: 6px; font-family: var(--fd);
+  font-weight: 700; font-size: 13px; letter-spacing: .5px;
+  color: var(--text2); transition: .18s; cursor: pointer; text-align: center;
+}
+.auth-tab.on { background: var(--gold); color: #000; }
+
+.auth-field { margin-bottom: 12px; }
+.auth-label {
+  display: block; font-size: 11px; font-weight: 700; font-family: var(--fd);
+  letter-spacing: .5px; color: var(--text2); margin-bottom: 5px;
+}
+.auth-input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 11px 13px; font-size: 14px; outline: none;
+  transition: border-color .18s; color: var(--text);
+}
+.auth-input:focus { border-color: var(--gold2); }
+.auth-input::placeholder { color: var(--text3); }
+
+.auth-btn {
+  width: 100%; padding: 13px; border-radius: 10px; margin-top: 4px;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #000; font-family: var(--fd); font-weight: 900; font-size: 16px;
+  letter-spacing: 1px; transition: .18s; cursor: pointer;
+}
+.auth-btn:hover { filter: brightness(1.08); box-shadow: 0 4px 20px rgba(245,197,24,.3); }
+.auth-btn:active { transform: scale(.98); }
+.auth-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.auth-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 16px 0; font-size: 11px; color: var(--text3);
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border2);
+}
+
+.oauth-btn {
+  width: 100%; padding: 11px 13px; border-radius: 9px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  font-family: var(--fd); font-weight: 700; font-size: 13px; letter-spacing: .3px;
+  color: var(--text); transition: .18s; cursor: pointer; margin-bottom: 8px;
+}
+.oauth-btn:hover { border-color: var(--gold2); color: var(--gold); }
+.oauth-btn:active { transform: scale(.98); }
+.oauth-icon { width: 18px; height: 18px; }
+
+.auth-forgot {
+  text-align: center; margin-top: 12px; font-size: 12px;
+  color: var(--gold); cursor: pointer; font-weight: 600;
+}
+.auth-err {
+  background: rgba(255,59,59,.1); border: 1px solid rgba(255,59,59,.25);
+  border-radius: 7px; padding: 8px 11px; font-size: 12px;
+  color: var(--red); margin-bottom: 10px; display: none;
+}
+.auth-err.on { display: block; }
+.auth-ok {
+  background: rgba(0,212,106,.1); border: 1px solid rgba(0,212,106,.25);
+  border-radius: 7px; padding: 8px 11px; font-size: 12px;
+  color: var(--green); margin-bottom: 10px; display: none;
+}
+.auth-ok.on { display: block; }
+
+/* ═══════════════════════════════════
+   APP SHELL
+═══════════════════════════════════ */
+#app {
+  display: flex; flex-direction: column; height: 100vh; height: 100dvh;
+  max-width: 430px; margin: 0 auto;
+  background: var(--bg); overflow: hidden; position: relative;
+}
+
+/* ── HEADER ── */
+#hd {
+  flex-shrink: 0; z-index: 20;
+  background: linear-gradient(180deg, #0B0D1E 0%, #0D0F1C 100%);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.hd-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; height: 54px; gap: 8px;
+}
+.logo { display: flex; align-items: center; gap: 8px; }
+.logo-svg { width: 34px; height: 34px; flex-shrink: 0; }
+.logo-wm { font-family: var(--fd); font-size: 22px; font-weight: 900; letter-spacing: 2px; }
+.logo-wm em { color: var(--gold); font-style: normal; }
+.hd-r { display: flex; align-items: center; gap: 7px; }
+.ccy-tog {
+  display: flex; background: var(--bg3); border-radius: 20px;
+  border: 1px solid var(--border2); overflow: hidden;
+}
+.ccy-tog button {
+  padding: 4px 9px; font-size: 11px; font-weight: 700;
+  font-family: var(--fd); color: var(--text2); transition: .15s;
+}
+.ccy-tog button.on { background: var(--gold); color: #000; }
+.w-pill {
+  display: flex; align-items: center; gap: 4px; background: var(--gf);
+  border: 1px solid var(--gold2); border-radius: 20px; padding: 5px 10px;
+  font-family: var(--fd); font-weight: 700; font-size: 13px;
+  color: var(--gold); cursor: pointer; white-space: nowrap;
+}
+.ava {
+  width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+  border: 1.5px solid var(--gold2); flex-shrink: 0; cursor: pointer;
+  background: var(--bg3); display: flex; align-items: center;
+  justify-content: center; font-size: 15px;
+}
+.ava img { width: 100%; height: 100%; object-fit: cover; }
+
+.gtabs {
+  display: flex; gap: 5px; padding: 7px 14px 10px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.gtabs::-webkit-scrollbar { display: none; }
+.gtab {
+  flex-shrink: 0; padding: 4px 12px; border-radius: 20px;
+  font-family: var(--fd); font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border2); color: var(--text2);
+  transition: .15s; white-space: nowrap; cursor: pointer;
+}
+.gtab.on { background: var(--gold); color: #000; border-color: var(--gold); }
+
+/* ── CONN BAR ── */
+#conn-bar {
+  flex-shrink: 0; height: 22px; display: flex; align-items: center;
+  justify-content: center; font-size: 10px; font-weight: 700;
+  font-family: var(--fd); letter-spacing: .5px; transition: .3s;
+}
+#conn-bar.connected { background: rgba(0,212,106,.08); color: var(--green); }
+#conn-bar.disconnected { background: rgba(255,59,59,.08); color: var(--red); }
+#conn-bar.demo { background: rgba(245,197,24,.06); color: var(--gold); }
+
+/* ── AD STRIP ── */
+#ads {
+  flex-shrink: 0; height: 86px; background: var(--bg2);
+  border-bottom: 1px solid var(--border2); overflow: hidden; position: relative;
+}
+#ads::before, #ads::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 26px;
+  z-index: 2; pointer-events: none;
+}
+#ads::before { left: 0; background: linear-gradient(90deg, var(--bg2), transparent); }
+#ads::after  { right: 0; background: linear-gradient(-90deg, var(--bg2), transparent); }
+.ad-tr { display: flex; width: max-content; animation: adroll 32s linear infinite; padding: 3px 0; }
+.ad-tr:hover { animation-play-state: paused; }
+@keyframes adroll { to { transform: translateX(-50%); } }
+.ad-c {
+  width: 192px; height: 80px; margin: 0 5px; border-radius: 9px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  display: flex; align-items: center; gap: 9px; padding: 0 11px;
+  flex-shrink: 0; position: relative; overflow: hidden; cursor: pointer; transition: .18s;
+}
+.ad-c:hover { border-color: var(--gold2); transform: scale(1.015); }
+.ad-gl { position: absolute; inset: 0; opacity: .1; }
+.ad-ico { font-size: 24px; z-index: 1; }
+.ad-tx { z-index: 1; flex: 1; }
+.ad-nm { font-family: var(--fd); font-weight: 700; font-size: 13px; line-height: 1; }
+.ad-ds { font-size: 10px; color: var(--text2); margin-top: 1px; }
+.ad-bl {
+  position: absolute; top: 6px; right: 7px;
+  font-size: 9px; font-weight: 900; font-family: var(--fd);
+  letter-spacing: 1px; padding: 2px 5px; border-radius: 3px;
+  background: var(--gold); color: #000;
+}
+
+/* ── TICKER ── */
+#ticker {
+  flex-shrink: 0; height: 26px; background: rgba(245,197,24,.03);
+  border-bottom: 1px solid var(--border); display: flex;
+  align-items: center; overflow: hidden;
+}
+.tk-tag {
+  background: var(--gold); color: #000; font-family: var(--fd);
+  font-size: 9px; font-weight: 900; letter-spacing: 1.5px;
+  padding: 0 9px; height: 100%; display: flex; align-items: center; flex-shrink: 0;
+}
+.tk-sc { display: flex; animation: tkroll 45s linear infinite; }
+.tk-sc:hover { animation-play-state: paused; }
+.tk-i { font-size: 10px; color: var(--text2); padding: 0 18px; white-space: nowrap; }
+.tk-w { color: var(--green); font-weight: 700; }
+.tk-h { color: var(--orange); font-weight: 700; }
+@keyframes tkroll { to { transform: translateX(-50%); } }
+
+/* ── MAIN SCROLL ── */
+#main {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  /* leave space so content isn't behind nav */
+  padding-bottom: 0;
+}
+.pg { display: none; padding: 11px 11px 8px; animation: pgin .2s ease; }
+.pg.on { display: block; }
+@keyframes pgin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── BOTTOM NAV — FIXED for small screens ── */
+#nav {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  z-index: 20;
+  /* Critical: account for safe area on Infinix/Android */
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 6px);
+  min-height: calc(var(--nav-h) + max(env(safe-area-inset-bottom, 0px), 6px));
+  /* Make sure it never gets cut off */
+  position: relative;
+  width: 100%;
+}
+.nb {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; padding: 8px 2px 6px;
+  font-family: var(--fd); font-size: 9px; font-weight: 700; letter-spacing: .5px;
+  color: var(--text3); transition: color .15s; position: relative;
+  min-height: 50px; /* Ensures touch target is big enough */
+}
+.nb svg { width: 19px; height: 19px; flex-shrink: 0; }
+.nb.on { color: var(--gold); }
+.nb.on::after {
+  content: ''; position: absolute; top: 0; left: 25%; right: 25%;
+  height: 2px; background: var(--gold); border-radius: 0 0 2px 2px;
+}
+.nb-b {
+  position: absolute; top: 5px; right: calc(50% - 16px);
+  background: var(--red); color: #fff; border-radius: 8px;
+  font-size: 8px; font-weight: 900; padding: 1px 4px;
+  min-width: 13px; text-align: center; font-family: var(--fd);
+}
+
+/* ═══════════════════════════════════
+   EMPTY STATE (no games yet)
+═══════════════════════════════════ */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 40px 20px; text-align: center;
+  min-height: 200px;
+}
+.es-icon { font-size: 48px; margin-bottom: 12px; opacity: .6; }
+.es-title {
+  font-family: var(--fd); font-weight: 700; font-size: 18px;
+  color: var(--text); margin-bottom: 6px;
+}
+.es-sub { font-size: 13px; color: var(--text2); line-height: 1.5; }
+.es-badge {
+  margin-top: 16px; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--gf); border: 1px solid var(--gold2);
+  border-radius: 20px; padding: 6px 14px;
+  font-family: var(--fd); font-size: 12px; font-weight: 700; color: var(--gold);
+}
+
+/* ═══════════════════════════════════
+   TYPOGRAPHY HELPERS
+═══════════════════════════════════ */
+.sh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; margin-top: 3px; }
+.st { font-family: var(--fd); font-weight: 700; font-size: 16px; letter-spacing: .4px; display: flex; align-items: center; gap: 6px; }
+.sl { font-size: 11px; color: var(--gold); font-weight: 700; cursor: pointer; }
+.dl { width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 6px var(--red); animation: blink 1s infinite; flex-shrink: 0; }
+@keyframes blink { 50% { opacity: .25; transform: scale(1.5); } }
+.tag { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; font-family: var(--fd); letter-spacing: .4px; }
+.tg { background: rgba(0,212,106,.12); color: var(--green); }
+.tb { background: rgba(0,175,255,.12); color: var(--blue); }
+.to { background: rgba(245,197,24,.12); color: var(--gold); }
+.tr { background: rgba(255,59,59,.12); color: var(--red); }
+
+/* ═══════════════════════════════════
+   AD CARDS / PROMO CARDS
+═══════════════════════════════════ */
+.promo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.promo-card {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
+  padding: 14px 12px; position: relative; overflow: hidden; cursor: pointer; transition: .18s;
+}
+.promo-card:hover { border-color: var(--gold2); transform: translateY(-1px); }
+.promo-card-glow { position: absolute; inset: 0; opacity: .08; }
+.promo-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.promo-ico { font-size: 26px; margin-bottom: 7px; }
+.promo-nm { font-family: var(--fd); font-weight: 700; font-size: 14px; line-height: 1.2; }
+.promo-ds { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.promo-badge {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 9px; font-weight: 900; font-family: var(--fd);
+  padding: 2px 6px; border-radius: 3px; background: var(--gold); color: #000;
+}
+.coming-section { margin-bottom: 12px; }
+.coming-label {
+  font-family: var(--fd); font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  color: var(--text3); margin-bottom: 8px; padding: 0 1px;
+}
+
+/* ═══════════════════════════════════
+   ACCOUNT / PROFILE PAGE
+═══════════════════════════════════ */
+.profile-hero {
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 20px 16px; text-align: center; margin-bottom: 10px;
+  position: relative; overflow: hidden;
+}
+.profile-hero::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% -10%, rgba(245,197,24,.1), transparent 60%);
+}
+.p-ava-wrap {
+  position: relative; width: 72px; height: 72px; margin: 0 auto 10px; z-index: 1;
+}
+.p-ava {
+  width: 72px; height: 72px; border-radius: 50%; overflow: hidden;
+  border: 2.5px solid var(--gold2); background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; cursor: pointer;
+}
+.p-ava img { width: 100%; height: 100%; object-fit: cover; }
+.p-ava-edit {
+  position: absolute; bottom: 0; right: 0; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--gold); border: 2px solid var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; cursor: pointer; z-index: 2;
+}
+.p-name { font-family: var(--fd); font-weight: 700; font-size: 22px; z-index: 1; position: relative; }
+.p-email { font-size: 12px; color: var(--text2); margin-top: 2px; z-index: 1; position: relative; }
+.p-level { font-size: 11px; color: var(--gold); margin-top: 4px; z-index: 1; position: relative; }
+.p-badges { display: flex; gap: 5px; justify-content: center; margin-top: 8px; z-index: 1; position: relative; flex-wrap: wrap; }
+
+.s3g { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 10px; }
+.s3 { background: var(--bg2); border: 1px solid var(--border2); border-radius: 9px; padding: 11px 7px; text-align: center; }
+.s3-v { font-family: var(--fd); font-weight: 700; font-size: 19px; }
+.s3-l { font-size: 9px; color: var(--text2); margin-top: 2px; }
+
+.wallet-card {
+  background: var(--bg2); border: 1px solid var(--gold2); border-radius: var(--r);
+  padding: 14px; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  position: relative; overflow: hidden;
+}
+.wallet-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold2), var(--gold), var(--gold2));
+}
+.w-info .w-lbl { font-size: 10px; color: var(--text2); font-family: var(--fd); letter-spacing: .5px; }
+.w-info .w-amt { font-family: var(--fn); font-size: 28px; color: var(--gold); font-weight: 700; line-height: 1.1; }
+.w-info .w-win { font-size: 10px; color: var(--green); margin-top: 2px; }
+.w-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.wab { padding: 9px 14px; border-radius: 8px; font-family: var(--fd); font-weight: 700; font-size: 13px; transition: .15s; }
+.wab.dep { background: var(--gold); color: #000; }
+.wab.dep:hover { filter: brightness(1.08); }
+.wab.wit { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+.wab.wit:hover { border-color: var(--gold2); color: var(--gold); }
+.wab:active { transform: scale(.97); }
+
+.menu-card { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r); overflow: hidden; margin-bottom: 10px; }
+.menu-card-title { font-family: var(--fd); font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--text3); padding: 10px 14px 6px; }
+.mi { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border2); cursor: pointer; transition: .14s; }
+.mi:last-child { border-bottom: none; }
+.mi:active { background: var(--bg3); }
+.mi-ic { width: 34px; height: 34px; border-radius: 8px; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.mi-body { flex: 1; }
+.mi-tx { font-size: 13px; font-weight: 600; }
+.mi-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.mi-ar { color: var(--text3); font-size: 16px; }
+.mi-badge { font-size: 10px; font-weight: 700; font-family: var(--fd); color: var(--gold); }
+
+/* ═══════════════════════════════════
+   TOURNAMENTS — COMING SOON
+═══════════════════════════════════ */
+.trn-preview {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
+  padding: 16px; margin-bottom: 10px; position: relative; overflow: hidden;
+}
+.trn-preview-shine {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+}
+.trn-soon-badge {
+  position: absolute; top: 12px; right: 12px;
+  background: var(--gf); border: 1px solid var(--gold2);
+  border-radius: 4px; padding: 3px 8px;
+  font-family: var(--fd); font-size: 10px; font-weight: 700; color: var(--gold);
+}
+.trn-icon { font-size: 28px; margin-bottom: 8px; }
+.trn-name { font-family: var(--fd); font-weight: 700; font-size: 16px; line-height: 1.2; }
+.trn-meta { font-size: 12px; color: var(--text2); margin-top: 4px; }
+.trn-prize {
+  margin-top: 10px; background: var(--bg3); border-radius: 8px;
+  padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.trn-prize-val { font-family: var(--fn); font-size: 20px; color: var(--gold); font-weight: 700; }
+.trn-prize-lbl { font-size: 10px; color: var(--text2); }
+.trn-notify-btn {
+  width: 100%; margin-top: 10px; padding: 10px; border-radius: 8px;
+  border: 1px solid var(--gold2); background: var(--gf);
+  font-family: var(--fd); font-weight: 700; font-size: 13px; color: var(--gold);
+  transition: .15s; cursor: pointer;
+}
+.trn-notify-btn:hover { background: rgba(245,197,24,.18); }
+
+/* ═══════════════════════════════════
+   MODALS
+═══════════════════════════════════ */
+#mw {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.84); z-index: 100;
+  align-items: flex-end; justify-content: center;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#mw.on { display: flex; }
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 16px 16px 0 0; width: 100%; max-width: 430px;
+  padding: 20px; animation: mup .24s cubic-bezier(.16,1,.3,1);
+  max-height: 85vh; overflow-y: auto;
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+}
+@keyframes mup { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+.m-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.m-tt { font-family: var(--fd); font-weight: 700; font-size: 18px; }
+.m-x {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--bg3);
+  font-size: 17px; display: flex; align-items: center; justify-content: center;
+  color: var(--text2); border: 1px solid var(--border2); cursor: pointer;
+}
+.fi {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none;
+  margin-bottom: 10px; transition: border-color .15s; color: var(--text);
+}
+.fi:focus { border-color: var(--gold2); }
+.fi::placeholder { color: var(--text3); }
+select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
+.fl { font-size: 11px; color: var(--text2); font-weight: 700; font-family: var(--fd); letter-spacing: .3px; margin-bottom: 4px; display: block; }
+.dg { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 12px; }
+.do {
+  padding: 11px 5px; border-radius: 7px; text-align: center;
+  background: var(--bg3); border: 1px solid var(--border2);
+  font-family: var(--fd); font-weight: 700; font-size: 14px;
+  color: var(--gold); cursor: pointer; transition: .15s;
+}
+.do:hover { border-color: var(--gold2); }
+.do:active { transform: scale(.96); }
+.cta {
+  width: 100%; padding: 13px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #000; font-family: var(--fd); font-weight: 900;
+  font-size: 16px; letter-spacing: 1px; transition: .15s;
+  margin-top: 4px; cursor: pointer; border: none;
+}
+.cta:active { transform: scale(.98); }
+.cta:hover { filter: brightness(1.08); box-shadow: 0 4px 18px rgba(245,197,24,.3); }
+.payment-unavail {
+  background: rgba(255,59,59,.08); border: 1px solid rgba(255,59,59,.2);
+  border-radius: 8px; padding: 12px; text-align: center;
+  color: var(--red); font-size: 13px; font-weight: 600; margin-top: 4px;
+}
+.payment-logos { display: flex; gap: 7px; justify-content: center; margin-top: 9px; font-size: 10px; color: var(--text3); }
+
+/* Profile edit modal */
+.pfp-upload {
+  width: 80px; height: 80px; border-radius: 50%; border: 2px dashed var(--gold2);
+  background: var(--bg3); display: flex; align-items: center; justify-content: center;
+  font-size: 28px; cursor: pointer; margin: 0 auto 14px; overflow: hidden; transition: .18s;
+}
+.pfp-upload:hover { border-color: var(--gold); }
+.pfp-upload img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Settings */
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--border2);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label { font-size: 13px; font-weight: 600; }
+.setting-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.toggle {
+  width: 40px; height: 22px; border-radius: 11px;
+  background: var(--bg3); border: 1px solid var(--border2);
+  position: relative; cursor: pointer; transition: .2s;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--gold); border-color: var(--gold); }
+.toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%; background: var(--text2);
+  transition: .2s;
+}
+.toggle.on::after { left: 20px; background: #000; }
+
+/* Achievements */
+.ach-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border-bottom: 1px solid var(--border2); cursor: pointer; transition: .14s;
+}
+.ach-card:last-child { border-bottom: none; }
+.ach-card:active { background: var(--bg3); }
+.ach-ico { font-size: 28px; flex-shrink: 0; }
+.ach-body { flex: 1; }
+.ach-nm { font-family: var(--fd); font-weight: 700; font-size: 14px; }
+.ach-ds { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.ach-prog { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-top: 5px; }
+.ach-prog-fill { height: 100%; background: var(--gold); border-radius: 2px; }
+.ach-lock { color: var(--text3); font-size: 16px; }
+
+/* Referral */
+.ref-box {
+  background: var(--bg3); border-radius: 9px; padding: 14px;
+  text-align: center; margin-bottom: 12px; border: 1px solid var(--border2);
+}
+.ref-code {
+  font-family: var(--fn); font-size: 26px; color: var(--gold); letter-spacing: 4px;
+  font-weight: 700; margin: 8px 0;
+}
+.ref-copy {
+  background: var(--gold); color: #000; padding: 8px 20px; border-radius: 7px;
+  font-family: var(--fd); font-weight: 700; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; transition: .15s;
+}
+.ref-copy:hover { filter: brightness(1.08); }
+
+/* Anti cheat log */
+.log-entry {
+  padding: 10px 14px; border-bottom: 1px solid var(--border2);
+  display: flex; align-items: flex-start; gap: 9px;
+}
+.log-entry:last-child { border-bottom: none; }
+.log-ico { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.log-body { flex: 1; }
+.log-msg { font-size: 12px; font-weight: 600; }
+.log-ts { font-size: 10px; color: var(--text2); margin-top: 2px; }
+.log-sev { font-size: 9px; font-weight: 700; font-family: var(--fd); }
+
+/* Game history */
+.gh-entry {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border2);
+}
+.gh-entry:last-child { border-bottom: none; }
+.gh-ico { font-size: 22px; flex-shrink: 0; }
+.gh-body { flex: 1; }
+.gh-match { font-family: var(--fd); font-weight: 700; font-size: 13px; }
+.gh-meta { font-size: 11px; color: var(--text2); margin-top: 1px; }
+.gh-result { font-family: var(--fd); font-weight: 700; font-size: 14px; }
+
+/* ═══════════════════════════════════
+   WATCH PAGE — COMING SOON
+═══════════════════════════════════ */
+.watch-promo {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
+  overflow: hidden; margin-bottom: 10px;
+}
+.watch-promo-thumb {
+  height: 130px; background: linear-gradient(135deg, var(--bg3), var(--bg4));
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.watch-promo-thumb .big-ico { font-size: 50px; opacity: .4; }
+.watch-promo-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; flex-direction: column; gap: 4px;
+}
+.watch-promo-badge {
+  background: rgba(245,197,24,.9); color: #000; font-family: var(--fd);
+  font-weight: 900; font-size: 12px; letter-spacing: 1px; padding: 4px 12px;
+  border-radius: 4px;
+}
+.watch-promo-body { padding: 12px; }
+.watch-promo-title { font-family: var(--fd); font-weight: 700; font-size: 15px; }
+.watch-promo-sub { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.watch-notify {
+  width: calc(100% - 24px); margin: 0 12px 12px; padding: 9px;
+  border-radius: 7px; border: 1px solid var(--border2); background: var(--bg3);
+  font-family: var(--fd); font-weight: 700; font-size: 13px; color: var(--text); transition: .15s;
+}
+.watch-notify:hover { border-color: var(--gold2); color: var(--gold); }
+
+/* ═══════════════════════════════════
+   TOAST
+═══════════════════════════════════ */
+#toast {
+  position: fixed; bottom: calc(var(--nav-h) + 16px + max(env(safe-area-inset-bottom, 0px), 6px));
+  left: 50%; transform: translateX(-50%) translateY(10px);
+  background: var(--bg2); border: 1px solid var(--gold2); border-radius: 9px;
+  padding: 9px 17px; font-size: 13px; font-weight: 700; font-family: var(--fd);
+  color: var(--gold); z-index: 500; opacity: 0; transition: .22s; pointer-events: none;
+  white-space: nowrap; max-width: calc(100vw - 32px); text-align: center;
+}
+#toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     AUTH SCREEN
+════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-logo">
+    <svg class="auth-logo-svg" viewBox="0 0 64 64">
+      <polygon points="32,3 58,17 58,47 32,61 6,47 6,17" fill="#0D0F1C" stroke="#F5C518" stroke-width="2.5"/>
+      <polygon points="32,12 50,22 50,42 32,52 14,42 14,22" fill="none" stroke="#F5C518" stroke-width=".8" opacity=".3"/>
+      <circle cx="32" cy="32" r="12" fill="none" stroke="#F5C518" stroke-width="2"/>
+      <circle cx="32" cy="32" r="4.5" fill="#F5C518"/>
+      <line x1="32" y1="16" x2="32" y2="26" stroke="#F5C518" stroke-width="2"/>
+      <line x1="32" y1="38" x2="32" y2="48" stroke="#F5C518" stroke-width="2"/>
+      <line x1="16" y1="32" x2="26" y2="32" stroke="#F5C518" stroke-width="2"/>
+      <line x1="38" y1="32" x2="48" y2="32" stroke="#F5C518" stroke-width="2"/>
+    </svg>
+    <div class="auth-logo-wm">BET<em>ELITE</em></div>
+    <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
+  </div>
+
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <div class="auth-tab on" id="tab-login" onclick="switchAuthTab('login')">SIGN IN</div>
+      <div class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">CREATE ACCOUNT</div>
+    </div>
+
+    <div id="auth-err" class="auth-err"></div>
+    <div id="auth-ok" class="auth-ok"></div>
+
+    <!-- LOGIN FORM -->
+    <div id="login-form">
+      <div class="auth-field">
+        <label class="auth-label">EMAIL ADDRESS</label>
+        <input class="auth-input" type="email" id="li-email" placeholder="you@email.com" autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">PASSWORD</label>
+        <input class="auth-input" type="password" id="li-pass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="auth-btn" id="li-btn" onclick="doLogin()">SIGN IN</button>
+      <div class="auth-forgot" onclick="doForgotPassword()">Forgot password?</div>
+
+      <div class="auth-divider">or continue with</div>
+      <button class="oauth-btn" onclick="doGoogleLogin()">
+        <svg class="oauth-icon" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continue with Google
+      </button>
+    </div>
+
+    <!-- SIGNUP FORM -->
+    <div id="signup-form" style="display:none">
+      <div class="auth-field">
+        <label class="auth-label">DISPLAY NAME</label>
+        <input class="auth-input" type="text" id="su-name" placeholder="Your gamer tag">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">EMAIL ADDRESS</label>
+        <input class="auth-input" type="email" id="su-email" placeholder="you@email.com" autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">PASSWORD</label>
+        <input class="auth-input" type="password" id="su-pass" placeholder="Min. 6 characters" autocomplete="new-password">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">CONFIRM PASSWORD</label>
+        <input class="auth-input" type="password" id="su-pass2" placeholder="Repeat password">
+      </div>
+      <button class="auth-btn" id="su-btn" onclick="doSignup()">CREATE ACCOUNT</button>
+
+      <div class="auth-divider">or continue with</div>
+      <button class="oauth-btn" onclick="doGoogleLogin()">
+        <svg class="oauth-icon" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continue with Google
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════ -->
+<div id="app" style="display:none">
+
+  <!-- HEADER -->
+  <div id="hd">
+    <div class="hd-top">
+      <div class="logo">
+        <svg class="logo-svg" viewBox="0 0 34 34">
+          <polygon points="17,2 30,9 30,25 17,32 4,25 4,9" fill="#0D0F1C" stroke="#F5C518" stroke-width="1.7"/>
+          <polygon points="17,7 27,13 27,21 17,27 7,21 7,13" fill="none" stroke="#F5C518" stroke-width=".55" opacity=".35"/>
+          <circle cx="17" cy="17" r="6.5" fill="none" stroke="#F5C518" stroke-width="1.3"/>
+          <circle cx="17" cy="17" r="2.5" fill="#F5C518"/>
+          <line x1="17" y1="9" x2="17" y2="14" stroke="#F5C518" stroke-width="1.3"/>
+          <line x1="17" y1="20" x2="17" y2="25" stroke="#F5C518" stroke-width="1.3"/>
+          <line x1="8"  y1="17" x2="13" y2="17" stroke="#F5C518" stroke-width="1.3"/>
+          <line x1="21" y1="17" x2="26" y2="17" stroke="#F5C518" stroke-width="1.3"/>
+        </svg>
+        <span class="logo-wm">BET<em>ELITE</em></span>
+      </div>
+      <div class="hd-r">
+        <div class="ccy-tog">
+          <button class="on" id="b-ngn" onclick="setCCY('NGN')">₦</button>
+          <button id="b-ghs" onclick="setCCY('GHS')">₵</button>
+        </div>
+        <div class="w-pill" onclick="navTo('account')">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M1 4a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H3a2 2 0 01-2-2V4zm11 4a1 1 0 100-2 1 1 0 000 2z"/></svg>
+          <span id="w-hd">₦0.00</span>
+        </div>
+        <div class="ava" id="hd-ava" onclick="navTo('account')">👤</div>
+      </div>
+    </div>
+    <div class="gtabs" id="gtabs">
+      <div class="gtab on" onclick="fGame(this,'all')">🎮 All Games</div>
+      <div class="gtab" onclick="fGame(this,'efootball')">⚽ eFootball</div>
+      <div class="gtab" onclick="fGame(this,'dream')">🏟️ Dream League</div>
+      <div class="gtab" onclick="fGame(this,'cod')">🎯 COD Mobile</div>
+      <div class="gtab" onclick="fGame(this,'freefire')">🔥 Free Fire</div>
+      <div class="gtab" onclick="fGame(this,'fifa')">🏆 FIFA Mobile</div>
+    </div>
+  </div>
+
+  <!-- CONN BAR -->
+  <div id="conn-bar" class="demo">⚡ Platform launching soon — stay tuned!</div>
+
+  <!-- ADS -->
+  <div id="ads"><div class="ad-tr" id="ad-tr"></div></div>
+
+  <!-- TICKER -->
+  <div id="ticker"><div class="tk-tag">COMING</div><div class="tk-sc" id="tk-sc"></div></div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- LIVE / HOME -->
+    <div class="pg on" id="pg-live">
+      <div class="sh">
+        <div class="st"><div class="dl"></div>Live Matches</div>
+        <span class="tag to">🔜 Launching Soon</span>
+      </div>
+
+      <!-- EMPTY STATE — no live games yet -->
+      <div class="empty-state">
+        <div class="es-icon">📡</div>
+        <div class="es-title">No Live Matches Yet</div>
+        <div class="es-sub">BETELITE is launching soon.<br>Live matches, scores and betting<br>will appear here once we go live.</div>
+        <div class="es-badge">🚀 Be the first to play</div>
+      </div>
+
+      <!-- Promo grid — upcoming games -->
+      <div class="sh" style="margin-top:4px">
+        <div class="st" style="font-size:13px">Upcoming on BETELITE</div>
+      </div>
+      <div class="promo-grid">
+        <div class="promo-card" style="border-top:2px solid #00D46A" onclick="toast('eFootball tournaments launching soon!')">
+          <div class="promo-card-glow" style="background:linear-gradient(135deg,#00D46A,transparent)"></div>
+          <div class="promo-ico">⚽</div>
+          <div class="promo-nm">eFootball</div>
+          <div class="promo-ds">5v5 tournaments · ₦500K prize</div>
+          <div class="promo-badge">SOON</div>
+        </div>
+        <div class="promo-card" style="border-top:2px solid #FF3B3B" onclick="toast('COD Mobile tournaments launching soon!')">
+          <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF3B3B,transparent)"></div>
+          <div class="promo-ico">🎯</div>
+          <div class="promo-nm">COD Mobile</div>
+          <div class="promo-ds">5v5 Pro League · ₦1M prize</div>
+          <div class="promo-badge">SOON</div>
+        </div>
+        <div class="promo-card" style="border-top:2px solid #FF7A00" onclick="toast('Free Fire tournaments launching soon!')">
+          <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF7A00,transparent)"></div>
+          <div class="promo-ico">🔥</div>
+          <div class="promo-nm">Free Fire</div>
+          <div class="promo-ds">Battle Royale · ₦250K prize</div>
+          <div class="promo-badge">SOON</div>
+        </div>
+        <div class="promo-card" style="border-top:2px solid #00AFFF" onclick="toast('Dream League tournaments launching soon!')">
+          <div class="promo-card-glow" style="background:linear-gradient(135deg,#00AFFF,transparent)"></div>
+          <div class="promo-ico">🏟️</div>
+          <div class="promo-nm">Dream League</div>
+          <div class="promo-ds">Afrika Cup · ₦150K prize</div>
+          <div class="promo-badge">SOON</div>
+        </div>
+      </div>
+
+      <div class="coming-section">
+        <div class="coming-label">ALSO COMING</div>
+        <div class="promo-grid">
+          <div class="promo-card" onclick="toast('FIFA Mobile — coming soon!')">
+            <div class="promo-ico">🏆</div>
+            <div class="promo-nm">FIFA Mobile</div>
+            <div class="promo-ds">Super Cup Series</div>
+            <div class="promo-badge">Q2 2025</div>
+          </div>
+          <div class="promo-card" onclick="toast('NBA 2K Mobile — coming soon!')">
+            <div class="promo-ico">🏀</div>
+            <div class="promo-nm">NBA 2K</div>
+            <div class="promo-ds">Basketball League</div>
+            <div class="promo-badge">BETA</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOURNAMENTS -->
+    <div class="pg" id="pg-tournaments">
+      <div class="sh"><div class="st">🏆 Tournaments</div><span class="tag to">Coming Soon</span></div>
+      <div class="empty-state">
+        <div class="es-icon">🏆</div>
+        <div class="es-title">Tournaments Launching Soon</div>
+        <div class="es-sub">Join a 15-player tournament,<br>win up to 30% of the prize pool.<br>Entry from ₦1,500.</div>
+        <div class="es-badge">🔔 Get notified when live</div>
+      </div>
+
+      <!-- Tournament previews -->
+      <div class="trn-preview">
+        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#00D46A,transparent)"></div>
+        <div class="trn-soon-badge">COMING SOON</div>
+        <div class="trn-icon">⚽</div>
+        <div class="trn-name">eFootball Champions Cup</div>
+        <div class="trn-meta">15 players · 5v5 format · AI-verified scores</div>
+        <div class="trn-prize">
+          <div><div class="trn-prize-val">₦22,500</div><div class="trn-prize-lbl">Base prize pool (₦1,500 entry)</div></div>
+          <span class="tag tg">1st gets 30%</span>
+        </div>
+        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
+      </div>
+
+      <div class="trn-preview">
+        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#FF3B3B,transparent)"></div>
+        <div class="trn-soon-badge">COMING SOON</div>
+        <div class="trn-icon">🎯</div>
+        <div class="trn-name">COD Mobile Warzone Pro</div>
+        <div class="trn-meta">15 players · 5v5 format · Live streaming</div>
+        <div class="trn-prize">
+          <div><div class="trn-prize-val">₦750,000</div><div class="trn-prize-lbl">With ₦50,000 entry tier</div></div>
+          <span class="tag tr">Max stakes</span>
+        </div>
+        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
+      </div>
+
+      <div class="trn-preview">
+        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#FF7A00,transparent)"></div>
+        <div class="trn-soon-badge">COMING SOON</div>
+        <div class="trn-icon">🔥</div>
+        <div class="trn-name">Free Fire Battle Royale</div>
+        <div class="trn-meta">15 players · Squad format · ₦25 GHS entry option</div>
+        <div class="trn-prize">
+          <div><div class="trn-prize-val">₦150,000</div><div class="trn-prize-lbl">With ₦10,000 entry tier</div></div>
+          <span class="tag to">NGN + GHS</span>
+        </div>
+        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
+      </div>
+    </div>
+
+    <!-- BETS -->
+    <div class="pg" id="pg-bets">
+      <div class="sh"><div class="st">💰 My Bets</div></div>
+      <div class="empty-state">
+        <div class="es-icon">💸</div>
+        <div class="es-title">No Bets Yet</div>
+        <div class="es-sub">Once live matches are available,<br>place bets up to ₦1,000,000<br>or ₵10,000 per game.</div>
+        <div class="es-badge">💡 Max bet: ₦1,000,000</div>
+      </div>
+    </div>
+
+    <!-- WATCH -->
+    <div class="pg" id="pg-watch">
+      <div class="sh"><div class="st">📺 Watch Live</div><span class="tag to">Coming Soon</span></div>
+      <div class="empty-state" style="padding-bottom:16px">
+        <div class="es-icon">📡</div>
+        <div class="es-title">Live Streaming Coming</div>
+        <div class="es-sub">Watch matches live via WebRTC.<br>AI tracks scores in real-time<br>from the stream automatically.</div>
+      </div>
+
+      <!-- Watch previews -->
+      <div class="watch-promo">
+        <div class="watch-promo-thumb">
+          <div class="big-ico">⚽</div>
+          <div class="watch-promo-overlay">
+            <div class="watch-promo-badge">COMING SOON</div>
+          </div>
+        </div>
+        <div class="watch-promo-body">
+          <div class="watch-promo-title">eFootball Live Stream</div>
+          <div class="watch-promo-sub">Share your screen · AI tracks score · Viewers bet live</div>
+        </div>
+        <button class="watch-notify" onclick="toast('🔔 Streaming feature coming soon!')">🔔 Notify Me</button>
+      </div>
+
+      <div class="watch-promo">
+        <div class="watch-promo-thumb">
+          <div class="big-ico">🎯</div>
+          <div class="watch-promo-overlay">
+            <div class="watch-promo-badge">COMING SOON</div>
+          </div>
+        </div>
+        <div class="watch-promo-body">
+          <div class="watch-promo-title">COD Mobile Pro Stream</div>
+          <div class="watch-promo-sub">Live kills · Score detection · Anti-cheat monitoring</div>
+        </div>
+        <button class="watch-notify" onclick="toast('🔔 Streaming feature coming soon!')">🔔 Notify Me</button>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div class="pg" id="pg-account">
+      <div class="profile-hero">
+        <div class="p-ava-wrap">
+          <div class="p-ava" id="p-ava-el" onclick="openModal('edit-profile')">
+            <span id="p-ava-ico">👤</span>
+            <img id="p-ava-img" src="" alt="" style="display:none">
+          </div>
+          <div class="p-ava-edit" onclick="openModal('edit-profile')">✏️</div>
+        </div>
+        <div class="p-name" id="p-nm">Loading...</div>
+        <div class="p-email" id="p-email"></div>
+        <div class="p-level" id="p-level">⭐ Bronze Elite · Level 1</div>
+        <div class="p-badges">
+          <span class="tag tb">🆕 New Player</span>
+          <span class="tag to">🎮 Registered</span>
+        </div>
+      </div>
+
+      <!-- Wallet -->
+      <div class="wallet-card">
+        <div class="w-info">
+          <div class="w-lbl">WALLET BALANCE</div>
+          <div class="w-amt" id="w-big">₦0.00</div>
+          <div class="w-win" id="w-win">+₦0 total winnings</div>
+        </div>
+        <div class="w-actions">
+          <button class="wab dep" onclick="openModal('deposit')">Deposit</button>
+          <button class="wab wit" onclick="openModal('withdraw')">Withdraw</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="s3g">
+        <div class="s3"><div class="s3-v" id="s-bt">0</div><div class="s3-l">Total Bets</div></div>
+        <div class="s3"><div class="s3-v" style="color:var(--green)" id="s-wn">0</div><div class="s3-l">Won</div></div>
+        <div class="s3"><div class="s3-v" style="color:var(--gold)" id="s-ea">₦0</div><div class="s3-l">Earnings</div></div>
+      </div>
+
+      <!-- Account menu -->
+      <div class="menu-card">
+        <div class="menu-card-title">MY ACCOUNT</div>
+        <div class="mi" onclick="openModal('game-history')">
+          <div class="mi-ic">🎮</div>
+          <div class="mi-body"><div class="mi-tx">Game History</div><div class="mi-sub">All your past matches</div></div>
+          <span class="mi-ar">›</span>
+        </div>
+        <div class="mi" onclick="openModal('achievements')">
+          <div class="mi-ic">🏅</div>
+          <div class="mi-body"><div class="mi-tx">Achievements</div><div class="mi-sub">Unlock rewards as you play</div></div>
+          <span class="mi-badge" id="ach-badge">0/12</span>
+          <span class="mi-ar">›</span>
+        </div>
+        <div class="mi" onclick="openModal('referral')">
+          <div class="mi-ic">🤝</div>
+          <div class="mi-body"><div class="mi-tx">Refer & Earn</div><div class="mi-sub">Earn ₦500 per referral</div></div>
+          <span class="mi-ar">›</span>
+        </div>
+        <div class="mi" onclick="openModal('anticheat')">
+          <div class="mi-ic">🛡️</div>
+          <div class="mi-body"><div class="mi-tx">Anti-Cheat Log</div><div class="mi-sub">Your verification history</div></div>
+          <span class="mi-ar">›</span>
+        </div>
+      </div>
+
+      <div class="menu-card">
+        <div class="menu-card-title">SETTINGS</div>
+        <div class="mi" onclick="openModal('settings')">
+          <div class="mi-ic">⚙️</div>
+          <div class="mi-body"><div class="mi-tx">App Settings</div><div class="mi-sub">Notifications, privacy, display</div></div>
+          <span class="mi-ar">›</span>
+        </div>
+        <div class="mi" onclick="doLogout()">
+          <div class="mi-ic" style="background:rgba(255,59,59,.1)">🚪</div>
+          <div class="mi-body"><div class="mi-tx" style="color:var(--red)">Logout</div><div class="mi-sub">Sign out of your account</div></div>
+          <span class="mi-ar">›</span>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="nav">
+    <button class="nb on" id="nb-live" onclick="navTo('live')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+        <path d="M4.9 4.9a10 10 0 0114.2 0M7.8 7.8a6 6 0 018.4 0" stroke-width="1.5"/>
+      </svg>
+      LIVE
+    </button>
+    <button class="nb" id="nb-tournaments" onclick="navTo('tournaments')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 21h8M12 17v4M7 4H5a2 2 0 00-2 2v3a5 5 0 005 5h8a5 5 0 005-5V6a2 2 0 00-2-2h-2M7 4V2m10 2V2M7 4h10"/>
+      </svg>
+      TOURNEYS
+    </button>
+    <button class="nb" id="nb-bets" onclick="navTo('bets')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="5" width="20" height="14" rx="2"/>
+        <path d="M2 10h20M6 15h.01M10 15h4"/>
+      </svg>
+      BETS
+    </button>
+    <button class="nb" id="nb-watch" onclick="navTo('watch')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="23 7 16 12 23 17 23 7"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>
+      WATCH
+    </button>
+    <button class="nb" id="nb-account" onclick="navTo('account')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      ACCOUNT
+    </button>
+  </nav>
+</div><!-- #app -->
+
+<!-- MODAL -->
+<div id="mw" onclick="closeMOut(event)">
+  <div class="modal">
+    <div class="m-hd">
+      <div class="m-tt" id="m-tt">—</div>
+      <button class="m-x" onclick="closeM()">×</button>
+    </div>
+    <div id="m-bd"></div>
+  </div>
+</div>
+
+<!-- FILE INPUT for avatar -->
+<input type="file" id="ava-file" accept="image/*" style="display:none" onchange="handleAvaUpload(this)">
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  FIREBASE CONFIG
+//  Replace with your actual Firebase project config
+// ══════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            window.FIREBASE_API_KEY            || "YOUR_API_KEY",
+  authDomain:        window.FIREBASE_AUTH_DOMAIN        || "YOUR_PROJECT.firebaseapp.com",
+  databaseURL:       window.FIREBASE_DATABASE_URL       || "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId:         window.FIREBASE_PROJECT_ID         || "YOUR_PROJECT_ID",
+  storageBucket:     window.FIREBASE_STORAGE_BUCKET     || "YOUR_PROJECT.appspot.com",
+  messagingSenderId: window.FIREBASE_MESSAGING_SENDER_ID|| "YOUR_SENDER_ID",
+  appId:             window.FIREBASE_APP_ID             || "YOUR_APP_ID",
+};
+
+// Payment gateway config (set from admin side)
+const PAYMENT_CONFIG = {
+  paystackKey:    window.PAYSTACK_PUBLIC_KEY    || null,
+  flutterwaveKey: window.FLUTTERWAVE_PUBLIC_KEY || null,
+};
+function hasPayment() { return !!(PAYMENT_CONFIG.paystackKey || PAYMENT_CONFIG.flutterwaveKey); }
+
+// Admin email
+const ADMIN_EMAIL = 'okafordavis8@gmail.com';
+
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+const CCY_DATA = {
+  NGN: { sym: '₦', rate: 1, name: 'Nigerian Naira', maxBet: 1000000 },
+  GHS: { sym: '₵', rate: 0.037, name: 'Ghanaian Cedi', maxBet: 10000 },
+};
+let ccy = 'NGN';
+
+const S = {
+  user: null,         // Firebase user
+  profile: null,      // Stored profile from DB
+  wallet: 0,
+  winnings: 0,
+  bets: [],
+  totalBets: 0,
+  totalWon: 0,
+  settings: {
+    notifications: true,
+    dataSaver: true,
+    darkMode: true,
+    autoDetect: true,
+  },
+};
+
+let db = null, auth = null;
+
+// ══════════════════════════════════════════════════════
+//  FIREBASE INIT
+// ══════════════════════════════════════════════════════
+function initFirebase() {
+  try {
+    if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+      console.warn('[Firebase] No config — running without auth');
+      showApp({ displayName: 'Guest Player', email: '', photoURL: null, uid: 'guest_' + Date.now() });
+      return;
+    }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    auth = firebase.auth();
+    db   = firebase.database();
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        showApp(user);
+      } else {
+        showAuth();
+      }
+    });
+  } catch (e) {
+    console.error('[Firebase]', e);
+    showApp({ displayName: 'Guest Player', email: '', photoURL: null, uid: 'guest_' + Date.now() });
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  AUTH FUNCTIONS
+// ══════════════════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').classList.toggle('on', tab === 'login');
+  document.getElementById('tab-signup').classList.toggle('on', tab === 'signup');
+  document.getElementById('login-form').style.display  = tab === 'login' ? '' : 'none';
+  document.getElementById('signup-form').style.display = tab === 'signup' ? '' : 'none';
+  clearAuthMsg();
+}
+
+function clearAuthMsg() {
+  document.getElementById('auth-err').classList.remove('on');
+  document.getElementById('auth-ok').classList.remove('on');
+}
+
+function showAuthErr(msg) {
+  const el = document.getElementById('auth-err');
+  el.textContent = msg; el.classList.add('on');
+  document.getElementById('auth-ok').classList.remove('on');
+}
+function showAuthOk(msg) {
+  const el = document.getElementById('auth-ok');
+  el.textContent = msg; el.classList.add('on');
+  document.getElementById('auth-err').classList.remove('on');
+}
+
+async function doLogin() {
+  const email = document.getElementById('li-email').value.trim();
+  const pass  = document.getElementById('li-pass').value;
+  if (!email || !pass) { showAuthErr('Please fill in all fields.'); return; }
+  if (!auth) { showApp({ displayName: 'Demo User', email, photoURL: null, uid: 'demo_' + Date.now() }); return; }
+
+  const btn = document.getElementById('li-btn');
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+    clearAuthMsg();
+  } catch (e) {
+    let msg = 'Sign in failed. Check your credentials.';
+    if (e.code === 'auth/user-not-found') msg = 'No account found with this email.';
+    if (e.code === 'auth/wrong-password') msg = 'Incorrect password.';
+    if (e.code === 'auth/too-many-requests') msg = 'Too many attempts. Try again later.';
+    showAuthErr(msg);
+  } finally {
+    btn.disabled = false; btn.textContent = 'SIGN IN';
+  }
+}
+
+async function doSignup() {
+  const name  = document.getElementById('su-name').value.trim();
+  const email = document.getElementById('su-email').value.trim();
+  const pass  = document.getElementById('su-pass').value;
+  const pass2 = document.getElementById('su-pass2').value;
+
+  if (!name || !email || !pass || !pass2) { showAuthErr('Please fill in all fields.'); return; }
+  if (pass !== pass2) { showAuthErr('Passwords do not match.'); return; }
+  if (pass.length < 6) { showAuthErr('Password must be at least 6 characters.'); return; }
+  if (!auth) { showApp({ displayName: name, email, photoURL: null, uid: 'demo_' + Date.now() }); return; }
+
+  const btn = document.getElementById('su-btn');
+  btn.disabled = true; btn.textContent = 'Creating account...';
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await cred.user.updateProfile({ displayName: name });
+    clearAuthMsg();
+  } catch (e) {
+    let msg = 'Account creation failed.';
+    if (e.code === 'auth/email-already-in-use') msg = 'This email is already registered. Sign in instead.';
+    if (e.code === 'auth/invalid-email') msg = 'Please enter a valid email address.';
+    if (e.code === 'auth/weak-password') msg = 'Password is too weak. Use at least 6 characters.';
+    showAuthErr(msg);
+  } finally {
+    btn.disabled = false; btn.textContent = 'CREATE ACCOUNT';
+  }
+}
+
+async function doGoogleLogin() {
+  if (!auth) {
+    showApp({ displayName: 'Google User', email: 'google@test.com', photoURL: null, uid: 'google_demo' });
+    return;
+  }
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+  } catch (e) {
+    showAuthErr('Google sign in failed. Try email instead.');
+  }
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('li-email').value.trim();
+  if (!email) { showAuthErr('Enter your email address first.'); return; }
+  if (!auth) { showAuthOk('Password reset email sent! (Demo mode)'); return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showAuthOk(`Password reset email sent to ${email}. Check your inbox!`);
+  } catch (e) {
+    showAuthErr('Could not send reset email. Check the address is correct.');
+  }
+}
+
+async function doLogout() {
+  if (auth) await auth.signOut();
+  else showAuth();
+}
+
+// ══════════════════════════════════════════════════════
+//  APP INIT — called after successful auth
+// ══════════════════════════════════════════════════════
+function showAuth() {
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('app').style.display = 'none';
+}
+
+async function showApp(user) {
+  S.user = user;
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app').style.display = 'flex';
+
+  // Load/create profile from Firebase
+  await loadProfile(user);
+  updateHeaderAvatar();
+  updateWallet();
+  buildAds();
+  buildTicker();
+
+  // Admin check
+  if (user.email === ADMIN_EMAIL) {
+    document.getElementById('conn-bar').textContent = '⭐ Admin Mode — okafordavis8@gmail.com';
+    document.getElementById('conn-bar').className = 'connected';
+  }
+}
+
+async function loadProfile(user) {
+  const fallback = {
+    displayName: user.displayName || 'Player',
+    email: user.email || '',
+    photoURL: user.photoURL || null,
+    wallet: 0, winnings: 0,
+    totalBets: 0, totalWon: 0,
+    level: 1, xp: 0,
+    referralCode: 'BET' + (user.uid || 'XXXX').slice(-4).toUpperCase(),
+    createdAt: Date.now(),
+  };
+
+  if (db && user.uid !== 'guest_' + Date.now().toString().slice(0,-4)) {
+    try {
+      const snap = await db.ref(`users/${user.uid}`).once('value');
+      const data = snap.val();
+      if (data) {
+        S.profile = { ...fallback, ...data };
+      } else {
+        // Create new profile
+        await db.ref(`users/${user.uid}`).set(fallback);
+        S.profile = fallback;
+      }
+    } catch (e) {
+      S.profile = fallback;
+    }
+  } else {
+    S.profile = fallback;
+  }
+
+  S.wallet   = S.profile.wallet || 0;
+  S.winnings = S.profile.winnings || 0;
+  S.totalBets= S.profile.totalBets || 0;
+  S.totalWon = S.profile.totalWon || 0;
+
+  // Update profile UI
+  document.getElementById('p-nm').textContent    = S.profile.displayName;
+  document.getElementById('p-email').textContent = S.profile.email;
+  document.getElementById('p-level').textContent = `⭐ Level ${S.profile.level || 1} · ${getLevel(S.profile.level)}`;
+
+  if (S.profile.photoURL) {
+    const img = document.getElementById('p-ava-img');
+    img.src = S.profile.photoURL; img.style.display = 'block';
+    document.getElementById('p-ava-ico').style.display = 'none';
+    const hdImg = document.createElement('img');
+    hdImg.src = S.profile.photoURL;
+    document.getElementById('hd-ava').innerHTML = '';
+    document.getElementById('hd-ava').appendChild(hdImg);
+  }
+}
+
+function getLevel(l) {
+  const levels = ['Bronze Elite','Silver Elite','Gold Elite','Platinum','Diamond','Legend'];
+  return levels[Math.min((l||1)-1, levels.length-1)];
+}
+
+async function saveProfile(updates) {
+  S.profile = { ...S.profile, ...updates };
+  if (db && S.user?.uid) {
+    try { await db.ref(`users/${S.user.uid}`).update(updates); } catch(e){}
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  AVATAR UPLOAD
+// ══════════════════════════════════════════════════════
+function handleAvaUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const dataURL = e.target.result;
+    // Show locally
+    const img = document.getElementById('p-ava-img');
+    img.src = dataURL; img.style.display = 'block';
+    document.getElementById('p-ava-ico').style.display = 'none';
+    const hdImg = document.createElement('img');
+    hdImg.src = dataURL;
+    document.getElementById('hd-ava').innerHTML = '';
+    document.getElementById('hd-ava').appendChild(hdImg);
+
+    // Update profile display name input if modal open
+    S.profile.photoURL = dataURL;
+    await saveProfile({ photoURL: dataURL });
+    toast('✅ Profile picture updated!');
+  };
+  reader.readAsDataURL(file);
+}
+
+// ══════════════════════════════════════════════════════
+//  CURRENCY
+// ══════════════════════════════════════════════════════
+function setCCY(c) {
+  ccy = c;
+  document.getElementById('b-ngn').classList.toggle('on', c === 'NGN');
+  document.getElementById('b-ghs').classList.toggle('on', c === 'GHS');
+  updateWallet();
+}
+function getSym() { return CCY_DATA[ccy].sym; }
+function fmt(n)   { return getSym() + (ccy === 'NGN' ? n : Math.round(n * CCY_DATA.GHS.rate)).toLocaleString(); }
+
+function updateWallet() {
+  const d = fmt(S.wallet);
+  document.getElementById('w-hd').textContent  = d;
+  document.getElementById('w-big').textContent = '₦' + S.wallet.toLocaleString() + '.00';
+  document.getElementById('w-win').textContent = '+₦' + S.winnings.toLocaleString() + ' total winnings';
+  document.getElementById('s-bt').textContent  = S.totalBets;
+  document.getElementById('s-wn').textContent  = S.totalWon;
+  document.getElementById('s-ea').textContent  = '₦' + S.winnings.toLocaleString();
+}
+
+// ══════════════════════════════════════════════════════
+//  HEADER AVATAR
+// ══════════════════════════════════════════════════════
+function updateHeaderAvatar() {
+  const el = document.getElementById('hd-ava');
+  if (S.profile?.photoURL) {
+    el.innerHTML = `<img src="${S.profile.photoURL}" alt="Avatar">`;
+  } else {
+    el.textContent = (S.profile?.displayName || 'P').charAt(0).toUpperCase();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════
+function navTo(n) {
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
+  document.getElementById(`pg-${n}`).classList.add('on');
+  document.getElementById(`nb-${n}`).classList.add('on');
+}
+function fGame(el, g) {
+  document.querySelectorAll('.gtab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  toast(`${g === 'all' ? 'All games' : g.toUpperCase()} — launching soon!`);
+}
+
+// ══════════════════════════════════════════════════════
+//  MODALS
+// ══════════════════════════════════════════════════════
+function openModal(type, data) {
+  document.getElementById('mw').classList.add('on');
+  const tt = document.getElementById('m-tt');
+  const bd = document.getElementById('m-bd');
+
+  if (type === 'deposit') {
+    tt.textContent = '💳 Deposit Funds';
+    if (!hasPayment()) {
+      bd.innerHTML = `
+        <div class="payment-unavail">
+          <div style="font-size:22px;margin-bottom:8px">🔒</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:4px">Payment Not Yet Available</div>
+          <div style="font-size:12px;opacity:.8">Payment processing is being set up by the admin.<br>Please check back soon.</div>
+        </div>
+        <div style="margin-top:14px;font-size:11px;color:var(--text2);text-align:center">
+          Powered by Paystack & Flutterwave · Coming soon
+        </div>`;
+    } else {
+      const opts = ccy === 'NGN'
+        ? [500,1000,2000,5000,10000,20000,50000,100000]
+        : [10,25,50,100,250,500,1000,2000];
+      bd.innerHTML = `
+        <div class="dg">${opts.map(a=>`<div class="do" onclick="doDeposit(${a})">${getSym()}${a.toLocaleString()}</div>`).join('')}</div>
+        <label class="fl">Custom Amount</label>
+        <input class="fi" type="number" id="dep-c" placeholder="Enter amount...">
+        <button class="cta" onclick="depCustom()">DEPOSIT NOW</button>
+        <div class="payment-logos">Secured by Paystack · Flutterwave</div>`;
+    }
+  }
+
+  else if (type === 'withdraw') {
+    tt.textContent = '💸 Withdraw Funds';
+    if (!hasPayment()) {
+      bd.innerHTML = `
+        <div class="payment-unavail">
+          <div style="font-size:22px;margin-bottom:8px">🔒</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:4px">Payment Not Yet Available</div>
+          <div style="font-size:12px;opacity:.8">Withdrawal functionality will be available once payment processing is active.</div>
+        </div>`;
+    } else {
+      bd.innerHTML = `
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">
+          Balance: <strong style="color:var(--gold)">₦${S.wallet.toLocaleString()}</strong>
+        </div>
+        <label class="fl">Amount</label>
+        <input class="fi" type="number" id="wth-a" placeholder="Amount to withdraw">
+        <label class="fl">Account Number</label>
+        <input class="fi" type="text" placeholder="0123456789">
+        <label class="fl">Bank</label>
+        <input class="fi" type="text" placeholder="GTBank / Access / Zenith / UBA...">
+        <button class="cta" onclick="toast('Withdrawal submitted! Processing in 1-3 days.');closeM()">WITHDRAW</button>`;
+    }
+  }
+
+  else if (type === 'edit-profile') {
+    tt.textContent = '✏️ Edit Profile';
+    bd.innerHTML = `
+      <div class="pfp-upload" id="pfp-prev" onclick="document.getElementById('ava-file').click()">
+        ${S.profile?.photoURL
+          ? `<img src="${S.profile.photoURL}" alt="Avatar">`
+          : `<span style="font-size:28px">📷</span>`}
+      </div>
+      <div style="text-align:center;font-size:11px;color:var(--text2);margin-bottom:14px">Tap to change profile picture</div>
+      <label class="fl">DISPLAY NAME</label>
+      <input class="fi" type="text" id="ep-name" value="${S.profile?.displayName || ''}" placeholder="Your name">
+      <label class="fl">USERNAME</label>
+      <input class="fi" type="text" id="ep-user" value="${S.profile?.username || ''}" placeholder="@username">
+      <label class="fl">COUNTRY</label>
+      <select class="fi" id="ep-country">
+        <option value="NG" ${S.profile?.country==='NG'?'selected':''}>🇳🇬 Nigeria</option>
+        <option value="GH" ${S.profile?.country==='GH'?'selected':''}>🇬🇭 Ghana</option>
+        <option value="KE" ${S.profile?.country==='KE'?'selected':''}>🇰🇪 Kenya</option>
+        <option value="ZA" ${S.profile?.country==='ZA'?'selected':''}>🇿🇦 South Africa</option>
+      </select>
+      <button class="cta" onclick="saveEditProfile()">SAVE CHANGES</button>`;
+  }
+
+  else if (type === 'game-history') {
+    tt.textContent = '🎮 Game History';
+    bd.innerHTML = `
+      <div class="menu-card">
+        <div class="log-entry">
+          <div class="log-ico">📭</div>
+          <div class="log-body">
+            <div class="log-msg">No game history yet</div>
+            <div class="log-ts">Your match history will appear here once you play</div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);text-align:center;margin-top:12px">
+        History tracks: match results, scores, duration, and outcome
+      </div>`;
+  }
+
+  else if (type === 'achievements') {
+    tt.textContent = '🏅 Achievements';
+    const ACHS = [
+      { ico:'🎯',nm:'First Bet',ds:'Place your first bet',pct:0,locked:true },
+      { ico:'🏆',nm:'Tournament King',ds:'Win a tournament',pct:0,locked:true },
+      { ico:'🔥',nm:'Win Streak',ds:'Win 3 bets in a row',pct:0,locked:true },
+      { ico:'💰',nm:'Big Winner',ds:'Win over ₦10,000 in one bet',pct:0,locked:true },
+      { ico:'🎮',nm:'Veteran Player',ds:'Play 50 matches',pct:0,locked:true },
+      { ico:'🤝',nm:'Recruiter',ds:'Refer 5 friends',pct:0,locked:true },
+      { ico:'⭐',nm:'Elite Status',ds:'Reach Level 5',pct:0,locked:true },
+      { ico:'🛡️',nm:'Clean Player',ds:'No cheat flags ever',pct:100,locked:false },
+      { ico:'📱',nm:'Early Bird',ds:'Joined during BETELITE launch',pct:100,locked:false },
+      { ico:'✅',nm:'Verified',ds:'Completed account setup',pct:100,locked:false },
+      { ico:'🌍',nm:'African Pride',ds:'Play from Nigeria or Ghana',pct:100,locked:false },
+      { ico:'🔔',nm:'Notified',ds:'Enabled match notifications',pct:0,locked:true },
+    ];
+    bd.innerHTML = `
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">
+        ${ACHS.filter(a=>!a.locked).length}/${ACHS.length} unlocked
+      </div>
+      <div class="menu-card">
+        ${ACHS.map(a => `
+        <div class="ach-card">
+          <div class="ach-ico">${a.ico}</div>
+          <div class="ach-body">
+            <div class="ach-nm" style="${a.locked?'color:var(--text2)':''}">${a.nm}</div>
+            <div class="ach-ds">${a.ds}</div>
+            ${a.pct > 0 && a.pct < 100 ? `<div class="ach-prog"><div class="ach-prog-fill" style="width:${a.pct}%"></div></div>` : ''}
+          </div>
+          <div class="ach-lock">${a.locked ? '🔒' : '✅'}</div>
+        </div>`).join('')}
+      </div>`;
+    document.getElementById('ach-badge').textContent = `${ACHS.filter(a=>!a.locked).length}/${ACHS.length}`;
+  }
+
+  else if (type === 'referral') {
+    tt.textContent = '🤝 Refer & Earn';
+    const code = S.profile?.referralCode || 'BETXXXX';
+    bd.innerHTML = `
+      <div class="ref-box">
+        <div style="font-size:12px;color:var(--text2)">Your referral code</div>
+        <div class="ref-code">${code}</div>
+        <button class="ref-copy" onclick="navigator.clipboard?.writeText('${code}');toast('✅ Code copied!')">
+          📋 Copy Code
+        </button>
+      </div>
+      <div class="menu-card" style="margin-bottom:12px">
+        <div class="mi">
+          <div class="mi-ic">🎁</div>
+          <div class="mi-body"><div class="mi-tx">Earn ₦500 per referral</div><div class="mi-sub">When your friend makes their first deposit</div></div>
+        </div>
+        <div class="mi">
+          <div class="mi-ic">👥</div>
+          <div class="mi-body"><div class="mi-tx">0 friends referred</div><div class="mi-sub">₦0 earned from referrals</div></div>
+        </div>
+        <div class="mi">
+          <div class="mi-ic">📈</div>
+          <div class="mi-body"><div class="mi-tx">Bonus tiers</div><div class="mi-sub">5 refs = Gold status · 10 refs = Platinum</div></div>
+        </div>
+      </div>
+      <button class="cta" onclick="shareReferral('${code}')">📤 Share Your Link</button>`;
+  }
+
+  else if (type === 'anticheat') {
+    tt.textContent = '🛡️ Anti-Cheat Log';
+    bd.innerHTML = `
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Your account verification and cheat detection history
+      </div>
+      <div class="menu-card">
+        <div class="log-entry">
+          <div class="log-ico">✅</div>
+          <div class="log-body">
+            <div class="log-msg">Account created & verified</div>
+            <div class="log-ts">${new Date().toLocaleDateString()} · System</div>
+            <div class="log-sev" style="color:var(--green)">CLEAN</div>
+          </div>
+        </div>
+        <div class="log-entry">
+          <div class="log-ico">🛡️</div>
+          <div class="log-body">
+            <div class="log-msg">AI anti-cheat monitoring active</div>
+            <div class="log-ts">Real-time · All matches monitored</div>
+            <div class="log-sev" style="color:var(--blue)">MONITORING</div>
+          </div>
+        </div>
+        <div class="log-entry">
+          <div class="log-ico">📊</div>
+          <div class="log-body">
+            <div class="log-msg">No flags on your account</div>
+            <div class="log-ts">Cheat flags appear here when detected</div>
+            <div class="log-sev" style="color:var(--green)">0 FLAGS</div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);text-align:center;margin-top:12px">
+        AI analyses screenshots, stream frames, and score submissions for anomalies
+      </div>`;
+  }
+
+  else if (type === 'settings') {
+    tt.textContent = '⚙️ Settings';
+    bd.innerHTML = `
+      <div class="menu-card" style="margin-bottom:10px">
+        <div class="menu-card-title">NOTIFICATIONS</div>
+        <div class="setting-row">
+          <div><div class="setting-label">Match Alerts</div><div class="setting-sub">Get notified when matches start</div></div>
+          <div class="toggle ${S.settings.notifications?'on':''}" onclick="toggleSetting('notifications',this)"></div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Tournament Alerts</div><div class="setting-sub">When your tournament starts</div></div>
+          <div class="toggle on" onclick="toggleSetting('tournamentAlerts',this)"></div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Win Notifications</div><div class="setting-sub">When your bet is settled</div></div>
+          <div class="toggle on" onclick="toggleSetting('winAlerts',this)"></div>
+        </div>
+      </div>
+      <div class="menu-card" style="margin-bottom:10px">
+        <div class="menu-card-title">PERFORMANCE</div>
+        <div class="setting-row">
+          <div><div class="setting-label">Data Saver Mode</div><div class="setting-sub">Reduce data usage on slow connections</div></div>
+          <div class="toggle ${S.settings.dataSaver?'on':''}" onclick="toggleSetting('dataSaver',this)"></div>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">AI Auto-Detect</div><div class="setting-sub">AI scans stream frames automatically</div></div>
+          <div class="toggle ${S.settings.autoDetect?'on':''}" onclick="toggleSetting('autoDetect',this)"></div>
+        </div>
+      </div>
+      <div class="menu-card" style="margin-bottom:10px">
+        <div class="menu-card-title">ACCOUNT</div>
+        <div class="setting-row">
+          <div><div class="setting-label">Change Password</div></div>
+          <button style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer" onclick="doForgotFromSettings()">Send Reset Email</button>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Currency</div></div>
+          <div style="display:flex;gap:5px">
+            <button onclick="setCCY('NGN');toast('Currency: Nigerian Naira ₦')" style="padding:5px 10px;border-radius:5px;background:${ccy==='NGN'?'var(--gold)':'var(--bg3)'};color:${ccy==='NGN'?'#000':'var(--text)'};font-family:var(--fd);font-weight:700;font-size:12px;cursor:pointer">₦ NGN</button>
+            <button onclick="setCCY('GHS');toast('Currency: Ghanaian Cedi ₵')" style="padding:5px 10px;border-radius:5px;background:${ccy==='GHS'?'var(--gold)':'var(--bg3)'};color:${ccy==='GHS'?'#000':'var(--text)'};font-family:var(--fd);font-weight:700;font-size:12px;cursor:pointer">₵ GHS</button>
+          </div>
+        </div>
+      </div>
+      <div class="menu-card">
+        <div class="menu-card-title">ABOUT</div>
+        <div class="setting-row"><div class="setting-label">Version</div><div style="font-size:12px;color:var(--text2)">BETELITE v2.0</div></div>
+        <div class="setting-row"><div class="setting-label">Build</div><div style="font-size:12px;color:var(--text2)">March 2025</div></div>
+      </div>`;
+  }
+}
+
+async function doForgotFromSettings() {
+  const email = S.user?.email;
+  if (!email || !auth) { toast('No email on account'); return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    toast(`✅ Reset email sent to ${email}`);
+  } catch(e) { toast('Failed to send reset email'); }
+}
+
+function toggleSetting(key, el) {
+  el.classList.toggle('on');
+  S.settings[key] = el.classList.contains('on');
+}
+
+async function saveEditProfile() {
+  const name    = document.getElementById('ep-name')?.value.trim();
+  const username= document.getElementById('ep-user')?.value.trim();
+  const country = document.getElementById('ep-country')?.value;
+  if (!name) { toast('Please enter a display name'); return; }
+  await saveProfile({ displayName: name, username, country });
+  document.getElementById('p-nm').textContent = name;
+  if (auth?.currentUser) await auth.currentUser.updateProfile({ displayName: name });
+  toast('✅ Profile updated!');
+  closeM();
+}
+
+function shareReferral(code) {
+  const msg = `Join BETELITE — the #1 esports betting platform in Africa! Use my code ${code} for a bonus. https://betelite.gg`;
+  if (navigator.share) navigator.share({ title: 'BETELITE Referral', text: msg });
+  else { navigator.clipboard?.writeText(msg); toast('📋 Referral link copied!'); }
+}
+
+function doDeposit(amt) {
+  if (!hasPayment()) { toast('Payment not yet available'); return; }
+  const n = ccy === 'NGN' ? amt : Math.round(amt / CCY_DATA.GHS.rate);
+  S.wallet += n;
+  saveProfile({ wallet: S.wallet });
+  updateWallet(); closeM();
+  toast(`✅ ${getSym()}${amt.toLocaleString()} deposited!`);
+}
+function depCustom() {
+  const v = parseFloat(document.getElementById('dep-c')?.value) || 0;
+  if (v < 50) { toast('Minimum deposit: ' + getSym() + '50'); return; }
+  doDeposit(v);
+}
+
+function closeM() { document.getElementById('mw').classList.remove('on'); }
+function closeMOut(e) { if (e.target === document.getElementById('mw')) closeM(); }
+
+// ══════════════════════════════════════════════════════
+//  ADS + TICKER
+// ══════════════════════════════════════════════════════
+const ADS = [
+  { i:'🎯', n:'COD Mobile',     d:'5v5 Pro · Win up to ₦1M', b:'SOON', c:'#FF3B3B' },
+  { i:'🔥', n:'Free Fire',      d:'Battle Royale · ₦250K', b:'SOON', c:'#FF7A00' },
+  { i:'⚽', n:'eFootball',      d:'5v5 Championships', b:'SOON', c:'#00D46A' },
+  { i:'🏟️', n:'Dream League',   d:'Afrika Cup · ₦150K', b:'SOON', c:'#00AFFF' },
+  { i:'🏆', n:'FIFA Mobile',    d:'Ultimate Cup Series', b:'Q2', c:'#F5C518' },
+  { i:'🏀', n:'NBA 2K Mobile',  d:'Basketball Leagues', b:'BETA', c:'#FF6B00' },
+  { i:'⚔️', n:'Mobile Legends', d:'MOBA 5v5 League', b:'LATER', c:'#9B59B6' },
+  { i:'🎲', n:'Chess Blitz',    d:'Mind Sports ₦500K', b:'NEW', c:'#00D46A' },
+];
+
+const TICKS = [
+  '🚀 BETELITE is <span class="tk-h">launching soon</span> — register now for early access',
+  '🏆 eFootball 5v5 — Entry from <span class="tk-w">₦1,500</span> · Prize pool up to ₦22,500',
+  '🎯 COD Mobile Pro League — Prize pool up to <span class="tk-w">₦750,000</span>',
+  '🔥 Free Fire Battle Royale — <span class="tk-h">15 players</span> · Winner takes 30%',
+  '🇬🇭 Ghana players welcome — Entry from <span class="tk-w">₵15</span>',
+  '💰 Max bet per match: <span class="tk-h">₦1,000,000</span> NGN or ₵10,000 GHS',
+  '🛡️ Anti-cheat AI monitors every match in real-time',
+  '📺 Live streaming with AI score detection — coming soon',
+];
+
+function buildAds() {
+  const all = [...ADS, ...ADS];
+  document.getElementById('ad-tr').innerHTML = all.map(a =>
+    `<div class="ad-c" onclick="toast('${a.n} — coming to BETELITE soon!')">
+      <div class="ad-gl" style="background:linear-gradient(135deg,${a.c},transparent)"></div>
+      <div class="ad-ico">${a.i}</div>
+      <div class="ad-tx"><div class="ad-nm">${a.n}</div><div class="ad-ds">${a.d}</div></div>
+      <div class="ad-bl">${a.b}</div>
+    </div>`).join('');
+}
+
+function buildTicker() {
+  const all = [...TICKS, ...TICKS];
+  document.getElementById('tk-sc').innerHTML = all.map(t =>
+    `<div class="tk-i">● ${t}</div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════
+let _tt;
+function toast(msg) {
+  const e = document.getElementById('toast');
+  e.textContent = msg; e.classList.add('on');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => e.classList.remove('on'), 3200);
+}
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initFirebase();
+
+  // Enter key on auth inputs
+  document.getElementById('li-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  document.getElementById('li-email').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('li-pass').focus(); });
+});
+</script>
+</body>
+</html>
