@@ -64,5 +64,28 @@ module.exports = (io, engine) => {
     res.json({ ok: true, result });
   });
 
+  // POST /api/detect/event (from Python AI service)
+  r.post('/event', async (req, res) => {
+    const { type, matchId, team, confidence } = req.body;
+    if (!matchId || !type) return res.status(400).json({ error: 'Missing data' });
+    
+    // Simulate updating the score based on the event type
+    if (type === 'goal_detected') {
+      try {
+        const updated = await engine.applyAIScore({ 
+          matchId, 
+          confidence, 
+          team,
+          detectedGoal: true
+        });
+        io.to(`match:${matchId}`).emit('score_update', updated);
+      } catch (e) {
+        console.error('[DETECT EVENT]', e.message);
+      }
+    }
+    
+    res.json({ ok: true });
+  });
+
   return r;
 };

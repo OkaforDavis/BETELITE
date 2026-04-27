@@ -92,7 +92,7 @@ class GameDetector:
         # Send to backend
         try:
             requests.post(
-                'http://localhost:3000/api/detection/event',
+                'http://localhost:3000/api/detect/event',
                 json=event,
                 timeout=5
             )
@@ -116,7 +116,7 @@ class GameDetector:
         
         try:
             requests.post(
-                'http://localhost:3000/api/detection/event',
+                'http://localhost:3000/api/detect/event',
                 json=event,
                 timeout=5
             )
