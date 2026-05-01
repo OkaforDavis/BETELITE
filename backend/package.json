@@ -21,7 +21,11 @@
     "node-cron": "^3.0.3",
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
-    "sharp": "^0.32.6"
+    "sharp": "^0.32.6",
+    "bcrypt": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "tesseract.js": "^4.1.1",
+    "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
