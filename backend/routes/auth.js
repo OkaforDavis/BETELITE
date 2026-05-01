@@ -3,6 +3,7 @@ const { db } = require('../services/firebase');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const prisma = require('../prismaClient');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'betelite-secret-key-change-in-production';
 const JWT_EXPIRE = 7 * 24 * 60 * 60; // 7 days
@@ -315,28 +316,24 @@ module.exports = (io, engine) => {
       const { idToken, googleUser } = req.body;
       const { email, name, picture } = googleUser;
 
-      // Check if user exists
+      // 1. Sync with Firebase Realtime Database
       const snapshot = await db.ref('users').orderByChild('email').equalTo(email).once('value');
-
-      let userId;
+      let firebaseUserId;
       if (snapshot.exists()) {
-        // Update existing user
         const users = snapshot.val();
-        userId = Object.keys(users)[0];
-        await db.ref(`users/${userId}`).update({
+        firebaseUserId = Object.keys(users)[0];
+        await db.ref(`users/${firebaseUserId}`).update({
           profilePicture: picture,
           lastLogin: Date.now(),
         });
       } else {
-        // Create new user
         const newUserRef = db.ref('users').push();
-        userId = newUserRef.key;
-
+        firebaseUserId = newUserRef.key;
         await newUserRef.set({
-          userId,
+          userId: firebaseUserId,
           email,
           username: name,
-          password: null, // OAuth users have no password
+          password: null,
           createdAt: Date.now(),
           emailVerified: true,
           role: 'player',
@@ -351,12 +348,58 @@ module.exports = (io, engine) => {
         });
       }
 
+      // 2. Sync with MySQL via Prisma
+      let sqlUser = await prisma.user.findUnique({
+        where: { email: email }
+      });
+
+      if (sqlUser) {
+        // Update existing SQL user
+        sqlUser = await prisma.user.update({
+          where: { id: sqlUser.id },
+          data: {
+            lastLogin: new Date(),
+          }
+        });
+        
+        // Update profile picture
+        await prisma.userProfile.upsert({
+            where: { userId: sqlUser.id },
+            update: { avatarUrl: picture, displayName: name },
+            create: { userId: sqlUser.id, avatarUrl: picture, displayName: name }
+        });
+      } else {
+        // Create new SQL user
+        sqlUser = await prisma.user.create({
+          data: {
+            email: email,
+            username: name.replace(/\s+/g, '').toLowerCase() + Math.floor(Math.random() * 10000), // ensure unique username
+            passwordHash: 'google-oauth',
+            emailVerified: true,
+            accountStatus: 'active',
+            profile: {
+                create: {
+                    displayName: name,
+                    avatarUrl: picture
+                }
+            },
+            wallet: {
+                create: {
+                    currencyCode: 'NGN',
+                    balanceAvailable: 0
+                }
+            }
+          }
+        });
+      }
+
       // Generate JWT token
-      const token = jwt.sign({ userId, email, role: 'player' }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
+      const token = jwt.sign({ userId: sqlUser.id.toString(), firebaseUserId, email, role: 'player' }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
 
       res.json({
         ok: true,
-        userId,
+        userId: sqlUser.id.toString(),
+        firebaseUserId,
         email,
         username: name,
         token,

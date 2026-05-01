@@ -10,13 +10,8 @@ class App {
             return;
         }
 
-        // Check auth for production
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            window.location.href = '/auth';
-            return;
-        }
-
+        // Firebase onAuthStateChanged in index.html will handle auth state and show App or Auth screen.
+        // We just wait for it.
         try {
             // Connect WebSocket
             await socket.connect(localStorage.getItem('user_id'));

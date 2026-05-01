@@ -1,6 +1,7 @@
 """
 BETELITE AI Detection Service
-Detects goals, offsides, and other game events using Python + OpenCV + ML
+Detects goals, scores, and gamer tags using Python + EasyOCR
+Supported Games: FIFA, DLS, COD, eFootball, PUBG, Free Fire
 """
 
 import cv2
@@ -9,25 +10,33 @@ from flask import Flask, request, jsonify, Response
 from threading import Thread
 import requests
 import json
+import base64
+import re
 from datetime import datetime
 from typing import Dict, List, Tuple
 import logging
+import easyocr
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Initialize EasyOCR Reader once
+logger.info("Initializing EasyOCR Model...")
+reader = easyocr.Reader(['en'], gpu=False) # set gpu=True if CUDA is available
+logger.info("EasyOCR Initialized.")
+
 class GameDetector:
-    """Main detection class for game analysis"""
+    """Main detection class for game analysis using EasyOCR"""
     
     def __init__(self):
         self.active_matches: Dict = {}
         self.detection_history: Dict = {}
-        self.confidence_threshold = 0.75
+        self.confidence_threshold = 0.5
         
     def start_detection(self, match_data: Dict) -> Dict:
-        """Start detection stream for a match"""
+        """Start tracking a match session"""
         match_id = match_data.get('matchId')
         game = match_data.get('game')
         
@@ -37,110 +46,99 @@ class GameDetector:
         self.active_matches[match_id] = {
             'game': game,
             'started_at': datetime.now(),
-            'goals_detected': 0,
-            'offsides_detected': 0,
             'status': 'running'
         }
-        
         self.detection_history[match_id] = []
         
-        # Start detection in background thread
-        thread = Thread(target=self._run_detection, args=(match_id, game))
-        thread.daemon = True
-        thread.start()
-        
-        logger.info(f'Detection started for match {match_id} ({game})')
+        logger.info(f'Detection tracking started for match {match_id} ({game})')
         return {
             'status': 'started',
             'matchId': match_id,
-            'detectionId': f'{match_id}_{datetime.now().timestamp()}'
         }
-    
-    def _run_detection(self, match_id: str, game: str):
-        """Run actual detection loop (placeholder)"""
-        # This would connect to screen capture stream
-        # For now, we simulate detection events
+
+    def stop_detection(self, match_id: str) -> Dict:
+        """End tracking for a match"""
+        if match_id in self.active_matches:
+            self.active_matches[match_id]['status'] = 'stopped'
+            return {'status': 'stopped', 'matchId': match_id}
+        return {'error': 'Match not found'}
+
+    def parse_football_score(self, texts: List[str]) -> Dict:
+        """Heuristics for FIFA, eFootball, DLS"""
+        # Look for patterns like "2 - 1" or separate numbers near team names
+        score_pattern = re.compile(r'(\d+)\s*[-:]\s*(\d+)')
+        for text in texts:
+            match = score_pattern.search(text)
+            if match:
+                return {
+                    'scoreHome': int(match.group(1)),
+                    'scoreAway': int(match.group(2)),
+                    'scoreChanged': True,
+                    'notes': f'Detected score {match.group(0)}'
+                }
         
-        import time
-        import random
+        # Fallback logic: find two numbers that might be scores
+        numbers = [int(t) for t in texts if t.isdigit() and len(t) < 3]
+        if len(numbers) >= 2:
+             return {
+                 'scoreHome': numbers[0],
+                 'scoreAway': numbers[1],
+                 'scoreChanged': True,
+                 'notes': 'Detected loose numbers as scores'
+             }
+             
+        return {'scoreChanged': False, 'notes': 'No score detected'}
+
+    def parse_fps_score(self, texts: List[str]) -> Dict:
+        """Heuristics for COD, PUBG, Free Fire"""
+        # Scoreboards usually have lists of Tags and Kills
+        # e.g., Player1 15, Player2 12
+        # For this prototype, we'll return the raw extracted text so Node.js can map it to gamers
         
-        while self.active_matches.get(match_id, {}).get('status') == 'running':
-            time.sleep(5)
+        tags_and_scores = []
+        for i, text in enumerate(texts):
+            # If text is a number and previous text is string, it might be Name + Score
+            if text.isdigit() and i > 0 and not texts[i-1].isdigit():
+                tags_and_scores.append({
+                    'gamerTag': texts[i-1],
+                    'score': int(text)
+                })
+        
+        if tags_and_scores:
+            return {
+                'scoreChanged': True,
+                'players': tags_and_scores,
+                'notes': 'Detected FPS scoreboard'
+            }
             
-            # Simulate random goal detection for demo
-            if random.random() < 0.1:  # 10% chance per 5 seconds
-                self._emit_goal_detected(match_id, game)
-            
-            # Simulate random offside detection
-            if random.random() < 0.05:  # 5% chance per 5 seconds
-                self._emit_offside_detected(match_id, game)
-    
-    def _emit_goal_detected(self, match_id: str, game: str):
-        """Send goal detection event to backend"""
-        event = {
-            'type': 'goal_detected',
-            'game': game,
-            'matchId': match_id,
-            'team': 'Team A' if np.random.rand() > 0.5 else 'Team B',
-            'confidence': round(np.random.uniform(0.8, 0.99), 2),
-            'timestamp': datetime.now().isoformat()
-        }
+        return {'scoreChanged': False, 'notes': 'No scoreboard detected'}
+
+    def analyze_frame(self, game_type: str, image_bytes: bytes) -> Dict:
+        """Analyze a single frame with EasyOCR"""
+        # Convert bytes to numpy array for OpenCV/EasyOCR
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        self.detection_history[match_id].append(event)
-        self.active_matches[match_id]['goals_detected'] += 1
+        if img is None:
+             return {'error': 'Invalid image'}
+             
+        # Run EasyOCR
+        results = reader.readtext(img)
         
-        # Send to backend
-        try:
-            requests.post(
-                'http://localhost:3000/api/detect/event',
-                json=event,
-                timeout=5
-            )
-            logger.info(f'Goal detected in match {match_id}: {event}')
-        except Exception as e:
-            logger.error(f'Failed to send goal event: {e}')
-    
-    def _emit_offside_detected(self, match_id: str, game: str):
-        """Send offside detection event to backend"""
-        event = {
-            'type': 'offside_detected',
-            'game': game,
-            'matchId': match_id,
-            'team': 'Team A' if np.random.rand() > 0.5 else 'Team B',
-            'confidence': round(np.random.uniform(0.7, 0.95), 2),
-            'timestamp': datetime.now().isoformat()
-        }
+        # Extract text strings that meet confidence threshold
+        texts = [res[1] for res in results if res[2] > self.confidence_threshold]
+        logger.info(f"Extracted Texts: {texts}")
         
-        self.detection_history[match_id].append(event)
-        self.active_matches[match_id]['offsides_detected'] += 1
-        
-        try:
-            requests.post(
-                'http://localhost:3000/api/detect/event',
-                json=event,
-                timeout=5
-            )
-            logger.info(f'Offside detected in match {match_id}: {event}')
-        except Exception as e:
-            logger.error(f'Failed to send offside event: {e}')
-    
-    def end_detection(self, match_id: str) -> Dict:
-        """End detection for a match"""
-        if match_id not in self.active_matches:
-            return {'error': 'Match not found'}
-        
-        self.active_matches[match_id]['status'] = 'stopped'
-        
-        return {
-            'status': 'stopped',
-            'matchId': match_id,
-            'summary': self.active_matches[match_id],
-            'history_count': len(self.detection_history.get(match_id, []))
-        }
-    
-    def get_match_events(self, match_id: str) -> List[Dict]:
-        """Get all detected events for a match"""
-        return self.detection_history.get(match_id, [])
+        game_type_lower = game_type.lower()
+        if game_type_lower in ['fifa', 'efootball', 'dls', 'dream', 'dream league soccer']:
+             parsed = self.parse_football_score(texts)
+        elif game_type_lower in ['cod', 'pubg', 'free fire']:
+             parsed = self.parse_fps_score(texts)
+        else:
+             parsed = {'error': f'Unsupported game type: {game_type}', 'raw_text': texts}
+             
+        parsed['raw_text'] = texts
+        return parsed
 
 
 detector = GameDetector()
@@ -150,109 +148,55 @@ detector = GameDetector()
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check"""
     return jsonify({
         'status': 'healthy',
-        'service': 'betelite-detection',
+        'service': 'betelite-detection-easyocr',
         'active_matches': len(detector.active_matches)
     })
 
 
-@app.route('/api/detect', methods=['POST'])
+@app.route('/api/detect/start', methods=['POST'])
 def start_detection():
-    """Start detection for a match"""
     data = request.get_json()
+    if not data: return jsonify({'error': 'No data'}), 400
+    return jsonify(detector.start_detection(data))
+
+
+@app.route('/api/detect/stop', methods=['POST'])
+def stop_detection():
+    data = request.get_json()
+    match_id = data.get('matchId') if data else None
+    return jsonify(detector.stop_detection(match_id))
+
+
+@app.route('/api/detect/analyze_frame', methods=['POST'])
+def analyze_frame():
+    """Receives a base64 image and game type, returns extracted scores"""
+    data = request.get_json()
+    if not data or 'image' not in data or 'game' not in data:
+        return jsonify({'error': 'Missing image or game type'}), 400
+        
+    game_type = data['game']
+    base64_img = data['image']
     
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    result = detector.start_detection(data)
-    
-    if 'error' in result:
-        return jsonify(result), 400
-    
-    return jsonify(result), 201
-
-
-@app.route('/api/detect/<match_id>', methods=['GET'])
-def get_match_status(match_id: str):
-    """Get detection status for a match"""
-    match_data = detector.active_matches.get(match_id)
-    
-    if not match_data:
-        return jsonify({'error': 'Match not found'}), 404
-    
-    return jsonify({
-        'matchId': match_id,
-        'status': match_data.get('status'),
-        'goalsDetected': match_data.get('goals_detected'),
-        'offsidesDetected': match_data.get('offsides_detected'),
-        'game': match_data.get('game')
-    })
-
-
-@app.route('/api/detect/<match_id>/stop', methods=['POST'])
-def stop_detection(match_id: str):
-    """Stop detection for a match"""
-    result = detector.end_detection(match_id)
-    
-    if 'error' in result:
-        return jsonify(result), 400
-    
-    return jsonify(result)
-
-
-@app.route('/api/detect/<match_id>/events', methods=['GET'])
-def get_match_events(match_id: str):
-    """Get all detected events for a match"""
-    events = detector.get_match_events(match_id)
-    
-    return jsonify({
-        'matchId': match_id,
-        'events': events,
-        'totalEvents': len(events)
-    })
-
-
-@app.route('/api/detect/stream/<match_id>', methods=['GET'])
-def stream_events(match_id: str):
-    """Stream detection events (Server-Sent Events)"""
-    def event_generator():
-        while match_id in detector.active_matches:
-            try:
-                events = detector.get_match_events(match_id)
-                yield f'data: {json.dumps({"events": events})}\n\n'
-                import time
-                time.sleep(2)
-            except Exception as e:
-                logger.error(f'Stream error: {e}')
-                break
-    
-    return Response(event_generator(), mimetype='text/event-stream')
-
-
-# ============= ERROR HANDLERS =============
-
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'Not found'}), 404
-
-
-@app.errorhandler(500)
-def server_error(error):
-    logger.error(f'Server error: {error}')
-    return jsonify({'error': 'Internal server error'}), 500
+    # Strip base64 header if present
+    if 'base64,' in base64_img:
+        base64_img = base64_img.split('base64,')[1]
+        
+    try:
+        image_bytes = base64.b64decode(base64_img)
+    except Exception as e:
+        return jsonify({'error': f'Invalid base64 encoding: {e}'}), 400
+        
+    try:
+        result = detector.analyze_frame(game_type, image_bytes)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f'Analysis error: {e}')
+        return jsonify({'error': 'Analysis failed', 'details': str(e)}), 500
 
 
 if __name__ == '__main__':
-    print('\n🔍 BETELITE Detection Service Starting...')
+    print('\\n🔍 BETELITE Detection Service (EasyOCR) Starting...')
     print('📊 Detection API: http://localhost:5000')
-    print('🎥 Stream Endpoint: http://localhost:5000/api/detect/stream/<match_id>\n')
-    
-    # Run Flask app
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=True,
-        threaded=True
-    )
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

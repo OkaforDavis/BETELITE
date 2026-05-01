@@ -294,7 +294,7 @@ img { display: block; }
 #main {
   flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
   /* leave space so content isn't behind nav */
-  padding-bottom: 0;
+  padding-bottom: calc(var(--nav-h) + max(env(safe-area-inset-bottom, 0px), 6px));
 }
 .pg { display: none; padding: 11px 11px 8px; animation: pgin .2s ease; }
 .pg.on { display: block; }
@@ -302,7 +302,6 @@ img { display: block; }
 
 /* ── BOTTOM NAV — FIXED for small screens ── */
 #nav {
-  flex-shrink: 0;
   display: flex;
   background: var(--bg2);
   border-top: 1px solid var(--border);
@@ -311,8 +310,15 @@ img { display: block; }
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 6px);
   min-height: calc(var(--nav-h) + max(env(safe-area-inset-bottom, 0px), 6px));
   /* Make sure it never gets cut off */
-  position: relative;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   width: 100%;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#nav.hidden {
+  transform: translateY(100%);
 }
 .nb {
   flex: 1; display: flex; flex-direction: column; align-items: center;
@@ -1209,10 +1215,43 @@ function initFirebase() {
     auth = firebase.auth();
     db   = firebase.database();
 
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
       if (user) {
-        showApp(user);
+        try {
+          const idToken = await user.getIdToken();
+          const googleUser = {
+            email: user.email,
+            name: user.displayName || user.email.split('@')[0],
+            picture: user.photoURL,
+            uid: user.uid
+          };
+          
+          const res = await fetch('/api/auth/google-oauth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, googleUser })
+          });
+          
+          const data = await res.json();
+          if (data.ok) {
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('user_id', data.userId);
+            if (window.api) window.api.setToken(data.token);
+            showApp(user);
+          } else {
+            console.error('Backend sync failed:', data.error);
+            showAuthErr(data.error || 'Backend sync failed');
+            auth.signOut();
+          }
+        } catch (err) {
+          console.error('Authentication error:', err);
+          showAuthErr('Authentication error');
+          auth.signOut();
+        }
       } else {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_id');
+        if (window.api) window.api.setToken(null);
         showAuth();
       }
     });
@@ -1849,6 +1888,33 @@ function toast(msg) {
 // ══════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   initFirebase();
+
+  // Automatic currency detection
+  fetch('https://ipapi.co/json/')
+    .then(res => res.json())
+    .then(data => {
+      if (data.country_code === 'GH') {
+        setCCY('GHS');
+      } else {
+        setCCY('NGN'); // default Nigeria/others
+      }
+    })
+    .catch(() => console.log('Location detection failed, defaulting to NGN.'));
+
+  // Bottom Nav Hide/Show on Scroll
+  let lastScroll = 0;
+  const mainEl = document.getElementById('main');
+  const navEl = document.getElementById('nav');
+  mainEl.addEventListener('scroll', () => {
+    const currentScroll = mainEl.scrollTop;
+    // Hide when scrolling down, show when scrolling up
+    if (currentScroll > lastScroll && currentScroll > 60) {
+      navEl.classList.add('hidden');
+    } else {
+      navEl.classList.remove('hidden');
+    }
+    lastScroll = currentScroll;
+  });
 
   // Enter key on auth inputs
   document.getElementById('li-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
