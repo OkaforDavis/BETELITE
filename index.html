@@ -3,11 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Redirects to the index file inside your nested folder -->
-    <meta http-equiv="refresh" content="0; url=BETELITE_v3/BETELITE_v3/mobile/index.html">
-    <script type="text/javascript">
-        window.location.href = "BETELITE_v3/BETELITE_v3/mobile/index.html";
-    </script>
     <title>BETELITE - Loading...</title>
     <style>
         body {
@@ -60,7 +55,20 @@
         <h1>BETELITE</h1>
         <div class="spinner"></div>
         <p>Loading the gaming & betting platform...</p>
-        <p>If you are not redirected automatically, <a href="BETELITE_v3/BETELITE_v3/mobile/index.html">click here</a></p>
+        <p>If you are not redirected automatically, <a href="./BETELITE_v3/BETELITE_v3/mobile/index.html">click here</a></p>
     </div>
+    <script>
+        // Determine the correct path based on current location
+        let targetPath = './BETELITE_v3/BETELITE_v3/mobile/index.html';
+        
+        // If this is running on GitHub Pages, adjust the path
+        if (window.location.hostname.includes('github.io')) {
+            const pathParts = window.location.pathname.split('/').filter(p => p);
+            const repoName = pathParts[0]; // 'BETELITE'
+            targetPath = '/' + repoName + '/BETELITE_v3/BETELITE_v3/mobile/index.html';
+        }
+        
+        window.location.href = targetPath;
+    </script>
 </body>
 </html>
