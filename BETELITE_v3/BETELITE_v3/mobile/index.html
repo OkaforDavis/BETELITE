@@ -905,54 +905,26 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 
     <!-- TOURNAMENTS -->
     <div class="pg" id="pg-tournaments">
-      <div class="sh"><div class="st">🏆 Tournaments</div><span class="tag to">Coming Soon</span></div>
-      <div class="empty-state">
-        <div class="es-icon">🏆</div>
-        <div class="es-title">Tournaments Launching Soon</div>
-        <div class="es-sub">Join a 15-player tournament,<br>win up to 30% of the prize pool.<br>Entry from ₦1,500.</div>
-        <div class="es-badge">🔔 Get notified when live</div>
+      <div class="sh">
+        <div class="st">🏆 Tournaments</div>
+        <button class="tag tg" onclick="loadTournaments()" style="cursor:pointer; border:none; background:var(--green); color:#000; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:900;">🔄 REFRESH</button>
       </div>
 
-      <!-- Tournament previews -->
-      <div class="trn-preview">
-        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#00D46A,transparent)"></div>
-        <div class="trn-soon-badge">COMING SOON</div>
-        <div class="trn-icon">⚽</div>
-        <div class="trn-name">eFootball Champions Cup</div>
-        <div class="trn-meta">15 players · 5v5 format · AI-verified scores</div>
-        <div class="trn-prize">
-          <div><div class="trn-prize-val">₦22,500</div><div class="trn-prize-lbl">Base prize pool (₦1,500 entry)</div></div>
-          <span class="tag tg">1st gets 30%</span>
-        </div>
-        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
+      <!-- My Active Fixtures (if joined a tournament) -->
+      <div id="my-fixtures-section" style="display:none; margin-bottom:16px;">
+        <div class="sh"><div class="st" style="color:var(--gold);">📋 My Next Matches</div></div>
+        <div id="my-fixtures-list"></div>
       </div>
 
-      <div class="trn-preview">
-        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#FF3B3B,transparent)"></div>
-        <div class="trn-soon-badge">COMING SOON</div>
-        <div class="trn-icon">🎯</div>
-        <div class="trn-name">COD Mobile Warzone Pro</div>
-        <div class="trn-meta">15 players · 5v5 format · Live streaming</div>
-        <div class="trn-prize">
-          <div><div class="trn-prize-val">₦750,000</div><div class="trn-prize-lbl">With ₦50,000 entry tier</div></div>
-          <span class="tag tr">Max stakes</span>
+      <!-- Tournament List -->
+      <div id="tournament-list">
+        <div class="empty-state">
+          <div class="es-icon">⏳</div>
+          <div class="es-title">Loading Tournaments...</div>
         </div>
-        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
-      </div>
-
-      <div class="trn-preview">
-        <div class="trn-preview-shine" style="background:linear-gradient(90deg,#FF7A00,transparent)"></div>
-        <div class="trn-soon-badge">COMING SOON</div>
-        <div class="trn-icon">🔥</div>
-        <div class="trn-name">Free Fire Battle Royale</div>
-        <div class="trn-meta">15 players · Squad format · ₦25 GHS entry option</div>
-        <div class="trn-prize">
-          <div><div class="trn-prize-val">₦150,000</div><div class="trn-prize-lbl">With ₦10,000 entry tier</div></div>
-          <span class="tag to">NGN + GHS</span>
-        </div>
-        <button class="trn-notify-btn" onclick="toast('🔔 You\'ll be notified when this launches!')">🔔 Notify Me When Live</button>
       </div>
     </div>
+
 
     <!-- BETS -->
     <div class="pg" id="pg-bets">
@@ -972,6 +944,31 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         <div class="es-icon">📡</div>
         <div class="es-title">Live Streaming Coming</div>
         <div class="es-sub">Watch matches live via WebRTC.<br>AI tracks scores in real-time<br>from the stream automatically.</div>
+      </div>
+
+      <!-- AI DETECTION TESTER -->
+      <div class="menu-card" style="margin-top: 16px; border: 1px solid var(--gold);">
+        <div class="menu-card-title" style="color: var(--gold); display: flex; justify-content: space-between; align-items: center;">
+          <span>🤖 AI SCORE DETECTOR TEST</span>
+          <span class="tag tg">BETA</span>
+        </div>
+        <div style="padding: 12px;">
+          <label class="fl">SELECT GAME</label>
+          <select class="fi" id="ai-game-type" style="margin-bottom: 12px;">
+            <option value="football">FIFA / eFootball / DLS</option>
+            <option value="fps">COD / PUBG / Free Fire</option>
+          </select>
+          
+          <div class="pfp-upload" style="width: 100%; height: 100px; border-radius: 8px; margin-bottom: 12px; background: var(--bg);" onclick="document.getElementById('ai-img-upload').click()">
+            <span style="font-size:24px" id="ai-up-icon">📸 Upload Screenshot</span>
+            <img id="ai-preview" src="" style="display:none; width: 100%; height: 100%; object-fit: contain; border-radius: 8px;">
+          </div>
+          <input type="file" id="ai-img-upload" accept="image/*" style="display:none" onchange="previewAITest(this)">
+          
+          <button class="cta" id="btn-detect" onclick="runAIDetection()" style="background: var(--gold); color: #000;">RUN DETECTION</button>
+          
+          <div id="ai-result" style="margin-top: 12px; font-family: monospace; font-size: 11px; background: var(--bg); padding: 8px; border-radius: 4px; display: none; white-space: pre-wrap; color: var(--text);"></div>
+        </div>
       </div>
 
       <!-- Watch previews -->
@@ -1202,7 +1199,7 @@ function initFirebase() {
   try {
     if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
       console.warn('[Firebase] No config — running without auth');
-      showApp({ displayName: 'Guest Player', email: '', photoURL: null, uid: 'guest_' + Date.now() });
+      showAuth();
       return;
     }
     firebase.initializeApp(FIREBASE_CONFIG);
@@ -1342,7 +1339,7 @@ async function showApp(user) {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').style.display = 'flex';
 
-  // Load/create profile from Firebase
+  // Load profile (uses localStorage cache for instant load, then syncs)
   await loadProfile(user);
   updateHeaderAvatar();
   updateWallet();
@@ -1354,6 +1351,37 @@ async function showApp(user) {
     document.getElementById('conn-bar').textContent = '⭐ Admin Mode — okafordavis8@gmail.com';
     document.getElementById('conn-bar').className = 'connected';
   }
+  
+  // Connect to Socket.io for real-time multiplayer
+  if (typeof io !== 'undefined' && !window._socket) {
+    const BACKEND = window.location.origin;
+    window._socket = io(BACKEND, { transports: ['websocket', 'polling'] });
+    window._socket.on('connect', () => {
+      window._socket.emit('identify', { userId: user.uid, username: S.profile.displayName });
+      console.log('[SOCKET] Connected for multiplayer');
+    });
+    window._socket.on('match_state', (match) => updateMatchUI(match));
+    window._socket.on('score_update', (data) => updateMatchUI(data));
+    window._socket.on('match_finished', (data) => toast(`🏆 Match over! Result: ${data.scoreHome}-${data.scoreAway}`));
+  }
+}
+
+// Profile cache helpers — per account uid
+const CACHE_KEY = uid => `betelite_profile_${uid}`;
+
+function saveProfileCache(uid, data) {
+  try { localStorage.setItem(CACHE_KEY(uid), JSON.stringify({ ...data, _cachedAt: Date.now() })); } catch(e){}
+}
+
+function loadProfileCache(uid) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY(uid));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // Cache valid for 30 minutes
+    if (Date.now() - (data._cachedAt || 0) > 30 * 60 * 1000) return null;
+    return data;
+  } catch(e) { return null; }
 }
 
 async function loadProfile(user) {
@@ -1368,30 +1396,43 @@ async function loadProfile(user) {
     createdAt: Date.now(),
   };
 
-  if (db && user.uid !== 'guest_' + Date.now().toString().slice(0,-4)) {
+  // 1. Load from localStorage cache instantly (so app feels fast)
+  const cached = loadProfileCache(user.uid);
+  if (cached) {
+    S.profile = { ...fallback, ...cached };
+    applyProfileToUI();
+  }
+
+  // 2. Sync from Firebase in background
+  if (db) {
     try {
       const snap = await db.ref(`users/${user.uid}`).once('value');
       const data = snap.val();
       if (data) {
         S.profile = { ...fallback, ...data };
       } else {
-        // Create new profile
         await db.ref(`users/${user.uid}`).set(fallback);
         S.profile = fallback;
       }
     } catch (e) {
-      S.profile = fallback;
+      if (!cached) S.profile = fallback;
     }
   } else {
-    S.profile = fallback;
+    if (!cached) S.profile = fallback;
   }
 
+  // 3. Save updated profile to localStorage cache
+  saveProfileCache(user.uid, S.profile);
+  applyProfileToUI();
+}
+
+function applyProfileToUI() {
+  if (!S.profile) return;
   S.wallet   = S.profile.wallet || 0;
   S.winnings = S.profile.winnings || 0;
   S.totalBets= S.profile.totalBets || 0;
   S.totalWon = S.profile.totalWon || 0;
 
-  // Update profile UI
   document.getElementById('p-nm').textContent    = S.profile.displayName;
   document.getElementById('p-email').textContent = S.profile.email;
   document.getElementById('p-level').textContent = `⭐ Level ${S.profile.level || 1} · ${getLevel(S.profile.level)}`;
@@ -1833,6 +1874,150 @@ function buildTicker() {
     `<div class="tk-i">● ${t}</div>`).join('');
 }
 
+
+// ===== TOURNAMENTS - Live Data =====
+let _activeTournamentId = null;
+let _fixtureImages = {};
+
+async function loadTournaments() {
+  var listEl = document.getElementById('tournament-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">Loading...</div></div>';
+  try {
+    var res = await fetch('/api/tournaments');
+    var data = await res.json();
+    renderTournamentList(data.tournaments);
+    if (_activeTournamentId) loadMyFixtures(_activeTournamentId);
+  } catch(e) {
+    listEl.innerHTML = '<div class="empty-state"><div class="es-icon">❌</div><div class="es-title">Backend offline</div><div class="es-sub">Start the Node.js server</div></div>';
+  }
+}
+
+function renderTournamentList(list) {
+  var listEl = document.getElementById('tournament-list');
+  if (!list || !list.length) { listEl.innerHTML = '<div class="empty-state"><div class="es-title">No tournaments</div></div>'; return; }
+  var html = '';
+  list.forEach(function(t) {
+    var isJoined = S.user && t.players.find(function(p){ return p.userId === S.user.uid; });
+    var sc = t.status === 'open' ? 'var(--green)' : t.status === 'active' ? 'var(--gold)' : 'var(--text3)';
+    var ep = Math.round(t.entryFeeNGN * (ccy === 'GHS' ? 0.037 : 1));
+    var pp = Math.round(t.prizePool * (ccy === 'GHS' ? 0.037 : 1));
+    var p1 = t.prizes[0] ? getSym() + Math.round(t.prizes[0].amount * (ccy === 'GHS' ? 0.037 : 1)).toLocaleString() : '--';
+    var joinBtn = '';
+    if (isJoined) {
+      joinBtn = '<button class="trn-notify-btn" style="background:var(--gold);color:#000;" onclick="viewMyMatches(' + "'" + t.id + "'" + ')">📋 VIEW MY MATCHES</button>';
+    } else if (t.status === 'open') {
+      joinBtn = '<button class="trn-notify-btn" onclick="joinTournamentById(' + "'" + t.id + "'" + ',' + "'" + t.name.replace(/'/g,'') + "'" + ',this)">⚔️ JOIN TOURNAMENT</button>';
+    } else {
+      joinBtn = '<button class="trn-notify-btn" disabled style="opacity:.5;">🔒 ' + t.status.toUpperCase() + '</button>';
+    }
+    html += '<div class="trn-preview" style="border-top:2px solid ' + sc + ';">' +
+      '<div class="trn-soon-badge" style="background:' + sc + ';color:#000;">' + t.status.toUpperCase() + ' · ' + t.playerCount + '/' + t.maxPlayers + '</div>' +
+      '<div class="trn-icon">' + t.icon + '</div>' +
+      '<div class="trn-name">' + t.name + '</div>' +
+      '<div class="trn-meta">' + t.mode + ' · Entry: ' + getSym() + ep.toLocaleString() + ' · Prize: ' + getSym() + pp.toLocaleString() + '</div>' +
+      '<div class="trn-prize"><div><div class="trn-prize-val">' + p1 + '</div><div class="trn-prize-lbl">1st place (30%)</div></div><span class="tag tg">Top 5 win</span></div>' +
+      joinBtn + '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+async function joinTournamentById(id, name, btn) {
+  if (!S.user) { toast('Please login first'); return; }
+  btn.disabled = true; btn.textContent = 'Joining...';
+  try {
+    var res = await fetch('/api/tournaments/' + id + '/join', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: S.user.uid, username: S.profile.displayName })
+    });
+    var data = await res.json();
+    if (!data.ok) { toast('Failed: ' + (data.error || 'Unknown')); btn.disabled = false; btn.textContent = '⚔️ JOIN TOURNAMENT'; return; }
+    toast('✅ Joined ' + name + '!');
+    _activeTournamentId = id;
+    loadTournaments();
+  } catch(e) { toast('Error: ' + e.message); btn.disabled = false; btn.textContent = '⚔️ JOIN TOURNAMENT'; }
+}
+
+async function viewMyMatches(id) {
+  _activeTournamentId = id;
+  document.getElementById('my-fixtures-section').style.display = 'block';
+  await loadMyFixtures(id);
+  document.getElementById('my-fixtures-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function loadMyFixtures(id) {
+  if (!S.user) return;
+  try {
+    var res = await fetch('/api/tournaments/' + id + '/fixtures?userId=' + encodeURIComponent(S.user.uid));
+    var data = await res.json();
+    renderMyFixtures(id, data.fixtures);
+  } catch(e) { console.error('[Fixtures]', e); }
+}
+
+function renderMyFixtures(tournamentId, fixList) {
+  var el = document.getElementById('my-fixtures-list');
+  if (!fixList || !fixList.length) {
+    el.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--text3)">Waiting for more players to join and generate fixtures...</div>';
+    return;
+  }
+  var html = '';
+  fixList.forEach(function(f) {
+    var done = f.status === 'completed';
+    var isHome = S.user && f.homeId === S.user.uid;
+    var my = isHome ? f.homeName : f.awayName;
+    var opp = isHome ? f.awayName : f.homeName;
+    var body = '';
+    if (done) {
+      body = '<div style="font-size:11px;color:var(--text3);">' + (f.aiVerified ? '🤖 AI Verified' : '✍️ Manual') + ' · ' + f.scoreHome + '-' + f.scoreAway + '</div>';
+    } else {
+      body = '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;">Play the match then upload scoreboard screenshot</div>' +
+        '<div class="pfp-upload" style="width:100%;height:80px;margin-bottom:8px;border-radius:8px;" onclick="document.getElementById(' + "'fix-img-" + f.id + "'" + ').click()">' +
+        '<span id="fix-icon-' + f.id + '" style="font-size:18px;">📸 Upload Screenshot</span>' +
+        '<img id="fix-prev-' + f.id + '" src="" style="display:none;width:100%;height:100%;object-fit:contain;border-radius:6px;"></div>' +
+        '<input type="file" id="fix-img-' + f.id + '" accept="image/*" style="display:none" onchange="previewFixture(this,' + "'" + f.id + "'" + ')">' +
+        '<button class="cta" id="fix-btn-' + f.id + '" onclick="submitFixture(' + "'" + tournamentId + "','" + f.id + "'" + ')" style="background:var(--gold);color:#000;padding:10px;">✅ MARK PLAYED &amp; SUBMIT</button>';
+    }
+    html += '<div class="menu-card" style="margin-bottom:10px;border:1px solid ' + (done ? 'var(--green)' : 'var(--gold)') + ';">' +
+      '<div style="padding:12px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+      '<span style="font-weight:900;font-size:13px;color:var(--text);">' + my + ' <span style="color:var(--text3)">vs</span> ' + opp + '</span>' +
+      '<span class="tag ' + (done ? 'tg' : 'to') + '">' + (done ? '✅ ' + f.scoreHome + '-' + f.scoreAway : '⏳ PENDING') + '</span></div>' +
+      body + '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+function previewFixture(input, fid) {
+  if (!input.files || !input.files[0]) return;
+  var r = new FileReader();
+  r.onload = function(e) {
+    _fixtureImages[fid] = e.target.result;
+    document.getElementById('fix-prev-' + fid).src = e.target.result;
+    document.getElementById('fix-prev-' + fid).style.display = 'block';
+    document.getElementById('fix-icon-' + fid).style.display = 'none';
+  };
+  r.readAsDataURL(input.files[0]);
+}
+
+async function submitFixture(tournamentId, fixtureId) {
+  if (!S.user) { toast('Please login'); return; }
+  var btn = document.getElementById('fix-btn-' + fixtureId);
+  btn.disabled = true; btn.textContent = '🤖 AI Detecting...';
+  try {
+    var res = await fetch('/api/tournaments/' + tournamentId + '/fixtures/' + fixtureId + '/submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: S.user.uid, image_b64: _fixtureImages[fixtureId] || null })
+    });
+    var data = await res.json();
+    if (!data.ok) { toast('Failed: ' + (data.error || 'Error')); btn.disabled = false; btn.textContent = '✅ MARK PLAYED & SUBMIT'; return; }
+    toast('Result: ' + data.finalScore + ' ' + (data.aiVerified ? '🤖 AI Verified' : '✍️ Manual'));
+    loadMyFixtures(tournamentId);
+    loadTournaments();
+  } catch(e) { toast('Error: ' + e.message); btn.disabled = false; btn.textContent = '✅ MARK PLAYED & SUBMIT'; }
+}
+
+// ===== END TOURNAMENTS =====
+
 // ══════════════════════════════════════════════════════
 //  TOAST
 // ══════════════════════════════════════════════════════
@@ -1842,6 +2027,56 @@ function toast(msg) {
   e.textContent = msg; e.classList.add('on');
   clearTimeout(_tt);
   _tt = setTimeout(() => e.classList.remove('on'), 3200);
+}
+
+// ══════════════════════════════════════════════════════
+//  AI DETECTION TEST
+// ══════════════════════════════════════════════════════
+let aiBase64 = null;
+
+function previewAITest(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    aiBase64 = e.target.result;
+    document.getElementById('ai-preview').src = aiBase64;
+    document.getElementById('ai-preview').style.display = 'block';
+    document.getElementById('ai-up-icon').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runAIDetection() {
+  if (!aiBase64) {
+    toast('Please upload an image first');
+    return;
+  }
+  
+  const btn = document.getElementById('btn-detect');
+  const resDiv = document.getElementById('ai-result');
+  const game = document.getElementById('ai-game-type').value;
+  
+  btn.disabled = true;
+  btn.textContent = 'ANALYZING...';
+  resDiv.style.display = 'block';
+  resDiv.textContent = 'Sending to EasyOCR Service...\\nThis may take 2-5 seconds on CPU.';
+  
+  try {
+    const res = await fetch('/api/detect/frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game, image_b64: aiBase64 })
+    });
+    
+    const data = await res.json();
+    resDiv.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    resDiv.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'RUN DETECTION';
+  }
 }
 
 // ══════════════════════════════════════════════════════

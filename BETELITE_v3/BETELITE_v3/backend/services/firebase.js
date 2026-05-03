@@ -3,7 +3,7 @@ const admin = require('firebase-admin');
 let db = null;
 
 try {
-  if (process.env.FIREBASE_PROJECT_ID) {
+  if (process.env.FIREBASE_PROJECT_ID && !process.env.FIREBASE_PROJECT_ID.includes('REPLACE')) {
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
       ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
       : null;
