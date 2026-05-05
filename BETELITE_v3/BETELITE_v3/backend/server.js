@@ -24,6 +24,16 @@ const detectRoutes     = require('./routes/detect');
 const streamRoutes     = require('./routes/stream');
 const footballRoutes   = require('./routes/football');
 
+// ── Payments & Auth (try to load if available)
+let paymentsRoutes = null;
+let authRoutes = null;
+try {
+  // These may not be compiled yet, will fallback gracefully
+  paymentsRoutes = require('./routes/payments');
+} catch (e) {
+  console.log('[INFO] Payment routes not available yet');
+}
+
 // ── Firebase
 const { db } = require('./services/firebase');
 
@@ -49,6 +59,11 @@ app.use('/api/bets',        betRoutes(io, engine));
 app.use('/api/detect',      detectRoutes(io, engine));
 app.use('/api/stream',      streamRoutes(io));
 app.use('/api/football',    footballRoutes(io, engine));
+
+// Payment routes (if available)
+if (paymentsRoutes) {
+  app.use('/api/payments', paymentsRoutes);
+}
 
 // ── Health check
 app.get('/health', (req, res) => res.json({
