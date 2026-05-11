@@ -947,7 +947,10 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
       <div class="menu-card" style="margin-top: 16px; border: 1px solid var(--gold);">
         <div class="menu-card-title" style="color: var(--gold); display: flex; justify-content: space-between; align-items: center;">
           <span>🤖 AI SCORE DETECTOR TEST</span>
-          <span class="tag tg">BETA</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+             <span class="tag tg" onclick="localStorage.removeItem('GEMINI_KEY'); toast('Gemini API Key reset. Click Run Detection to enter a new one.');" style="cursor:pointer; background:rgba(255,255,255,0.1); color:#fff; border:1px solid #444;">🔑 Key</span>
+             <span class="tag tg">BETA</span>
+          </div>
         </div>
         <div style="padding: 12px;">
           <label class="fl">SELECT GAME</label>
@@ -2079,26 +2082,62 @@ async function runAIDetection() {
     return;
   }
   
+  // Ask for Gemini API key if not cached
+  let apiKey = localStorage.getItem('GEMINI_KEY');
+  if (!apiKey) {
+    apiKey = prompt("Enter your Gemini API Key for direct browser detection:");
+    if (!apiKey) return;
+    localStorage.setItem('GEMINI_KEY', apiKey);
+  }
+  
   const btn = document.getElementById('btn-detect');
   const resDiv = document.getElementById('ai-result');
   const game = document.getElementById('ai-game-type').value;
   
   btn.disabled = true;
-  btn.textContent = 'ANALYZING...';
+  btn.textContent = 'AI IS ANALYZING...';
   resDiv.style.display = 'block';
-  resDiv.textContent = 'Sending to EasyOCR Service...\\nThis may take 2-5 seconds on CPU.';
+  resDiv.textContent = 'Processing via Gemini Vision API...';
   
   try {
-    const res = await fetch(BACKEND_URL + '/api/detect/frame', {
+    // Strip the data URL prefix
+    const base64Data = aiBase64.split(',')[1];
+    const mimeType = aiBase64.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)[1];
+
+    const promptText = `Analyze this ${game} screenshot and extract the match score. 
+Return ONLY a pure JSON object in this format (no markdown tags):
+{
+  "team1": "Name or Code",
+  "score1": 0,
+  "team2": "Name or Code",
+  "score2": 0,
+  "confidence": 0.95
+}`;
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game, image_b64: aiBase64 })
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: mimeType, data: base64Data } }
+          ]
+        }]
+      })
     });
     
+    if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error?.message || res.statusText);
+    }
+    
     const data = await res.json();
-    resDiv.textContent = JSON.stringify(data, null, 2);
+    const aiText = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    resDiv.textContent = JSON.stringify(JSON.parse(aiText), null, 2);
   } catch (err) {
-    resDiv.textContent = 'Error: ' + err.message;
+    resDiv.textContent = 'Error: ' + err.message + '\n\n(Tip: Click "🔑 Key" to reset your API Key if unauthorized)';
   } finally {
     btn.disabled = false;
     btn.textContent = 'RUN DETECTION';
