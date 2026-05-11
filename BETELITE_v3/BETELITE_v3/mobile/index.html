@@ -1138,6 +1138,9 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 <div id="toast"></div>
 
 <script>
+const isProd = window.location.hostname.includes('github.io');
+const BACKEND_URL = isProd ? 'https://betelite-backend.onrender.com' : window.location.origin;
+
 // ══════════════════════════════════════════════════════
 //  FIREBASE CONFIG
 //  Replace with your actual Firebase project config
@@ -1359,11 +1362,7 @@ async function showApp(user) {
   
   // Connect to Socket.io for real-time multiplayer
   if (typeof io !== 'undefined' && !window._socket) {
-    // If on github pages or production, point to the deployed Render backend
-    const isProd = window.location.hostname.includes('github.io');
-    const BACKEND = isProd ? 'https://betelite-backend.onrender.com' : window.location.origin;
-    
-    window._socket = io(BACKEND, { transports: ['websocket', 'polling'] });
+    window._socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
     window._socket.on('connect', () => {
       window._socket.emit('identify', { userId: user.uid, username: S.profile.displayName });
       console.log('[SOCKET] Connected for multiplayer');
@@ -2090,7 +2089,7 @@ async function runAIDetection() {
   resDiv.textContent = 'Sending to EasyOCR Service...\\nThis may take 2-5 seconds on CPU.';
   
   try {
-    const res = await fetch('/api/detect/frame', {
+    const res = await fetch(BACKEND_URL + '/api/detect/frame', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ game, image_b64: aiBase64 })
