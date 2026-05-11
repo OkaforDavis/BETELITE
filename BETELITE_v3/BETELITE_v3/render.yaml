@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: betelite-backend
+    env: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGINS
+        value: "*"
+        # Ensure you set FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL and FIREBASE_SERVICE_ACCOUNT_JSON in the Render dashboard.
+
+  - type: web
+    name: betelite-detection
+    env: docker
+    rootDir: detection_service
+    plan: free
+    # Make sure to set the ANTHROPIC_API_KEY in the Render dashboard if you use Anthropic models.

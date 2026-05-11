@@ -801,10 +801,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         <span class="logo-wm">BET<em>ELITE</em></span>
       </div>
       <div class="hd-r">
-        <div class="ccy-tog">
-          <button class="on" id="b-ngn" onclick="setCCY('NGN')">₦</button>
-          <button id="b-ghs" onclick="setCCY('GHS')">₵</button>
-        </div>
+
         <div class="w-pill" onclick="navTo('account')">
           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M1 4a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H3a2 2 0 01-2-2V4zm11 4a1 1 0 100-2 1 1 0 000 2z"/></svg>
           <span id="w-hd">₦0.00</span>
@@ -858,28 +855,28 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#00D46A,transparent)"></div>
           <div class="promo-ico">⚽</div>
           <div class="promo-nm">eFootball</div>
-          <div class="promo-ds">5v5 tournaments · ₦500K prize</div>
+          <div class="promo-ds">5v5 tournaments · <span class="dyn-p" data-base="500000">₦500K</span> prize</div>
           <div class="promo-badge">SOON</div>
         </div>
         <div class="promo-card" style="border-top:2px solid #FF3B3B" onclick="toast('COD Mobile tournaments launching soon!')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF3B3B,transparent)"></div>
           <div class="promo-ico">🎯</div>
           <div class="promo-nm">COD Mobile</div>
-          <div class="promo-ds">5v5 Pro League · ₦1M prize</div>
+          <div class="promo-ds">5v5 Pro League · <span class="dyn-p" data-base="1000000">₦1M</span> prize</div>
           <div class="promo-badge">SOON</div>
         </div>
         <div class="promo-card" style="border-top:2px solid #FF7A00" onclick="toast('Free Fire tournaments launching soon!')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF7A00,transparent)"></div>
           <div class="promo-ico">🔥</div>
           <div class="promo-nm">Free Fire</div>
-          <div class="promo-ds">Battle Royale · ₦250K prize</div>
+          <div class="promo-ds">Battle Royale · <span class="dyn-p" data-base="250000">₦250K</span> prize</div>
           <div class="promo-badge">SOON</div>
         </div>
         <div class="promo-card" style="border-top:2px solid #00AFFF" onclick="toast('Dream League tournaments launching soon!')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#00AFFF,transparent)"></div>
           <div class="promo-ico">🏟️</div>
           <div class="promo-nm">Dream League</div>
-          <div class="promo-ds">Afrika Cup · ₦150K prize</div>
+          <div class="promo-ds">Afrika Cup · <span class="dyn-p" data-base="150000">₦150K</span> prize</div>
           <div class="promo-badge">SOON</div>
         </div>
       </div>
@@ -932,8 +929,8 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
       <div class="empty-state">
         <div class="es-icon">💸</div>
         <div class="es-title">No Bets Yet</div>
-        <div class="es-sub">Once live matches are available,<br>place bets up to ₦1,000,000<br>or ₵10,000 per game.</div>
-        <div class="es-badge">💡 Max bet: ₦1,000,000</div>
+        <div class="es-sub">Once live matches are available,<br>place bets up to <span id="max-bet-txt">₦1,000,000</span> per game.</div>
+        <div class="es-badge">💡 Max bet: <span id="max-bet-badge">₦1,000,000</span></div>
       </div>
     </div>
 
@@ -1056,7 +1053,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         </div>
         <div class="mi" onclick="openModal('referral')">
           <div class="mi-ic">🤝</div>
-          <div class="mi-body"><div class="mi-tx">Refer & Earn</div><div class="mi-sub">Earn ₦500 per referral</div></div>
+          <div class="mi-body"><div class="mi-tx">Refer & Earn</div><div class="mi-sub">Earn <span class="dyn-p" data-base="500">₦500</span> per referral</div></div>
           <span class="mi-ar">›</span>
         </div>
         <div class="mi" onclick="openModal('anticheat')">
@@ -1250,7 +1247,11 @@ async function doLogin() {
   const email = document.getElementById('li-email').value.trim();
   const pass  = document.getElementById('li-pass').value;
   if (!email || !pass) { showAuthErr('Please fill in all fields.'); return; }
-  if (!auth) { showApp({ displayName: 'Demo User', email, photoURL: null, uid: 'demo_' + Date.now() }); return; }
+  if (!auth) { 
+    const demoUid = 'demo_' + email.toLowerCase().replace(/[^a-z0-9]/g, '');
+    showApp({ displayName: 'Demo User', email, photoURL: null, uid: demoUid }); 
+    return; 
+  }
 
   const btn = document.getElementById('li-btn');
   btn.disabled = true; btn.textContent = 'Signing in...';
@@ -1277,7 +1278,11 @@ async function doSignup() {
   if (!name || !email || !pass || !pass2) { showAuthErr('Please fill in all fields.'); return; }
   if (pass !== pass2) { showAuthErr('Passwords do not match.'); return; }
   if (pass.length < 6) { showAuthErr('Password must be at least 6 characters.'); return; }
-  if (!auth) { showApp({ displayName: name, email, photoURL: null, uid: 'demo_' + Date.now() }); return; }
+  if (!auth) { 
+    const demoUid = 'demo_' + email.toLowerCase().replace(/[^a-z0-9]/g, '');
+    showApp({ displayName: name, email, photoURL: null, uid: demoUid }); 
+    return; 
+  }
 
   const btn = document.getElementById('su-btn');
   btn.disabled = true; btn.textContent = 'Creating account...';
@@ -1354,7 +1359,10 @@ async function showApp(user) {
   
   // Connect to Socket.io for real-time multiplayer
   if (typeof io !== 'undefined' && !window._socket) {
-    const BACKEND = window.location.origin;
+    // If on github pages or production, point to the deployed Render backend
+    const isProd = window.location.hostname.includes('github.io');
+    const BACKEND = isProd ? 'https://betelite-backend.onrender.com' : window.location.origin;
+    
     window._socket = io(BACKEND, { transports: ['websocket', 'polling'] });
     window._socket.on('connect', () => {
       window._socket.emit('identify', { userId: user.uid, username: S.profile.displayName });
@@ -1378,8 +1386,8 @@ function loadProfileCache(uid) {
     const raw = localStorage.getItem(CACHE_KEY(uid));
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // Cache valid for 30 minutes
-    if (Date.now() - (data._cachedAt || 0) > 30 * 60 * 1000) return null;
+    // We don't expire the cache so that Demo mode progress is retained indefinitely.
+    // Real Firebase data will overwrite this if the user is fully logged in.
     return data;
   } catch(e) { return null; }
 }
@@ -1392,6 +1400,7 @@ async function loadProfile(user) {
     wallet: 0, winnings: 0,
     totalBets: 0, totalWon: 0,
     level: 1, xp: 0,
+    history: [],
     referralCode: 'BET' + (user.uid || 'XXXX').slice(-4).toUpperCase(),
     createdAt: Date.now(),
   };
@@ -1491,21 +1500,39 @@ function handleAvaUpload(input) {
 // ══════════════════════════════════════════════════════
 function setCCY(c) {
   ccy = c;
-  document.getElementById('b-ngn').classList.toggle('on', c === 'NGN');
-  document.getElementById('b-ghs').classList.toggle('on', c === 'GHS');
   updateWallet();
+  updateDynamicPrices();
 }
 function getSym() { return CCY_DATA[ccy].sym; }
 function fmt(n)   { return getSym() + (ccy === 'NGN' ? n : Math.round(n * CCY_DATA.GHS.rate)).toLocaleString(); }
 
+function fmtAbbr(n) {
+  const v = ccy === 'NGN' ? n : Math.round(n * CCY_DATA.GHS.rate);
+  if (v >= 1000000) return getSym() + +(v/1000000).toFixed(1) + 'M';
+  if (v >= 1000) return getSym() + +(v/1000).toFixed(1) + 'K';
+  return getSym() + v;
+}
+
+function updateDynamicPrices() {
+  document.querySelectorAll('.dyn-p').forEach(el => {
+    const base = parseFloat(el.getAttribute('data-base'));
+    el.textContent = fmtAbbr(base);
+  });
+  const maxBet = CCY_DATA[ccy].maxBet;
+  const maxStr = getSym() + maxBet.toLocaleString();
+  const maxTxt = document.getElementById('max-bet-txt');
+  if (maxTxt) maxTxt.textContent = maxStr;
+  const maxBadge = document.getElementById('max-bet-badge');
+  if (maxBadge) maxBadge.textContent = maxStr;
+}
+
 function updateWallet() {
-  const d = fmt(S.wallet);
-  document.getElementById('w-hd').textContent  = d;
-  document.getElementById('w-big').textContent = '₦' + S.wallet.toLocaleString() + '.00';
-  document.getElementById('w-win').textContent = '+₦' + S.winnings.toLocaleString() + ' total winnings';
+  document.getElementById('w-hd').textContent  = fmt(S.wallet);
+  document.getElementById('w-big').textContent = fmt(S.wallet) + (ccy === 'NGN' ? '.00' : '');
+  document.getElementById('w-win').textContent = '+' + fmt(S.winnings) + ' total winnings';
   document.getElementById('s-bt').textContent  = S.totalBets;
   document.getElementById('s-wn').textContent  = S.totalWon;
-  document.getElementById('s-ea').textContent  = '₦' + S.winnings.toLocaleString();
+  document.getElementById('s-ea').textContent  = fmt(S.winnings);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1768,10 +1795,10 @@ function openModal(type, data) {
           <button style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer" onclick="doForgotFromSettings()">Send Reset Email</button>
         </div>
         <div class="setting-row">
-          <div><div class="setting-label">Currency</div></div>
-          <div style="display:flex;gap:5px">
-            <button onclick="setCCY('NGN');toast('Currency: Nigerian Naira ₦')" style="padding:5px 10px;border-radius:5px;background:${ccy==='NGN'?'var(--gold)':'var(--bg3)'};color:${ccy==='NGN'?'#000':'var(--text)'};font-family:var(--fd);font-weight:700;font-size:12px;cursor:pointer">₦ NGN</button>
-            <button onclick="setCCY('GHS');toast('Currency: Ghanaian Cedi ₵')" style="padding:5px 10px;border-radius:5px;background:${ccy==='GHS'?'var(--gold)':'var(--bg3)'};color:${ccy==='GHS'?'#000':'var(--text)'};font-family:var(--fd);font-weight:700;font-size:12px;cursor:pointer">₵ GHS</button>
+          <div><div class="setting-label">Currency (Auto-Detected)</div><div class="setting-sub" id="currency-display">Detecting...</div></div>
+          <div id="currency-info" style="text-align:right">
+            <div style="font-size:14px;font-weight:700;color:var(--gold)" id="currency-symbol">₦</div>
+            <div style="font-size:11px;color:var(--text2)" id="currency-code">NGN</div>
           </div>
         </div>
       </div>
@@ -2080,9 +2107,33 @@ async function runAIDetection() {
 }
 
 // ══════════════════════════════════════════════════════
+//  AUTO-DETECT CURRENCY
+// ══════════════════════════════════════════════════════
+async function detectUserCurrency() {
+  try {
+    const response = await fetch('https://ipapi.co/json/');
+    const data = await response.json();
+    
+    if (data.country_code === 'GH') {
+      setCCY('GHS');
+      console.log(`[CURRENCY] Auto-detected: GHS (Ghana)`);
+    } else {
+      setCCY('NGN');
+      console.log(`[CURRENCY] Auto-detected: NGN (${data.country_name || 'Nigeria'})`);
+    }
+  } catch (error) {
+    console.error('[CURRENCY] Detection failed:', error);
+    setCCY('NGN');
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+  // Auto-detect currency first
+  detectUserCurrency();
+  
   initFirebase();
 
   // Enter key on auth inputs
