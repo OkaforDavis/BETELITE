@@ -1126,13 +1126,12 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 
 <!-- FILE INPUT for avatar -->
 <input type="file" id="ava-file" accept="image/*" style="display:none" onchange="handleAvaUpload(this)">
-
 <!-- TOAST -->
 <div id="toast"></div>
 
 <script>
-const isProd = window.location.hostname.includes('github.io');
-const BACKEND_URL = isProd ? 'https://betelite-backend.onrender.com' : window.location.origin;
+const isProd = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.protocol !== 'file:';
+const BACKEND_URL = isProd ? 'https://betelite-backend.onrender.com' : 'http://localhost:3000';
 
 // ══════════════════════════════════════════════════════
 //  FIREBASE CONFIG
