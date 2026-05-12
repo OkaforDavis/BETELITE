@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07080F">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>BETELITE</title>
+<title>CrestArena</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -180,9 +180,12 @@ img { display: block; }
 /* ── HEADER ── */
 #hd {
   flex-shrink: 0; z-index: 20;
-  background: linear-gradient(180deg, #0B0D1E 0%, #0D0F1C 100%);
+  background: rgba(13, 15, 28, 0.7);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
   border-bottom: 1px solid var(--border);
   padding-top: env(safe-area-inset-top, 0px);
+  max-width: 430px; margin: 0 auto; width: 100%;
 }
 .hd-top {
   display: flex; align-items: center; justify-content: space-between;
@@ -203,10 +206,12 @@ img { display: block; }
 }
 .ccy-tog button.on { background: var(--gold); color: #000; }
 .w-pill {
-  display: flex; align-items: center; gap: 4px; background: var(--gf);
-  border: 1px solid var(--gold2); border-radius: 20px; padding: 5px 10px;
+  display: flex; align-items: center; gap: 4px;
+  background: linear-gradient(135deg, rgba(245,197,24,0.15), rgba(212,167,0,0.05));
+  border: 1px solid rgba(245,197,24,0.3); border-radius: 20px; padding: 5px 10px;
   font-family: var(--fd); font-weight: 700; font-size: 13px;
   color: var(--gold); cursor: pointer; white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(245,197,24,0.1);
 }
 .ava {
   width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
@@ -302,17 +307,15 @@ img { display: block; }
 
 /* ── BOTTOM NAV — FIXED for small screens ── */
 #nav {
-  flex-shrink: 0;
-  display: flex;
-  background: var(--bg2);
+  flex-shrink: 0; display: flex;
+  background: rgba(13, 15, 28, 0.7);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
   border-top: 1px solid var(--border);
   z-index: 20;
-  /* Critical: account for safe area on Infinix/Android */
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 6px);
   min-height: calc(var(--nav-h) + max(env(safe-area-inset-bottom, 0px), 6px));
-  /* Make sure it never gets cut off */
-  position: relative;
-  width: 100%;
+  position: relative; width: 100%; max-width: 430px; margin: 0 auto;
 }
 .nb {
   flex: 1; display: flex; flex-direction: column; align-items: center;
@@ -377,7 +380,8 @@ img { display: block; }
   background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
   padding: 14px 12px; position: relative; overflow: hidden; cursor: pointer; transition: .18s;
 }
-.promo-card:hover { border-color: var(--gold2); transform: translateY(-1px); }
+.promo-card:hover { border-color: var(--gold2); transform: scale(0.98); }
+.promo-card:active { transform: scale(0.95); }
 .promo-card-glow { position: absolute; inset: 0; opacity: .08; }
 .promo-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
 .promo-ico { font-size: 26px; margin-bottom: 7px; }
@@ -697,17 +701,8 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 ════════════════════════════════════════ -->
 <div id="auth-screen">
   <div class="auth-logo">
-    <svg class="auth-logo-svg" viewBox="0 0 64 64">
-      <polygon points="32,3 58,17 58,47 32,61 6,47 6,17" fill="#0D0F1C" stroke="#F5C518" stroke-width="2.5"/>
-      <polygon points="32,12 50,22 50,42 32,52 14,42 14,22" fill="none" stroke="#F5C518" stroke-width=".8" opacity=".3"/>
-      <circle cx="32" cy="32" r="12" fill="none" stroke="#F5C518" stroke-width="2"/>
-      <circle cx="32" cy="32" r="4.5" fill="#F5C518"/>
-      <line x1="32" y1="16" x2="32" y2="26" stroke="#F5C518" stroke-width="2"/>
-      <line x1="32" y1="38" x2="32" y2="48" stroke="#F5C518" stroke-width="2"/>
-      <line x1="16" y1="32" x2="26" y2="32" stroke="#F5C518" stroke-width="2"/>
-      <line x1="38" y1="32" x2="48" y2="32" stroke="#F5C518" stroke-width="2"/>
-    </svg>
-    <div class="auth-logo-wm">BET<em>ELITE</em></div>
+    <img src="logo.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
+    <div class="auth-logo-wm" style="letter-spacing:1px; font-size:28px;">Crest<em>Arena</em></div>
     <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
   </div>
 
@@ -788,17 +783,8 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
   <div id="hd">
     <div class="hd-top">
       <div class="logo">
-        <svg class="logo-svg" viewBox="0 0 34 34">
-          <polygon points="17,2 30,9 30,25 17,32 4,25 4,9" fill="#0D0F1C" stroke="#F5C518" stroke-width="1.7"/>
-          <polygon points="17,7 27,13 27,21 17,27 7,21 7,13" fill="none" stroke="#F5C518" stroke-width=".55" opacity=".35"/>
-          <circle cx="17" cy="17" r="6.5" fill="none" stroke="#F5C518" stroke-width="1.3"/>
-          <circle cx="17" cy="17" r="2.5" fill="#F5C518"/>
-          <line x1="17" y1="9" x2="17" y2="14" stroke="#F5C518" stroke-width="1.3"/>
-          <line x1="17" y1="20" x2="17" y2="25" stroke="#F5C518" stroke-width="1.3"/>
-          <line x1="8"  y1="17" x2="13" y2="17" stroke="#F5C518" stroke-width="1.3"/>
-          <line x1="21" y1="17" x2="26" y2="17" stroke="#F5C518" stroke-width="1.3"/>
-        </svg>
-        <span class="logo-wm">BET<em>ELITE</em></span>
+        <img src="logo.png" alt="CrestArena" class="logo-svg" style="border-radius:6px; background:#000; padding:2px;">
+        <span class="logo-wm" style="letter-spacing:1px; font-size:20px;">Crest<em>Arena</em></span>
       </div>
       <div class="hd-r">
 
@@ -822,17 +808,19 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
   <!-- CONN BAR -->
   <div id="conn-bar" class="demo">⚡ Platform launching soon — stay tuned!</div>
 
-  <!-- ADS -->
-  <div id="ads"><div class="ad-tr" id="ad-tr"></div></div>
+  
 
-  <!-- TICKER -->
-  <div id="ticker"><div class="tk-tag">COMING</div><div class="tk-sc" id="tk-sc"></div></div>
+  
 
   <!-- MAIN -->
   <div id="main">
 
     <!-- LIVE / HOME -->
     <div class="pg on" id="pg-live">
+  <!-- ADS -->
+  <div id="ads"><div class="ad-tr" id="ad-tr"></div></div>
+  <!-- TICKER -->
+  <div id="ticker"><div class="tk-tag">COMING</div><div class="tk-sc" id="tk-sc"></div></div>
       <div class="sh">
         <div class="st"><div class="dl"></div>Live Matches</div>
         <span class="tag to">🔜 Launching Soon</span>
@@ -842,13 +830,13 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
       <div class="empty-state">
         <div class="es-icon">📡</div>
         <div class="es-title">No Live Matches Yet</div>
-        <div class="es-sub">BETELITE is launching soon.<br>Live matches, scores and betting<br>will appear here once we go live.</div>
+        <div class="es-sub">CrestArena is launching soon.<br>Live matches, scores and betting<br>will appear here once we go live.</div>
         <div class="es-badge">🚀 Be the first to play</div>
       </div>
 
       <!-- Promo grid — upcoming games -->
       <div class="sh" style="margin-top:4px">
-        <div class="st" style="font-size:13px">Upcoming on BETELITE</div>
+        <div class="st" style="font-size:13px">Upcoming on CrestArena</div>
       </div>
       <div class="promo-grid">
         <div class="promo-card" style="border-top:2px solid #00D46A" onclick="toast('eFootball tournaments launching soon!')">
