@@ -13,6 +13,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <!-- Socket.io -->
 <script src="/socket.io/socket.io.js" onerror="window._noSocket=true"></script>
+<!-- Paystack Inline SDK -->
+<script src="https://js.paystack.co/v1/inline.js"></script>
 <style>
 /* ═══════════════════════════════════
    ROOT VARIABLES
@@ -833,8 +835,6 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
     <div class="es-title" style="font-size:16px;">Live Matchmaking Active</div>
     <div class="es-sub" style="font-size:12px;">Join tournaments or challenge players to start earning.</div>
   </div>
-        
-      </div>
 
       <!-- Promo grid — upcoming games -->
       <div class="sh" style="margin-top:4px">
@@ -1150,7 +1150,7 @@ const FIREBASE_CONFIG = {
 
 // Payment gateway config (set from admin side)
 const PAYMENT_CONFIG = {
-  paystackKey:    window.PAYSTACK_PUBLIC_KEY    || null,
+  paystackKey:    localStorage.getItem('PAYSTACK_KEY') || window.PAYSTACK_PUBLIC_KEY || null,
   flutterwaveKey: window.FLUTTERWAVE_PUBLIC_KEY || null,
 };
 function hasPayment() { return !!(PAYMENT_CONFIG.paystackKey || PAYMENT_CONFIG.flutterwaveKey); }
@@ -1782,6 +1782,12 @@ function openModal(type, data) {
       </div>
       <div class="menu-card" style="margin-bottom:10px">
         <div class="menu-card-title">ACCOUNT</div>
+        ${S.user?.email === ADMIN_EMAIL ? `
+        <div class="setting-row">
+          <div><div class="setting-label">Paystack Live Key (Admin)</div><div class="setting-sub">${PAYMENT_CONFIG.paystackKey ? 'Key is configured ✅' : 'No key configured ❌'}</div></div>
+          <button style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer" onclick="setPaystackKey()">Set Key</button>
+        </div>
+        ` : ''}
         <div class="setting-row">
           <div><div class="setting-label">Change Password</div></div>
           <button style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer" onclick="doForgotFromSettings()">Send Reset Email</button>
@@ -1811,6 +1817,16 @@ async function doForgotFromSettings() {
   } catch(e) { toast('Failed to send reset email'); }
 }
 
+function setPaystackKey() {
+  const k = prompt('Enter Paystack Public Key (pk_live_... or pk_test_...):');
+  if (k) {
+    localStorage.setItem('PAYSTACK_KEY', k.trim());
+    PAYMENT_CONFIG.paystackKey = k.trim();
+    toast('✅ Paystack Key Saved. Deposits enabled.');
+    closeM();
+  }
+}
+
 function toggleSetting(key, el) {
   el.classList.toggle('on');
   S.settings[key] = el.classList.contains('on');
@@ -1836,11 +1852,29 @@ function shareReferral(code) {
 
 function doDeposit(amt) {
   if (!hasPayment()) { toast('Payment not yet available'); return; }
-  const n = ccy === 'NGN' ? amt : Math.round(amt / CCY_DATA.GHS.rate);
-  S.wallet += n;
-  saveProfile({ wallet: S.wallet });
-  updateWallet(); closeM();
-  toast(`✅ ${getSym()}${amt.toLocaleString()} deposited!`);
+  
+  const ref = 'CA_' + Math.floor((Math.random() * 1000000000) + 1);
+  
+  const handler = PaystackPop.setup({
+    key: PAYMENT_CONFIG.paystackKey,
+    email: S.user?.email || 'guest@crestarena.com',
+    amount: amt * 100, // Paystack works in kobo/pesewas
+    currency: ccy,     // Dynamically charges exactly in NGN or GHS
+    ref: ref,
+    callback: function(response) {
+      toast(`✅ Payment successful! (Ref: ${response.reference})`);
+      // Update normalized NGN base wallet
+      const n = ccy === 'NGN' ? amt : Math.round(amt / CCY_DATA.GHS.rate);
+      S.wallet += n;
+      saveProfile({ wallet: S.wallet });
+      updateWallet(); 
+      closeM();
+    },
+    onClose: function() {
+      toast('Payment window closed.');
+    }
+  });
+  handler.openIframe();
 }
 function depCustom() {
   const v = parseFloat(document.getElementById('dep-c')?.value) || 0;
