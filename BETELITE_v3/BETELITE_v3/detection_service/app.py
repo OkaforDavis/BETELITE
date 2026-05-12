@@ -158,7 +158,9 @@ class GameDetector:
                 'notes': 'Detected FPS players and scores'
             }
 
-        return {'detected': False, 'notes': 'No FPS scoreboard detected'}\n\n    def analyze_image(self, game_type: str, image_bytes: bytes, target_gamertag: str = ""):
+        return {'detected': False, 'notes': 'No FPS scoreboard detected'}
+
+    def analyze_image(self, game_type: str, image_bytes: bytes, target_gamertag: str = ""):
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
