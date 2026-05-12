@@ -218,6 +218,6 @@ async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), fi
 
 if __name__ == "__main__":
     import uvicorn
-    print("\\n🔍 BETELITE AI Detection (FastAPI + EasyOCR) Starting...")
-    print("📊 API: http://localhost:5000\\n")
+    print("\\nBETELITE AI Detection (FastAPI + EasyOCR) Starting...")
+    print("API: http://localhost:5000\\n")
     uvicorn.run(app, host="0.0.0.0", port=5000)
