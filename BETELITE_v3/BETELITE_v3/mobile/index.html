@@ -938,7 +938,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         <div class="menu-card-title" style="color: var(--gold); display: flex; justify-content: space-between; align-items: center;">
           <span>🤖 AI SCORE DETECTOR TEST</span>
           <div style="display:flex; gap:8px; align-items:center;">
-             <span class="tag tg" onclick="localStorage.removeItem('GEMINI_KEY'); toast('Gemini API Key reset. Click Run Detection to enter a new one.');" style="cursor:pointer; background:rgba(255,255,255,0.1); color:#fff; border:1px solid #444;">🔑 Key</span>
+             
              <span class="tag tg">NEW</span>
           </div>
         </div>
@@ -2116,72 +2116,47 @@ function previewAITest(input) {
 }
 
 async function runAIDetection() {
-  if (!aiBase64) {
-    toast('Please upload an image first');
-    return;
-  }
-  
-  // Ask for Gemini API key if not cached
-  let apiKey = localStorage.getItem('GEMINI_KEY');
-  if (!apiKey) {
-    apiKey = prompt("Enter your Gemini API Key for direct browser detection:");
-    if (!apiKey) return;
-    localStorage.setItem('GEMINI_KEY', apiKey);
-  }
-  
-  const btn = document.getElementById('btn-detect');
-  const resDiv = document.getElementById('ai-result');
-  const game = document.getElementById('ai-game-type').value;
-  
-  btn.disabled = true;
-  btn.textContent = 'AI IS ANALYZING...';
-  resDiv.style.display = 'block';
-  resDiv.textContent = 'Processing via Gemini Vision API...';
-  
-  try {
-    // Strip the data URL prefix
-    const base64Data = aiBase64.split(',')[1];
-    const mimeType = aiBase64.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)[1];
-
-    const promptText = `Analyze this ${game} screenshot and extract the match score. 
-Return ONLY a pure JSON object in this format (no markdown tags):
-{
-  "team1": "Name or Code",
-  "score1": 0,
-  "team2": "Name or Code",
-  "score2": 0,
-  "confidence": 0.95
-}`;
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType: mimeType, data: base64Data } }
-          ]
-        }]
-      })
-    });
-    
-    if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error?.message || res.statusText);
+    if (!aiBase64) {
+      toast('Please upload an image first');
+      return;
     }
     
-    const data = await res.json();
-    const aiText = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const btn = document.getElementById('btn-detect');
+    const resDiv = document.getElementById('ai-result');
+    const game = document.getElementById('ai-game-type').value;
     
-    resDiv.textContent = JSON.stringify(JSON.parse(aiText), null, 2);
-  } catch (err) {
-    resDiv.textContent = 'Error: ' + err.message + '\n\n(Tip: Click "🔑 Key" to reset your API Key if unauthorized)';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'RUN DETECTION';
+    btn.disabled = true;
+    btn.textContent = 'AI IS ANALYZING...';
+    resDiv.style.display = 'block';
+    resDiv.textContent = 'Processing via Local Backend AI Engine...';
+    
+    try {
+      // POST to backend API which proxies to FastAPI EasyOCR
+      const formData = new FormData();
+      formData.append('game', game);
+      formData.append('image_b64', aiBase64); // Send raw base64 string
+      // In the future (Phase 2), we will also append: formData.append('target_gamertag', S.profile.gamertag);
+      
+      const res = await fetch(BACKEND_URL + '/api/detect/frame', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || errData.detail || res.statusText);
+      }
+      
+      const data = await res.json();
+      
+      resDiv.textContent = JSON.stringify(data, null, 2);
+    } catch (err) {
+      resDiv.textContent = 'Error: ' + err.message + '\n\n(Tip: Ensure the backend detection service is running on port 5000)';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'RUN DETECTION';
+    }
   }
-}
 
 // ══════════════════════════════════════════════════════
 //  AUTO-DETECT CURRENCY

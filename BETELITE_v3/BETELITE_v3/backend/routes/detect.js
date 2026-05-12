@@ -11,8 +11,10 @@ module.exports = function(io, engine) {
   router.post('/frame', upload.single('image'), async (req, res) => {
     try {
       const gameType = req.body.game || 'football';
+      const targetGamertag = req.body.target_gamertag || '';
       const form = new FormData();
       form.append('game', gameType);
+      form.append('target_gamertag', targetGamertag);
 
       if (req.file) {
         form.append('file', req.file.buffer, {
