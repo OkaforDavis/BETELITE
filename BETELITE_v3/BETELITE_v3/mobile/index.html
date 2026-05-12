@@ -471,7 +471,7 @@ img { display: block; }
 .mi-badge { font-size: 10px; font-weight: 700; font-family: var(--fd); color: var(--gold); }
 
 /* ═══════════════════════════════════
-   TOURNAMENTS — COMING SOON
+   TOURNAMENTS — COMING LIVE
 ═══════════════════════════════════ */
 .trn-preview {
   background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
@@ -649,7 +649,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 .gh-result { font-family: var(--fd); font-weight: 700; font-size: 14px; }
 
 /* ═══════════════════════════════════
-   WATCH PAGE — COMING SOON
+   WATCH PAGE — COMING LIVE
 ═══════════════════════════════════ */
 .watch-promo {
   background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r);
@@ -806,7 +806,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
   </div>
 
   <!-- CONN BAR -->
-  <div id="conn-bar" class="demo">⚡ Platform launching soon — stay tuned!</div>
+  <div id="conn-bar" class="connected">⚡ Real-time Matchmaking Connected</div>
 
   
 
@@ -823,12 +823,15 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
   <div id="ticker"><div class="tk-tag">COMING</div><div class="tk-sc" id="tk-sc"></div></div>
       <div class="sh">
         <div class="st"><div class="dl"></div>Live Matches</div>
-        <span class="tag to">🔜 Launching Soon</span>
+        <span class="tag tg">🟢 System Online</span>
       </div>
 
       <!-- EMPTY STATE — no live games yet -->
-      <div class="empty-state">
-        <div class="es-icon">📡</div>
+      <div class="empty-state" style="padding:20px; min-height:auto; border:1px solid rgba(0,212,106,0.2); background:rgba(0,212,106,0.05); border-radius:12px; margin-bottom:12px;">
+    <div style="font-size:24px; margin-bottom:8px;">🟢</div>
+    <div class="es-title" style="font-size:16px;">Live Matchmaking Active</div>
+    <div class="es-sub" style="font-size:12px;">Join tournaments or challenge players to start earning.</div>
+  </div>
         <div class="es-title">No Live Matches Yet</div>
         <div class="es-sub">CrestArena is launching soon.<br>Live matches, scores and betting<br>will appear here once we go live.</div>
         <div class="es-badge">🚀 Be the first to play</div>
@@ -836,53 +839,53 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
 
       <!-- Promo grid — upcoming games -->
       <div class="sh" style="margin-top:4px">
-        <div class="st" style="font-size:13px">Upcoming on CrestArena</div>
+        <div class="st" style="font-size:13px">Active Leagues</div>
       </div>
       <div class="promo-grid">
-        <div class="promo-card" style="border-top:2px solid #00D46A" onclick="toast('eFootball tournaments launching soon!')">
+        <div class="promo-card" style="border-top:2px solid #00D46A" onclick="navTo('tourneys')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#00D46A,transparent)"></div>
           <div class="promo-ico">⚽</div>
           <div class="promo-nm">eFootball</div>
           <div class="promo-ds">5v5 tournaments · <span class="dyn-p" data-base="500000">₦500K</span> prize</div>
-          <div class="promo-badge">SOON</div>
+          <div class="promo-badge">LIVE</div>
         </div>
-        <div class="promo-card" style="border-top:2px solid #FF3B3B" onclick="toast('COD Mobile tournaments launching soon!')">
+        <div class="promo-card" style="border-top:2px solid #FF3B3B" onclick="navTo('tourneys')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF3B3B,transparent)"></div>
           <div class="promo-ico">🎯</div>
           <div class="promo-nm">COD Mobile</div>
           <div class="promo-ds">5v5 Pro League · <span class="dyn-p" data-base="1000000">₦1M</span> prize</div>
-          <div class="promo-badge">SOON</div>
+          <div class="promo-badge">LIVE</div>
         </div>
-        <div class="promo-card" style="border-top:2px solid #FF7A00" onclick="toast('Free Fire tournaments launching soon!')">
+        <div class="promo-card" style="border-top:2px solid #FF7A00" onclick="navTo('tourneys')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#FF7A00,transparent)"></div>
           <div class="promo-ico">🔥</div>
           <div class="promo-nm">Free Fire</div>
           <div class="promo-ds">Battle Royale · <span class="dyn-p" data-base="250000">₦250K</span> prize</div>
-          <div class="promo-badge">SOON</div>
+          <div class="promo-badge">LIVE</div>
         </div>
-        <div class="promo-card" style="border-top:2px solid #00AFFF" onclick="toast('Dream League tournaments launching soon!')">
+        <div class="promo-card" style="border-top:2px solid #00AFFF" onclick="navTo('tourneys')">
           <div class="promo-card-glow" style="background:linear-gradient(135deg,#00AFFF,transparent)"></div>
           <div class="promo-ico">🏟️</div>
           <div class="promo-nm">Dream League</div>
           <div class="promo-ds">Afrika Cup · <span class="dyn-p" data-base="150000">₦150K</span> prize</div>
-          <div class="promo-badge">SOON</div>
+          <div class="promo-badge">LIVE</div>
         </div>
       </div>
 
       <div class="coming-section">
         <div class="coming-label">ALSO COMING</div>
         <div class="promo-grid">
-          <div class="promo-card" onclick="toast('FIFA Mobile — coming soon!')">
+          <div class="promo-card" onclick="navTo('tourneys')">
             <div class="promo-ico">🏆</div>
             <div class="promo-nm">FIFA Mobile</div>
             <div class="promo-ds">Super Cup Series</div>
-            <div class="promo-badge">Q2 2025</div>
+            <div class="promo-badge">HOT</div>
           </div>
-          <div class="promo-card" onclick="toast('NBA 2K Mobile — coming soon!')">
+          <div class="promo-card" onclick="navTo('tourneys')">
             <div class="promo-ico">🏀</div>
             <div class="promo-nm">NBA 2K</div>
             <div class="promo-ds">Basketball League</div>
-            <div class="promo-badge">BETA</div>
+            <div class="promo-badge">NEW</div>
           </div>
         </div>
       </div>
@@ -937,7 +940,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
           <span>🤖 AI SCORE DETECTOR TEST</span>
           <div style="display:flex; gap:8px; align-items:center;">
              <span class="tag tg" onclick="localStorage.removeItem('GEMINI_KEY'); toast('Gemini API Key reset. Click Run Detection to enter a new one.');" style="cursor:pointer; background:rgba(255,255,255,0.1); color:#fff; border:1px solid #444;">🔑 Key</span>
-             <span class="tag tg">BETA</span>
+             <span class="tag tg">NEW</span>
           </div>
         </div>
         <div style="padding: 12px;">
@@ -964,7 +967,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         <div class="watch-promo-thumb">
           <div class="big-ico">⚽</div>
           <div class="watch-promo-overlay">
-            <div class="watch-promo-badge">COMING SOON</div>
+            <div class="watch-promo-badge" style="background:var(--red);">LIVE NOW</div>
           </div>
         </div>
         <div class="watch-promo-body">
@@ -978,7 +981,7 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
         <div class="watch-promo-thumb">
           <div class="big-ico">🎯</div>
           <div class="watch-promo-overlay">
-            <div class="watch-promo-badge">COMING SOON</div>
+            <div class="watch-promo-badge" style="background:var(--red);">LIVE NOW</div>
           </div>
         </div>
         <div class="watch-promo-body">
@@ -1853,42 +1856,44 @@ function closeMOut(e) { if (e.target === document.getElementById('mw')) closeM()
 //  ADS + TICKER
 // ══════════════════════════════════════════════════════
 const ADS = [
-  { i:'🎯', n:'COD Mobile',     d:'5v5 Pro · Win up to ₦1M', b:'SOON', c:'#FF3B3B' },
-  { i:'🔥', n:'Free Fire',      d:'Battle Royale · ₦250K', b:'SOON', c:'#FF7A00' },
-  { i:'⚽', n:'eFootball',      d:'5v5 Championships', b:'SOON', c:'#00D46A' },
-  { i:'🏟️', n:'Dream League',   d:'Afrika Cup · ₦150K', b:'SOON', c:'#00AFFF' },
-  { i:'🏆', n:'FIFA Mobile',    d:'Ultimate Cup Series', b:'Q2', c:'#F5C518' },
-  { i:'🏀', n:'NBA 2K Mobile',  d:'Basketball Leagues', b:'BETA', c:'#FF6B00' },
-  { i:'⚔️', n:'Mobile Legends', d:'MOBA 5v5 League', b:'LATER', c:'#9B59B6' },
-  { i:'🎲', n:'Chess Blitz',    d:'Mind Sports ₦500K', b:'NEW', c:'#00D46A' },
+  { i:'🎯', n:'COD Mobile',     d:'5v5 Pro · Win <span class="dyn-p" data-base="1000000">₦1M</span>', b:'LIVE', c:'#FF3B3B' },
+  { i:'🔥', n:'Free Fire',      d:'Battle Royale · <span class="dyn-p" data-base="250000">₦250K</span>', b:'HOT', c:'#FF7A00' },
+  { i:'⚽', n:'eFootball',      d:'5v5 Championships', b:'LIVE', c:'#00D46A' },
+  { i:'🏟️', n:'Dream League',   d:'Afrika Cup · <span class="dyn-p" data-base="150000">₦150K</span>', b:'HOT', c:'#00AFFF' },
+  { i:'🏆', n:'FIFA Mobile',    d:'Ultimate Cup Series', b:'NEW', c:'#F5C518' },
+  { i:'🏀', n:'NBA 2K Mobile',  d:'Basketball Leagues', b:'LIVE', c:'#FF6B00' },
+  { i:'⚔️', n:'Mobile Legends', d:'MOBA 5v5 League', b:'HOT', c:'#9B59B6' },
+  { i:'🎲', n:'Chess Blitz',    d:'Mind Sports <span class="dyn-p" data-base="500000">₦500K</span>', b:'NEW', c:'#00D46A' },
 ];
 
 const TICKS = [
-  '🚀 BETELITE is <span class="tk-h">launching soon</span> — register now for early access',
-  '🏆 eFootball 5v5 — Entry from <span class="tk-w">₦1,500</span> · Prize pool up to ₦22,500',
-  '🎯 COD Mobile Pro League — Prize pool up to <span class="tk-w">₦750,000</span>',
+  '🚀 CrestArena is <span class="tk-h">LIVE</span> — matchmaking is active',
+  '🏆 eFootball 5v5 — Entry from <span class="tk-w dyn-p" data-base="1500">₦1,500</span> · Prize pool up to <span class="dyn-p" data-base="22500">₦22,500</span>',
+  '🎯 COD Mobile Pro League — Prize pool up to <span class="tk-w dyn-p" data-base="750000">₦750,000</span>',
   '🔥 Free Fire Battle Royale — <span class="tk-h">15 players</span> · Winner takes 30%',
-  '🇬🇭 Ghana players welcome — Entry from <span class="tk-w">₵15</span>',
-  '💰 Max bet per match: <span class="tk-h">₦1,000,000</span> NGN or ₵10,000 GHS',
+  '🌍 Global players welcome — Auto-converted payouts',
+  '💰 Max bet per match: <span class="tk-h dyn-p" data-base="1000000">₦1,000,000</span>',
   '🛡️ Anti-cheat AI monitors every match in real-time',
-  '📺 Live streaming with AI score detection — coming soon',
+  '📺 Live streaming with AI score detection active',
 ];
 
 function buildAds() {
   const all = [...ADS, ...ADS];
   document.getElementById('ad-tr').innerHTML = all.map(a =>
-    `<div class="ad-c" onclick="toast('${a.n} — coming to BETELITE soon!')">
+    `<div class="ad-c" onclick="navTo('tourneys')">
       <div class="ad-gl" style="background:linear-gradient(135deg,${a.c},transparent)"></div>
       <div class="ad-ico">${a.i}</div>
       <div class="ad-tx"><div class="ad-nm">${a.n}</div><div class="ad-ds">${a.d}</div></div>
       <div class="ad-bl">${a.b}</div>
     </div>`).join('');
+  setTimeout(updateDynamicPrices, 50);
 }
 
 function buildTicker() {
   const all = [...TICKS, ...TICKS];
   document.getElementById('tk-sc').innerHTML = all.map(t =>
     `<div class="tk-i">● ${t}</div>`).join('');
+  setTimeout(updateDynamicPrices, 50);
 }
 
 
