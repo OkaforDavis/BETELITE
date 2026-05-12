@@ -1855,11 +1855,24 @@ function doDeposit(amt) {
   
   const ref = 'CA_' + Math.floor((Math.random() * 1000000000) + 1);
   
+  // Paystack Accounts are tied to a home currency (e.g., NGN).
+  // If the user's local currency is GHS, but your merchant account only supports NGN,
+  // we must pass the equivalent NGN amount to Paystack. 
+  // Their bank will automatically handle the conversion from Cedis to Naira.
+  let checkoutAmt = amt;
+  let checkoutCcy = ccy;
+  
+  if (ccy !== 'NGN') {
+    // Convert back to base NGN for the actual charge
+    checkoutAmt = Math.round(amt * CCY_DATA[ccy].rate);
+    checkoutCcy = 'NGN'; 
+  }
+  
   const handler = PaystackPop.setup({
     key: PAYMENT_CONFIG.paystackKey,
     email: S.user?.email || 'guest@crestarena.com',
-    amount: amt * 100, // Paystack works in kobo/pesewas
-    currency: ccy,     // Dynamically charges exactly in NGN or GHS
+    amount: checkoutAmt * 100, // Paystack works in kobo/pesewas
+    currency: checkoutCcy,     // Forces NGN to prevent "Currency not supported" error
     ref: ref,
     callback: function(response) {
       toast(`✅ Payment successful! (Ref: ${response.reference})`);
