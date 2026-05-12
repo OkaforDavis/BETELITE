@@ -1162,8 +1162,8 @@ const ADMIN_EMAIL = 'okafordavis8@gmail.com';
 //  STATE
 // ══════════════════════════════════════════════════════
 const CCY_DATA = {
-  NGN: { sym: '₦', rate: 1, name: 'Nigerian Naira', maxBet: 1000000 },
-  GHS: { sym: '₵', rate: 0.037, name: 'Ghanaian Cedi', maxBet: 10000 },
+  NGN: { sym: '₦', ngnValue: 1, name: 'Nigerian Naira', maxBet: 1000000 },
+  GHS: { sym: '₵', ngnValue: 123, name: 'Ghanaian Cedi', maxBet: 10000 },
 };
 let ccy = 'NGN';
 
@@ -1496,10 +1496,10 @@ function setCCY(c) {
   updateDynamicPrices();
 }
 function getSym() { return CCY_DATA[ccy].sym; }
-function fmt(n)   { return getSym() + (ccy === 'NGN' ? n : Math.round(n * CCY_DATA.GHS.rate)).toLocaleString(); }
+function fmt(n)   { return getSym() + (ccy === 'NGN' ? n : Math.round(n / CCY_DATA[ccy].ngnValue)).toLocaleString(); }
 
 function fmtAbbr(n) {
-  const v = ccy === 'NGN' ? n : Math.round(n * CCY_DATA.GHS.rate);
+  const v = ccy === 'NGN' ? n : Math.round(n / CCY_DATA[ccy].ngnValue);
   if (v >= 1000000) return getSym() + +(v/1000000).toFixed(1) + 'M';
   if (v >= 1000) return getSym() + +(v/1000).toFixed(1) + 'K';
   return getSym() + v;
@@ -1864,7 +1864,7 @@ function doDeposit(amt) {
   
   if (ccy !== 'NGN') {
     // Convert back to base NGN for the actual charge
-    checkoutAmt = Math.round(amt * CCY_DATA[ccy].rate);
+    checkoutAmt = Math.round(amt * CCY_DATA[ccy].ngnValue);
     checkoutCcy = 'NGN'; 
   }
   
@@ -1877,7 +1877,7 @@ function doDeposit(amt) {
     callback: function(response) {
       toast(`✅ Payment successful! (Ref: ${response.reference})`);
       // Update normalized NGN base wallet
-      const n = ccy === 'NGN' ? amt : Math.round(amt / CCY_DATA.GHS.rate);
+      const n = ccy === 'NGN' ? amt : Math.round(amt * CCY_DATA[ccy].ngnValue);
       S.wallet += n;
       saveProfile({ wallet: S.wallet });
       updateWallet(); 
