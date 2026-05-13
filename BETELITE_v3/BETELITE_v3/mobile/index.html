@@ -1816,15 +1816,26 @@ async function doForgotFromSettings() {
   } catch(e) { toast('Failed to send reset email'); }
 }
 
-function setPaystackKey() {
-  const k = prompt('Enter Paystack Public Key (pk_live_... or pk_test_...):');
-  if (k) {
-    localStorage.setItem('PAYSTACK_KEY', k.trim());
-    PAYMENT_CONFIG.paystackKey = k.trim();
-    toast('✅ Paystack Key Saved. Deposits enabled.');
-    closeM();
+async function setPaystackKey() {
+    const k = prompt('Enter Paystack Public Key (pk_live_... or pk_test_...):');
+    if (k) {
+      localStorage.setItem('PAYSTACK_KEY', k.trim());
+      PAYMENT_CONFIG.paystackKey = k.trim();
+      
+      try {
+        await fetch(BACKEND_URL + '/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'paystackKey', value: k.trim() })
+        });
+        toast('🚀 Paystack Key Synced Globally. Deposits enabled on all devices.');
+      } catch (e) {
+        toast('⚠️ Saved locally, but failed to sync globally.');
+      }
+      
+      closeM();
+    }
   }
-}
 
 function toggleSetting(key, el) {
   el.classList.toggle('on');

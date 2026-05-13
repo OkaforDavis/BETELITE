@@ -53,6 +53,8 @@ const limiter = rateLimit({ windowMs: 60000, max: 200 });
 app.use('/api/', limiter);
 
 // ── API Routes
+const settingsRoutes = require('./routes/settings');
+app.use('/api/settings',    settingsRoutes);
 app.use('/api/matches',     matchRoutes(io, engine));
 app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));

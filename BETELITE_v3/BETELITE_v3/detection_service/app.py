@@ -105,24 +105,30 @@ class GameDetector:
             best_idx = -1
             
             for i, text in enumerate(texts):
-                ratio = difflib.SequenceMatcher(None, target_gamertag, str(text).upper()).ratio()
-                if ratio > 0.75 and ratio > best_ratio:
-                    best_ratio = ratio
+                text_upper = str(text).upper()
+                ratio = difflib.SequenceMatcher(None, target_gamertag, text_upper).ratio()
+                
+                # Check if it's a very close match OR if the gamertag is a direct substring of a longer phrase (like "SQUANTAKAY KILLS 19")
+                if ratio > 0.75 or (target_gamertag in text_upper and len(target_gamertag) > 3):
+                    best_ratio = max(ratio, 1.0 if target_gamertag in text_upper else ratio)
                     best_match = text
                     best_idx = i
                     
             if best_match:
-                # Look for numbers nearby in the text stream
-                # Often it is "Gamertag", "KILLS", "19"
+                # Look for numbers nearby in the text stream OR inside the same text block
                 found_score = None
                 
-                # Check up to 5 elements ahead for a number
-                for j in range(best_idx + 1, min(best_idx + 6, len(texts))):
-                    # Sometimes "KILLS 19" is parsed as one string, or "19" is isolated
-                    m = re.search(r'\b(\d+)\b', str(texts[j]))
-                    if m:
-                        found_score = int(m.group(1))
-                        break
+                # First check if the score is in the exact same text block (e.g., "SQUANTAKAY KILLS 19")
+                m_inline = re.search(r'\b(\d+)\b', str(best_match))
+                if m_inline:
+                    found_score = int(m_inline.group(1))
+                else:
+                    # Check up to 5 elements ahead for a number
+                    for j in range(best_idx + 1, min(best_idx + 6, len(texts))):
+                        m = re.search(r'\b(\d+)\b', str(texts[j]))
+                        if m:
+                            found_score = int(m.group(1))
+                            break
                         
                 if found_score is not None:
                     return {
@@ -175,9 +181,9 @@ class GameDetector:
         logger.info(f"Detected texts: {texts}")
 
         game_type_lower = game_type.lower() if game_type else ""
-        if game_type_lower in ['fifa', 'efootball', 'dls', 'dream', 'football']:
+        if any(g in game_type_lower for g in ['fifa', 'efootball', 'dls', 'dream', 'football']):
             parsed = self.parse_football_score(texts, results, img_height)
-        elif game_type_lower in ['cod', 'pubg', 'free fire', 'fps']:
+        elif any(g in game_type_lower for g in ['cod', 'pubg', 'free fire', 'fps', 'call of duty']):
             parsed = self.parse_fps_score(texts, results, target_gamertag)
         else:
             parsed = {'detected': False, 'notes': f'Unsupported game: {game_type}'}
