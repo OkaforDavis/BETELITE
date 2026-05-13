@@ -948,6 +948,17 @@ select.fi { -webkit-appearance: none; appearance: none; cursor: pointer; }
             <option value="football">FIFA / eFootball / DLS</option>
             <option value="fps">COD / PUBG / Free Fire</option>
           </select>
+            
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+              <div style="flex:1;">
+                <label class="fl">YOUR ID</label>
+                <input class="fi" type="text" id="ai-target-id" placeholder="e.g. KLAUS" value="KLAUS">
+              </div>
+              <div style="flex:1;">
+                <label class="fl">OPPONENT ID</label>
+                <input class="fi" type="text" id="ai-opponent-id" placeholder="e.g. JOSEP" value="JOSEP GUARDIOLA">
+              </div>
+            </div>
           
           <div class="pfp-upload" style="width: 100%; height: 100px; border-radius: 8px; margin-bottom: 12px; background: var(--bg);" onclick="document.getElementById('ai-img-upload').click()">
             <span style="font-size:24px" id="ai-up-icon">📸 Upload Screenshot</span>
@@ -2134,8 +2145,10 @@ async function runAIDetection() {
     const btn = document.getElementById('btn-detect');
     const resDiv = document.getElementById('ai-result');
     const game = document.getElementById('ai-game-type').value;
-      const targetId = document.getElementById('ai-target-id').value.trim();
-      const oppId = document.getElementById('ai-opponent-id').value.trim();
+      const tEl = document.getElementById('ai-target-id');
+        const oEl = document.getElementById('ai-opponent-id');
+        const targetId = tEl ? tEl.value.trim() : 'KLAUS';
+        const oppId = oEl ? oEl.value.trim() : 'JOSEP GUARDIOLA';
       
       btn.disabled = true;
       btn.textContent = 'AI IS ANALYZING...';
