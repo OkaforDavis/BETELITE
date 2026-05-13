@@ -41,57 +41,77 @@ class GameDetector:
     def __init__(self):
         self.confidence_threshold = 0.4
         
-    def parse_football_score(self, texts, results=None, img_height=None):
+    def parse_football_score(self, texts, results=None, img_height=None, img_width=None, target_gamertag="", opponent_gamertag=""):
         """
-        Smart football score parser (FIFA, eFootball, DLS).
-        Uses bounding box positions to find the scoreline near the TOP of the image,
-        and filters out stat numbers (e.g. percentages, large numbers).
+        Spatial football score parser (FIFA, eFootball, DLS).
+        Uses bounding box positions to map Left/Right scores to Left/Right players.
         """
-        # First try direct pattern "4 - 0" or "4:0"
-        score_pattern = re.compile(r'(\d{1,2})\s*[-:]\s*(\d{1,2})')
-        for text in texts:
-            m = score_pattern.search(text)
-            if m:
-                return {
-                    'scoreHome': int(m.group(1)),
-                    'scoreAway': int(m.group(2)),
-                    'detected': True,
-                    'notes': f'Direct score pattern: {m.group(0)}'
-                }
-
-        # Use positional data: look for small numbers (0-20) in the TOP 30% of the image
-        if results and img_height:
-            top_threshold = img_height * 0.30
-            top_numbers = []
-            for (bbox, text, conf) in results:
-                if conf < self.confidence_threshold:
-                    continue
-                # bbox is [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-                avg_y = sum(pt[1] for pt in bbox) / 4
-                if avg_y < top_threshold and text.isdigit():
-                    val = int(text)
-                    if 0 <= val <= 20:  # Realistic football scores
-                        top_numbers.append(val)
-
-            if len(top_numbers) >= 2:
-                return {
-                    'scoreHome': top_numbers[0],
-                    'scoreAway': top_numbers[1],
-                    'detected': True,
-                    'notes': f'Positional score detection (top {int(top_threshold)}px)'
-                }
-
-        # Final fallback: first two numbers <= 20 in text order
-        score_numbers = [int(t) for t in texts if t.isdigit() and 0 <= int(t) <= 20]
-        if len(score_numbers) >= 2:
-            return {
-                'scoreHome': score_numbers[0],
-                'scoreAway': score_numbers[1],
-                'detected': True,
-                'notes': 'First two plausible score numbers found'
-            }
-
-        return {'detected': False, 'notes': 'No football score detected'}
+        import difflib
+        
+        if not (results and img_height and img_width and target_gamertag):
+            return {'detected': False, 'notes': 'Missing required parameters for spatial OCR'}
+            
+        target_gamertag = target_gamertag.upper()
+        opponent_gamertag = opponent_gamertag.upper() if opponent_gamertag else ""
+        
+        # 1. Find all digits <= 20 in the top 30% of the image
+        top_threshold = img_height * 0.35
+        top_scores = []
+        for (bbox, text, conf) in results:
+            if conf < self.confidence_threshold: continue
+            
+            clean_text = "".join(filter(str.isdigit, str(text)))
+            if not clean_text: continue
+            
+            avg_y = sum(pt[1] for pt in bbox) / 4
+            avg_x = sum(pt[0] for pt in bbox) / 4
+            
+            if avg_y < top_threshold:
+                val = int(clean_text)
+                if 0 <= val <= 20:
+                    top_scores.append({'val': val, 'x': avg_x})
+                    
+        # Sort scores from left to right based on X coordinate
+        top_scores.sort(key=lambda s: s['x'])
+        
+        if len(top_scores) < 2:
+            return {'detected': False, 'notes': f'Found {len(top_scores)} top scores, need 2'}
+            
+        left_score = top_scores[0]['val']
+        right_score = top_scores[1]['val']
+        
+        # 2. Find target gamertag side
+        target_x = None
+        for (bbox, text, conf) in results:
+            text_upper = str(text).upper()
+            ratio = difflib.SequenceMatcher(None, target_gamertag, text_upper).ratio()
+            if ratio > 0.75 or (target_gamertag in text_upper and len(target_gamertag) > 3):
+                target_x = sum(pt[0] for pt in bbox) / 4
+                break
+                
+        if target_x is None:
+            return {'detected': False, 'notes': f'Target {target_gamertag} not found'}
+            
+        # 3. Determine if target is Left or Right
+        is_target_left = target_x < (img_width / 2)
+        
+        target_final_score = left_score if is_target_left else right_score
+        opponent_final_score = right_score if is_target_left else left_score
+        
+        return {
+            'detected': True,
+            'target_player': {
+                'gamerTag': target_gamertag,
+                'score': target_final_score,
+                'side': 'LEFT' if is_target_left else 'RIGHT'
+            },
+            'opponent': {
+                'gamerTag': opponent_gamertag or "Opponent",
+                'score': opponent_final_score,
+                'side': 'RIGHT' if is_target_left else 'LEFT'
+            },
+            'notes': f'Spatial OCR success: {target_gamertag} ({target_final_score}) vs Opponent ({opponent_final_score})'
+        }
 
     def parse_fps_score(self, texts, results, target_gamertag=""):
         """Advanced heuristics for FPS scoreboards (COD Mobile, etc)"""
@@ -166,7 +186,7 @@ class GameDetector:
 
         return {'detected': False, 'notes': 'No FPS scoreboard detected'}
 
-    def analyze_image(self, game_type: str, image_bytes: bytes, target_gamertag: str = ""):
+    def analyze_image(self, game_type: str, image_bytes: bytes, target_gamertag: str = "", opponent_gamertag: str = ""):
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -182,7 +202,7 @@ class GameDetector:
 
         game_type_lower = game_type.lower() if game_type else ""
         if any(g in game_type_lower for g in ['fifa', 'efootball', 'dls', 'dream', 'football']):
-            parsed = self.parse_football_score(texts, results, img_height)
+            parsed = self.parse_football_score(texts, results, img_height, img_width, target_gamertag, opponent_gamertag)
         elif any(g in game_type_lower for g in ['cod', 'pubg', 'free fire', 'fps', 'call of duty']):
             parsed = self.parse_fps_score(texts, results, target_gamertag)
         else:
@@ -199,7 +219,7 @@ def health_check():
     return {"status": "healthy", "service": "betelite-ai-fastapi"}
 
 @app.post("/api/detect/frame")
-async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), file: UploadFile = None, image_b64: str = Form("")):
+async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), opponent_gamertag: str = Form(""), file: UploadFile = None, image_b64: str = Form("")):
     """Endpoint to detect scores from either a multipart file or base64 string"""
     image_bytes = None
     
@@ -214,7 +234,7 @@ async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), fi
         else:
             raise HTTPException(status_code=400, detail="No image provided")
             
-        result = detector.analyze_image(game, image_bytes, target_gamertag)
+        result = detector.analyze_image(game, image_bytes, target_gamertag, opponent_gamertag)
         return result
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

@@ -12,9 +12,11 @@ module.exports = function(io, engine) {
     try {
       const gameType = req.body.game || 'football';
       const targetGamertag = req.body.target_gamertag || '';
+      const opponentGamertag = req.body.opponent_gamertag || '';
       const form = new FormData();
       form.append('game', gameType);
       form.append('target_gamertag', targetGamertag);
+      form.append('opponent_gamertag', opponentGamertag);
 
       if (req.file) {
         form.append('file', req.file.buffer, {

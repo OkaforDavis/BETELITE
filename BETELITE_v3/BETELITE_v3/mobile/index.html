@@ -2134,18 +2134,20 @@ async function runAIDetection() {
     const btn = document.getElementById('btn-detect');
     const resDiv = document.getElementById('ai-result');
     const game = document.getElementById('ai-game-type').value;
-    
-    btn.disabled = true;
-    btn.textContent = 'AI IS ANALYZING...';
-    resDiv.style.display = 'block';
-    resDiv.textContent = 'Processing via Local Backend AI Engine...';
-    
-    try {
-      // POST to backend API which proxies to FastAPI EasyOCR
-      const formData = new FormData();
-      formData.append('game', game);
-      formData.append('image_b64', aiBase64); // Send raw base64 string
-      // In the future (Phase 2), we will also append: formData.append('target_gamertag', S.profile.gamertag);
+      const targetId = document.getElementById('ai-target-id').value.trim();
+      const oppId = document.getElementById('ai-opponent-id').value.trim();
+      
+      btn.disabled = true;
+      btn.textContent = 'AI IS ANALYZING...';
+      resDiv.style.display = 'block';
+      resDiv.textContent = 'Processing via Spatial Detection Engine...';
+      
+      try {
+        const formData = new FormData();
+        formData.append('game', game);
+        formData.append('image_b64', aiBase64);
+        formData.append('target_gamertag', targetId);
+        formData.append('opponent_gamertag', oppId);
       
       const res = await fetch(BACKEND_URL + '/api/detect/frame', {
         method: 'POST',
