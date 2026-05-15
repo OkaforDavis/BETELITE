@@ -1,0 +1,30 @@
+services:
+  # Node.js backend + frontend server
+  - type: web
+    name: betelite-backend
+    env: node
+    region: oregon
+    plan: free
+    rootDir: BETELITE_v3/BETELITE_v3/backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Firebase (add your service account JSON here in Render dashboard)
+      - key: FIREBASE_PROJECT_ID
+        value: betelite-crest
+      - key: FIREBASE_DATABASE_URL
+        value: https://betelite-crest-default-rtdb.firebaseio.com
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false  # Set this secret in Render dashboard
+      # AI Services
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Set this secret in Render dashboard
+      - key: API_FOOTBALL_KEY
+        sync: false
+      # Detection service URL (leave empty to use Anthropic fallback on server)
+      - key: DETECTION_SERVICE_URL
+        value: ""

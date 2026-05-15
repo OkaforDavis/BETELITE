@@ -3,24 +3,29 @@ const admin = require('firebase-admin');
 let db = null;
 
 try {
-  if (process.env.FIREBASE_PROJECT_ID && !process.env.FIREBASE_PROJECT_ID.includes('REPLACE')) {
-    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
-      : null;
+  const projectId  = process.env.FIREBASE_PROJECT_ID;
+  const dbUrl      = process.env.FIREBASE_DATABASE_URL;
+  const saJson     = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
-    const config = serviceAccount
-      ? { credential: admin.credential.cert(serviceAccount) }
-      : { credential: admin.credential.applicationDefault(),
-          databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com` };
+  const hasValidProject = projectId && !projectId.includes('REPLACE');
+  const hasServiceAccount = saJson && saJson.trim().length > 2;
 
-    if (!admin.apps.length) admin.initializeApp({
-      ...config,
-      databaseURL: process.env.FIREBASE_DATABASE_URL ||
-        `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`,
-    });
-
+  if (hasValidProject && hasServiceAccount) {
+    // Full admin mode — use service account for privileged DB access
+    const serviceAccount = JSON.parse(saJson);
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: dbUrl || `https://${projectId}-default-rtdb.firebaseio.com`,
+      });
+    }
     db = admin.database();
-    console.log('[FIREBASE] Connected to Realtime Database');
+    console.log('[FIREBASE] ✅ Admin SDK connected with service account');
+  } else if (hasValidProject) {
+    // Project ID set but no service account — skip Admin SDK, run in-memory
+    // The frontend Firebase JS SDK handles auth directly, backend uses in-memory state
+    console.log('[FIREBASE] ℹ️  No service account — backend running in-memory mode.');
+    console.log('[FIREBASE]    To enable server-side DB writes, add FIREBASE_SERVICE_ACCOUNT_JSON to .env');
   } else {
     console.log('[FIREBASE] No credentials — running in-memory only');
   }

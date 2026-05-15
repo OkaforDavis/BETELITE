@@ -75,9 +75,32 @@ app.get('/health', (req, res) => res.json({
   activeMatches: engine.getActiveMatchCount(),
 }));
 
+// ── Geo-detection proxy (avoids browser CORS issues with ipapi.co)
+const axios = require('axios');
+app.get('/api/geo', async (req, res) => {
+  try {
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const resp = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 3000 });
+    res.json({ country_code: resp.data.country_code, country_name: resp.data.country_name });
+  } catch (e) {
+    res.json({ country_code: 'NG', country_name: 'Nigeria' }); // default
+  }
+});
+
+// ── Live matches shortcut (for Live Board initial load)
+app.get('/api/matches/live', (req, res) => {
+  try {
+    const matches = engine.getAllMatches ? engine.getAllMatches() : [];
+    res.json({ ok: true, matches });
+  } catch (e) {
+    res.json({ ok: true, matches: [] });
+  }
+});
+
 // ── Serve mobile frontend
 app.use('/mobile', express.static(path.join(__dirname, '../mobile')));
 app.get('/', (req, res) => res.redirect('/mobile'));
+
 
 // ══════════════════════════════════════════
 //  SOCKET.IO — Real-time hub
