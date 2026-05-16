@@ -7,6 +7,7 @@ const KEY  = process.env.API_FOOTBALL_KEY || '';
 // Cache to avoid hitting rate limits
 let cache = { data: null, ts: 0 };
 const CACHE_TTL = 60000; // 1 minute
+let _hasWarnedKey = false; // only warn once about missing/invalid key
 
 async function getLiveFootball() {
   if (!KEY) return getMockFootball();
@@ -38,7 +39,10 @@ async function getLiveFootball() {
     cache = { data: mapped, ts: Date.now() };
     return mapped;
   } catch (e) {
-    console.error('[FOOTBALL_API] Error:', e.message);
+    if (!_hasWarnedKey) {
+      console.warn('[FOOTBALL_API] Key invalid or missing — using demo scores. Add API_FOOTBALL_KEY to .env to enable real scores.');
+      _hasWarnedKey = true;
+    }
     return getMockFootball();
   }
 }

@@ -2514,10 +2514,10 @@
       measurementId: "G-598XJQJCFS"
     };
 
-    // Payment gateway config (set from admin side)
+    // Payment gateway config — auto-loaded from backend on startup
     const PAYMENT_CONFIG = {
-      paystackKey: localStorage.getItem('PAYSTACK_KEY') || window.PAYSTACK_PUBLIC_KEY || null,
-      flutterwaveKey: window.FLUTTERWAVE_PUBLIC_KEY || null,
+      paystackKey: null,   // loaded by fetchBackendSettings() below
+      flutterwaveKey: null,
     };
     function hasPayment() { return !!(PAYMENT_CONFIG.paystackKey || PAYMENT_CONFIG.flutterwaveKey); }
 
@@ -2712,7 +2712,8 @@
       updateWallet();
       buildAds();
       buildTicker();
-      loadLiveMatches(); // populate live board cards from backend
+      loadLiveMatches();       // populate live board cards from backend
+      fetchBackendSettings();  // auto-load Paystack key + any server config
 
       // Admin check
       if (user.email === ADMIN_EMAIL) {
@@ -3151,8 +3152,8 @@
         <div class="menu-card-title">ACCOUNT</div>
         ${S.user?.email === ADMIN_EMAIL ? `
         <div class="setting-row">
-          <div><div class="setting-label">Paystack Live Key (Admin)</div><div class="setting-sub">${PAYMENT_CONFIG.paystackKey ? 'Key is configured ✅' : 'No key configured ❌'}</div></div>
-          <button style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer" onclick="setPaystackKey()">Set Key</button>
+          <div><div class="setting-label">Payment Gateway</div><div class="setting-sub">${PAYMENT_CONFIG.paystackKey ? '✅ Paystack configured' : '⏳ Loading from server...'}</div></div>
+          <span style="font-size:11px;color:${PAYMENT_CONFIG.paystackKey ? 'var(--green)' : 'var(--text3)'};font-weight:700;">${PAYMENT_CONFIG.paystackKey ? 'ACTIVE' : 'PENDING'}</span>
         </div>
         ` : ''}
         <div class="setting-row">
@@ -3184,26 +3185,7 @@
       } catch (e) { toast('Failed to send reset email'); }
     }
 
-    async function setPaystackKey() {
-      const k = prompt('Enter Paystack Public Key (pk_live_... or pk_test_...):');
-      if (k) {
-        localStorage.setItem('PAYSTACK_KEY', k.trim());
-        PAYMENT_CONFIG.paystackKey = k.trim();
-
-        try {
-          await fetch(BACKEND_URL + '/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: 'paystackKey', value: k.trim() })
-          });
-          toast('🚀 Paystack Key Synced Globally. Deposits enabled on all devices.');
-        } catch (e) {
-          toast('⚠️ Saved locally, but failed to sync globally.');
-        }
-
-        closeM();
-      }
-    }
+    // Paystack key is loaded from the backend — no manual entry needed
 
     function toggleSetting(key, el) {
       el.classList.toggle('on');
@@ -3570,6 +3552,23 @@
     // ══════════════════════════════════════════════════════
     //  LIVE BOARD — fetch and render match cards
     // ══════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    //  BACKEND SETTINGS — auto-loads Paystack key etc.
+    // ══════════════════════════════════════════════════════
+    async function fetchBackendSettings() {
+      try {
+        const res = await fetch(BACKEND_URL + '/api/settings');
+        if (!res.ok) return;
+        const { settings } = await res.json();
+        if (settings?.paystackKey) {
+          PAYMENT_CONFIG.paystackKey = settings.paystackKey;
+          console.log('[SETTINGS] Paystack key loaded from server ✅');
+        }
+      } catch (e) {
+        console.warn('[SETTINGS] Could not load backend settings:', e.message);
+      }
+    }
+
     async function loadLiveMatches() {
       try {
         const res = await fetch(BACKEND_URL + '/api/matches');
