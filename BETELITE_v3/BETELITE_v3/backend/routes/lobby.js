@@ -24,17 +24,13 @@ module.exports = (io, engine, db) => {
       const { uid, username, game, amount, platform } = req.body;
       if (!uid || !amount || !game) return res.status(400).json({ error: 'Missing fields' });
 
-      // Check balance if DB exists (Firebase)
+      // Check creator balance before allowing challenge post
       if (db) {
-        // [TEST MODE] Bypass wallet check
-        /*
-        const userRef = db.ref(\`users/\${uid}\`);
-        const snap = await userRef.once('value');
+        const snap = await db.ref(`users/${uid}`).once('value');
         const user = snap.val() || {};
-        if ((user.balance || 0) < amount) {
-          return res.status(400).json({ error: 'Insufficient balance' });
+        if ((user.balance || 0) < Number(amount)) {
+          return res.status(400).json({ error: 'Insufficient balance to post this challenge' });
         }
-        */
       }
 
       const challengeId = `ch_${uuid().substring(0, 8)}`;
@@ -68,41 +64,53 @@ module.exports = (io, engine, db) => {
       if (!challenge) return res.status(404).json({ error: 'Challenge not found or already accepted' });
       if (challenge.creatorId === uid) return res.status(400).json({ error: 'Cannot accept your own challenge' });
 
-      // Deduct funds if DB exists
+      // Atomically deduct from both wallets into escrow
       if (db) {
-        // [TEST MODE] Bypass wallet check and deduction
-        /*
-        const creatorRef = db.ref(\`users/\${challenge.creatorId}\`);
-        const acceptorRef = db.ref(\`users/\${uid}\`);
-        
-        const [cSnap, aSnap] = await Promise.all([creatorRef.once('value'), acceptorRef.once('value')]);
+        const creatorRef = db.ref(`users/${challenge.creatorId}`);
+        const acceptorRef = db.ref(`users/${uid}`);
+
+        const [cSnap, aSnap] = await Promise.all([
+          creatorRef.once('value'),
+          acceptorRef.once('value'),
+        ]);
         const cUser = cSnap.val() || {};
         const aUser = aSnap.val() || {};
 
+        // Re-validate both balances at accept time
         if ((cUser.balance || 0) < challenge.amount) {
           lobbyChallenges.delete(challengeId);
           io.emit('lobby_challenge_removed', { id: challengeId });
-          return res.status(400).json({ error: 'Creator no longer has funds' });
+          return res.status(400).json({ error: 'Challenger no longer has sufficient funds' });
         }
         if ((aUser.balance || 0) < challenge.amount) {
-          return res.status(400).json({ error: 'Insufficient balance to accept' });
+          return res.status(400).json({ error: 'Insufficient balance to accept this challenge' });
         }
 
-        // Deduct into escrow
-        await Promise.all([
-          creatorRef.update({ balance: cUser.balance - challenge.amount }),
-          acceptorRef.update({ balance: aUser.balance - challenge.amount })
-        ]);
-        */
-        
-        // Log transaction
-        const txRef = db.ref('transactions').push();
-        await txRef.set({
-          type: 'escrow_hold',
-          amount: challenge.amount * 2,
+        // Atomic multi-path update: deduct both + record escrow
+        const escrowId = `esc_${challengeId}`;
+        await db.ref().update({
+          [`users/${challenge.creatorId}/balance`]: (cUser.balance || 0) - challenge.amount,
+          [`users/${uid}/balance`]:                 (aUser.balance || 0) - challenge.amount,
+          [`escrow/${escrowId}`]: {
+            challengeId,
+            creatorId:  challenge.creatorId,
+            acceptorId: uid,
+            amount:     challenge.amount,
+            pool:       challenge.amount * 2,
+            status:     'held',
+            heldAt:     Date.now(),
+          },
+        });
+        console.log(`[ESCROW] ₦${challenge.amount * 2} held for challenge ${challengeId}`);
+
+        // Log transaction for audit trail
+        await db.ref('transactions').push().set({
+          type:         'escrow_hold',
+          amount:       challenge.amount * 2,
           participants: [challenge.creatorId, uid],
-          timestamp: Date.now(),
-          challengeId
+          escrowId,
+          challengeId,
+          timestamp:    Date.now(),
         });
       }
 

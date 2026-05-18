@@ -3733,11 +3733,11 @@
     // ══════════════════════════════════════════════════════
     async function detectUserCurrency() {
       try {
-        // Route through backend to avoid browser CORS block on ipapi.co
-        const response = await fetch(BACKEND_URL + '/api/geo');
+        // Use api.country.is for high rate-limit free client-side geo detection
+        const response = await fetch('https://api.country.is/');
         if (!response.ok) throw new Error('geo failed');
         const data = await response.json();
-        if (data.country_code === 'GH') {
+        if (data.country === 'GH') {
           setCCY('GHS');
           console.log('[CURRENCY] Auto-detected: GHS');
         } else {
@@ -3883,55 +3883,116 @@
     };
 
     async function startWebRTCStream(matchId) {
+      currentStreamMatchId = matchId;
+      const video   = document.getElementById('webrtc-video');
+      const overlay = document.getElementById('stream-overlay');
+      const status  = document.getElementById('stream-status');
+
+      // ── Capability checks before attempting anything
+      if (!navigator.mediaDevices) {
+        showStreamError('Screen sharing is not available on this browser. Try Chrome on Android 10+ or Safari 15.4+.');
+        return;
+      }
+      if (!navigator.mediaDevices.getDisplayMedia) {
+        // Fallback: offer camera stream instead of screen share
+        const useCam = confirm('Screen sharing is not supported on this device.\n\nWould you like to use your camera instead?');
+        if (!useCam) { showStreamError('Streaming not available on this browser. Try Chrome on desktop or Android 10+.'); return; }
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+          video.srcObject = localStream;
+          video.style.display = 'block';
+          if (overlay) overlay.style.display = 'none';
+          window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'camera' });
+          toast('📷 Camera stream is live (screen share not supported on this device)');
+          _attachHostListeners();
+          return;
+        } catch(camErr) {
+          showStreamError('Camera access denied. Enable camera permission in your browser settings.');
+          return;
+        }
+      }
+
+      // ── Full screen share path
       try {
-        currentStreamMatchId = matchId;
-        const video = document.getElementById('webrtc-video');
-        const overlay = document.getElementById('stream-overlay');
-        const status = document.getElementById('stream-status');
-        
-        // Request screen sharing
-        localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        if (status) status.textContent = 'Requesting screen access...';
+        localStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 15, max: 30 }, width: { max: 1280 } },
+          audio: false, // audio from screen share causes echo on mobile
+        });
         video.srcObject = localStream;
         video.style.display = 'block';
-        overlay.style.display = 'none';
-        
-        window._socket.emit('stream_start', { matchId, username: S.user.displayName });
-        
-        // Cleanup old listeners
-        window._socket.off('viewer_joined');
-        window._socket.off('webrtc_answer');
-        window._socket.off('webrtc_ice');
-        
-        // Listen for viewers
-        window._socket.on('viewer_joined', async ({ viewerSocket }) => {
+        if (overlay) overlay.style.display = 'none';
+
+        // If user stops sharing via browser's built-in button
+        localStream.getVideoTracks()[0].addEventListener('ended', () => {
+          toast('📴 Stream ended');
+          stopLocalStream();
+        });
+
+        window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'screen' });
+        toast('🎥 Stream is live!');
+        _attachHostListeners();
+
+      } catch(err) {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          showStreamError('Screen share permission denied. Tap "Allow" when your browser asks, then try again.');
+        } else if (err.name === 'NotSupportedError') {
+          showStreamError('Screen sharing is not supported on this browser. Try Chrome on Android 10+ or a desktop browser.');
+        } else if (err.name === 'AbortError') {
+          showStreamError('Screen share was cancelled. Tap START STREAM again when ready.');
+        } else {
+          showStreamError('Could not start stream: ' + err.message);
+        }
+      }
+    }
+
+    function showStreamError(msg) {
+      const overlay = document.getElementById('stream-overlay');
+      const status  = document.getElementById('stream-status');
+      if (status)  status.textContent = msg;
+      if (overlay) overlay.style.display = 'flex';
+      toast('⚠️ ' + msg.substring(0, 60));
+      console.warn('[STREAM]', msg);
+    }
+
+    function stopLocalStream() {
+      if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+      Object.values(peerConnections).forEach(pc => pc.close());
+      peerConnections = {};
+    }
+
+    function _attachHostListeners() {
+      window._socket.off('viewer_joined');
+      window._socket.off('webrtc_answer');
+      window._socket.off('webrtc_ice');
+
+      window._socket.on('viewer_joined', async ({ viewerSocket }) => {
+        try {
           const pc = new RTCPeerConnection(servers);
           peerConnections[viewerSocket] = pc;
-          
           localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-          
           pc.onicecandidate = e => {
             if (e.candidate) window._socket.emit('webrtc_ice', { to: viewerSocket, candidate: e.candidate });
           };
-          
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           window._socket.emit('webrtc_offer', { to: viewerSocket, offer });
-        });
-        
-        window._socket.on('webrtc_answer', async ({ from, answer }) => {
-          const pc = peerConnections[from];
-          if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
-        });
-        
-        window._socket.on('webrtc_ice', async ({ from, candidate }) => {
-          const pc = peerConnections[from];
-          if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        });
-        
-        toast('🎥 Stream is live!');
-      } catch(err) {
-        toast('❌ Could not start stream: ' + err.message);
-      }
+        } catch(e) { console.warn('[WEBRTC] Offer failed:', e.message); }
+      });
+
+      window._socket.on('webrtc_answer', async ({ from, answer }) => {
+        const pc = peerConnections[from];
+        if (pc && pc.signalingState !== 'closed') {
+          try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); } catch(e) {}
+        }
+      });
+
+      window._socket.on('webrtc_ice', async ({ from, candidate }) => {
+        const pc = peerConnections[from];
+        if (pc && pc.signalingState !== 'closed') {
+          try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+        }
+      });
     }
 
     async function joinWebRTCStream(matchId) {

@@ -152,6 +152,7 @@ module.exports = (io, engine) => {
 
     t.matches.push({
       fixtureId: fixture.id,
+      round: fixture.round,
       homeId: fixture.homeId, homeName: fixture.homeName,
       awayId: fixture.awayId, awayName: fixture.awayName,
       scoreHome: finalHome, scoreAway: finalAway,
@@ -163,6 +164,9 @@ module.exports = (io, engine) => {
       fixture,
       aiResult
     });
+
+    // Check if round is complete and auto-advance bracket
+    checkProgression(t, io, engine);
 
     res.json({ ok: true, fixture, aiVerified, finalScore: `${finalHome}-${finalAway}`, aiResult });
   });
@@ -178,27 +182,142 @@ module.exports = (io, engine) => {
   return r;
 };
 
+// ── Bracket generator: single-elimination rounds
 function generateFixtures(t) {
-  // Round-robin: each player plays every other player once
-  const players = t.players;
-  for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) {
-      const id = uuid();
-      fixtures.set(id, {
-        id,
-        tournamentId: t.id,
-        homeId: players[i].userId,
-        homeName: players[i].username,
-        awayId: players[j].userId,
-        awayName: players[j].username,
-        status: 'pending',  // pending | completed
-        scoreHome: null,
-        scoreAway: null,
-        aiVerified: false,
-        createdAt: Date.now(),
-      });
-    }
+  // Round 1: pair players randomly
+  const players = [...t.players].sort(() => Math.random() - 0.5);
+  t.currentRound = 1;
+  t.totalRounds  = Math.ceil(Math.log2(players.length));
+
+  for (let i = 0; i < players.length - 1; i += 2) {
+    const id = uuid();
+    fixtures.set(id, {
+      id,
+      tournamentId: t.id,
+      round:        1,
+      homeId:       players[i].userId,
+      homeName:     players[i].username,
+      awayId:       players[i + 1].userId,
+      awayName:     players[i + 1].username,
+      status:       'pending',
+      scoreHome:    null,
+      scoreAway:    null,
+      aiVerified:   false,
+      createdAt:    Date.now(),
+    });
   }
+
+  // Bye for odd player count
+  if (players.length % 2 !== 0) {
+    const bye = players[players.length - 1];
+    t.byePlayers = t.byePlayers || [];
+    t.byePlayers.push({ userId: bye.userId, username: bye.username, round: 1 });
+  }
+}
+
+// ── After each result, check if the round is complete and advance
+function checkProgression(t, io, engine) {
+  const roundFixtures = [...fixtures.values()].filter(
+    f => f.tournamentId === t.id && f.round === t.currentRound
+  );
+  const allDone = roundFixtures.every(f => f.status === 'completed');
+  if (!allDone) return;
+
+  // Collect winners of this round
+  const winners = roundFixtures.map(f => {
+    const winnerId = f.scoreHome > f.scoreAway ? f.homeId : f.awayId;
+    const winName  = f.scoreHome > f.scoreAway ? f.homeName : f.awayName;
+    return { userId: winnerId, username: winName };
+  });
+
+  // Add any bye players from this round
+  if (t.byePlayers) {
+    t.byePlayers.filter(b => b.round === t.currentRound).forEach(b => winners.push(b));
+  }
+
+  // Final: only 1 winner left → distribute prizes
+  if (winners.length === 1) {
+    t.status    = 'finished';
+    t.winnerId  = winners[0].userId;
+    t.winnerName= winners[0].username;
+    distributePrizes(t, io);
+    io.emit('tournament_finished', { id: t.id, name: t.name, winner: winners[0] });
+    return;
+  }
+
+  // Advance: create next round fixtures
+  t.currentRound++;
+  const shuffled = winners.sort(() => Math.random() - 0.5);
+  for (let i = 0; i < shuffled.length - 1; i += 2) {
+    const id = uuid();
+    fixtures.set(id, {
+      id,
+      tournamentId: t.id,
+      round:        t.currentRound,
+      homeId:       shuffled[i].userId,
+      homeName:     shuffled[i].username,
+      awayId:       shuffled[i + 1].userId,
+      awayName:     shuffled[i + 1].username,
+      status:       'pending',
+      scoreHome:    null,
+      scoreAway:    null,
+      aiVerified:   false,
+      createdAt:    Date.now(),
+    });
+  }
+  if (shuffled.length % 2 !== 0) {
+    t.byePlayers = t.byePlayers || [];
+    t.byePlayers.push({ userId: shuffled[shuffled.length - 1].userId, username: shuffled[shuffled.length - 1].username, round: t.currentRound });
+  }
+
+  io.emit('tournament_round_advanced', {
+    id: t.id, name: t.name, round: t.currentRound,
+    fixtures: [...fixtures.values()].filter(f => f.tournamentId === t.id && f.round === t.currentRound),
+  });
+  io.emit('tournament_update', formatT(t));
+}
+
+// ── Distribute prizes to top finishers
+async function distributePrizes(t, io) {
+  const PRIZE_CUTS = [0.50, 0.25, 0.15]; // 1st, 2nd, 3rd
+  const PLATFORM_FEE = 0.10;
+  const netPool = Math.round(t.prizePool * (1 - PLATFORM_FEE));
+
+  // Build final standings from round results
+  const standings = buildStandings(t);
+  const payouts   = [];
+
+  for (let i = 0; i < Math.min(standings.length, PRIZE_CUTS.length); i++) {
+    const player = standings[i];
+    const amount = Math.round(netPool * PRIZE_CUTS[i]);
+    payouts.push({ position: i + 1, userId: player.userId, username: player.username, amount });
+  }
+
+  io.emit('tournament_prizes', { id: t.id, payouts, netPool });
+  t.payouts = payouts;
+  t.finalStandings = standings;
+  console.log(`[TOURNAMENT] Prize distribution for ${t.name}:`, payouts);
+  // Note: actual wallet credit happens in the payments layer when Firebase is connected
+}
+
+function buildStandings(t) {
+  // Winner of the final is 1st; collect round finishes in reverse
+  const roundMax = t.currentRound || 1;
+  const standings = [];
+  const seen = new Set();
+
+  for (let r = roundMax; r >= 1; r--) {
+    const roundF = [...fixtures.values()].filter(f => f.tournamentId === t.id && f.round === r && f.status === 'completed');
+    roundF.forEach(f => {
+      const winnerId = f.scoreHome >= f.scoreAway ? f.homeId : f.awayId;
+      const loserId  = f.scoreHome >= f.scoreAway ? f.awayId : f.homeId;
+      const winName  = f.scoreHome >= f.scoreAway ? f.homeName : f.awayName;
+      const loseName = f.scoreHome >= f.scoreAway ? f.awayName : f.homeName;
+      if (!seen.has(winnerId)) { standings.push({ userId: winnerId, username: winName }); seen.add(winnerId); }
+      if (!seen.has(loserId))  { standings.push({ userId: loserId,  username: loseName }); seen.add(loserId); }
+    });
+  }
+  return standings;
 }
 
 function getMyFixtures(tournamentId, userId) {

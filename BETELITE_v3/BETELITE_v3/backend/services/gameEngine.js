@@ -296,43 +296,72 @@ class GameEngine {
     if (match.isP2P && match.wagerPool && this.db) {
       (async () => {
         try {
+          const escrowSnap = await this.db.ref('escrow')
+            .orderByChild('challengeId').equalTo(match.challengeId || match.id)
+            .once('value');
+          const escrowData = escrowSnap.val();
+          const escrowEntry = escrowData ? Object.values(escrowData)[0] : null;
+          const escrowKey   = escrowData ? Object.keys(escrowData)[0]   : null;
+
+          const PLATFORM_FEE = 0.10; // 10%
+          const pool   = match.wagerPool;
+          const payout = Math.round(pool * (1 - PLATFORM_FEE));
+          const fee    = pool - payout;
+
           let winnerId = null;
           if (match.scoreHome > match.scoreAway) winnerId = match.homeId;
           else if (match.scoreAway > match.scoreHome) winnerId = match.awayId;
 
           if (winnerId) {
-            const winRef = this.db.ref(`users/${winnerId}`);
-            const snap = await winRef.once('value');
-            const user = snap.val() || {};
-            // Take 10% platform fee
-            const fee = match.wagerPool * 0.1;
-            const payout = match.wagerPool - fee;
-            await winRef.update({ balance: (user.balance || 0) + payout });
-            
-            // Log transaction
+            // Atomic: credit winner, close escrow, log fee
+            const winSnap = await this.db.ref(`users/${winnerId}`).once('value');
+            const winUser = winSnap.val() || {};
+
+            const atomicUpdate = {
+              [`users/${winnerId}/balance`]: (winUser.balance || 0) + payout,
+            };
+            if (escrowKey) atomicUpdate[`escrow/${escrowKey}/status`] = 'paid_out';
+
+            await this.db.ref().update(atomicUpdate);
+
             await this.db.ref('transactions').push().set({
-              type: 'wager_win',
-              amount: payout,
-              user: winnerId,
+              type:      'wager_win',
+              matchId:   match.id,
+              winnerId,
+              payout,
+              fee,
+              pool,
               timestamp: Date.now(),
-              matchId: match.id
             });
-            console.log(`[ENGINE] Payout of $${payout} awarded to ${winnerId} for match ${match.id}`);
+
+            this.io?.to(`match:${match.id}`).emit('escrow_paid', { winnerId, payout, fee });
+            console.log(`[ESCROW] ₦${payout} paid to ${winnerId} (fee ₦${fee}) for match ${match.id}`);
+
           } else {
-            // Draw: refund amounts
-            const homeRef = this.db.ref(`users/${match.homeId}`);
-            const awayRef = this.db.ref(`users/${match.awayId}`);
-            const [hSnap, aSnap] = await Promise.all([homeRef.once('value'), awayRef.once('value')]);
-            const hUser = hSnap.val() || {};
-            const aUser = aSnap.val() || {};
-            await Promise.all([
-              homeRef.update({ balance: (hUser.balance || 0) + match.wagerAmount }),
-              awayRef.update({ balance: (aUser.balance || 0) + match.wagerAmount })
+            // Draw — full refund, no platform fee
+            const [hSnap, aSnap] = await Promise.all([
+              this.db.ref(`users/${match.homeId}`).once('value'),
+              this.db.ref(`users/${match.awayId}`).once('value'),
             ]);
-            console.log(`[ENGINE] Match ${match.id} ended in draw. Escrow refunded.`);
+            const refundEach = match.wagerAmount;
+            const atomicUpdate = {
+              [`users/${match.homeId}/balance`]: (hSnap.val()?.balance || 0) + refundEach,
+              [`users/${match.awayId}/balance`]: (aSnap.val()?.balance || 0) + refundEach,
+            };
+            if (escrowKey) atomicUpdate[`escrow/${escrowKey}/status`] = 'refunded';
+
+            await this.db.ref().update(atomicUpdate);
+
+            await this.db.ref('transactions').push().set({
+              type:      'wager_draw_refund',
+              matchId:   match.id,
+              refundEach,
+              timestamp: Date.now(),
+            });
+            console.log(`[ESCROW] Draw — ₦${refundEach} refunded to each player for match ${match.id}`);
           }
         } catch(e) {
-          console.error('[ENGINE] Escrow payout failed:', e.message);
+          console.error('[ESCROW] Payout failed:', e.message);
         }
       })();
     }

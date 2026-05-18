@@ -1,0 +1,46 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read":  "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+
+    "live_matches": {
+      ".read": "auth !== null",
+      ".write": false,
+      ".indexOn": ["status", "gameType", "isP2P", "homeId", "awayId", "createdAt"]
+    },
+
+    "escrow": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["challengeId", "status", "creatorId", "acceptorId"]
+    },
+
+    "bets": {
+      ".read": false,
+      ".write": "auth !== null",
+      ".indexOn": ["matchId", "userId", "status"]
+    },
+
+    "transactions": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["type", "matchId", "winnerId", "timestamp"]
+    },
+
+    "tournaments": {
+      ".read": "auth !== null",
+      ".write": false,
+      ".indexOn": ["status", "game", "createdAt"]
+    },
+
+    "lobby_challenges": {
+      ".read": "auth !== null",
+      ".write": "auth !== null",
+      ".indexOn": ["creatorId", "game", "amount", "createdAt"]
+    }
+  }
+}
