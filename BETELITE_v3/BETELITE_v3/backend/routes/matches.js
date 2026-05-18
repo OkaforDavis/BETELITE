@@ -16,7 +16,7 @@ module.exports = (io, engine) => {
   });
 
   r.post('/locked-room', (req, res) => {
-    const { hostName, gameType, roomId } = req.body;
+    const { hostName, hostId, gameType, roomId } = req.body;
     if (!roomId || !hostName) return res.status(400).json({ error: 'Missing room data' });
     
     // Create an ad-hoc match for the live board
@@ -25,6 +25,7 @@ module.exports = (io, engine) => {
       game: gameType || 'CrestArena',
       label: 'Private Stream',
       home: hostName,
+      homeId: hostId, // Critical: this allows the creator to see START STREAM button
       away: 'Waiting...',
       scoreHome: 0,
       scoreAway: 0,
@@ -35,7 +36,7 @@ module.exports = (io, engine) => {
     };
     
     // Inject it into the live matches map
-    engine.liveMatches.set(roomId, roomMatch);
+    engine.matches.set(roomId, roomMatch);
     
     // Broadcast to everyone so the Live Board updates
     io.emit('score_update', roomMatch);

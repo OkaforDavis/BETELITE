@@ -2128,12 +2128,6 @@
           </div>
           <span class="tag tg" id="live-online-tag">🟢 Loading...</span>
         </div>
-
-        <!-- LOCKED ROOM BUTTON -->
-        <button class="btn" style="width:100%; margin-bottom:16px; background:rgba(0,212,106,0.1); border:1px solid var(--green); color:var(--green); font-weight:700;" onclick="createLockedRoom()">
-          🔒 Start Locked Room (Stream)
-        </button>
-
         <!-- LIVE MATCH CARDS — dynamically populated -->
         <div id="live-games-container"></div>
 
@@ -2258,12 +2252,16 @@
         <div class="sh">
           <div class="st">📺 Watch Live</div><span class="tag to">Coming Soon</span>
         </div>
-        <div class="empty-state" style="padding-bottom:16px">
+        <div class="empty-state" style="padding-bottom:16px; margin-bottom: 16px;">
           <div class="es-icon">📡</div>
-          <div class="es-title">Live Streaming Coming</div>
-          <div class="es-sub">Watch matches live via WebRTC.<br>AI tracks scores in real-time<br>from the stream
-            automatically.</div>
+          <div class="es-title">Live Streaming</div>
+          <div class="es-sub">Watch matches live via WebRTC.<br>Or create your own Locked Room to start streaming your gameplay.</div>
         </div>
+
+        <!-- LOCKED ROOM BUTTON -->
+        <button class="btn" style="width:100%; margin-bottom:16px; background:rgba(0,212,106,0.1); border:1px solid var(--green); color:var(--green); font-weight:700;" onclick="createLockedRoom()">
+          🔒 Start Locked Room (Stream)
+        </button>
 
         <!-- AI SCORE DETECTOR -->
         <div class="menu-card" style="margin-top: 16px;">
@@ -3727,6 +3725,7 @@
       const roomId = 'room_' + Date.now() + '_' + Math.floor(Math.random()*1000);
       
       const hostName = S.user?.displayName || 'Player';
+      const hostId = S.user?.uid;
       const gameType = prompt("Enter Game Name (e.g. FIFA, COD Mobile):", "FIFA 1v1");
       if (!gameType) return;
       
@@ -3734,7 +3733,7 @@
         const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostName, gameType, roomId })
+          body: JSON.stringify({ hostName, hostId, gameType, roomId })
         });
         
         if (!res.ok) throw new Error('Failed to create room');
