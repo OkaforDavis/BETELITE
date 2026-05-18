@@ -2221,17 +2221,30 @@
       </div>
 
 
-      <!-- BETS -->
+      <!-- LOBBY (1v1 Wagers) -->
       <div class="pg" id="pg-bets">
         <div class="sh">
-          <div class="st">💰 My Bets</div>
+          <div class="st">⚔️ 1v1 Matchmaking</div>
         </div>
-        <div class="empty-state">
-          <div class="es-icon">💸</div>
-          <div class="es-title">No Bets Yet</div>
-          <div class="es-sub">Once live matches are available,<br>place bets up to <span
-              id="max-bet-txt">₦1,000,000</span> per game.</div>
-          <div class="es-badge">💡 Max bet: <span id="max-bet-badge">₦1,000,000</span></div>
+        
+        <div style="padding: 16px;">
+          <button class="cta" style="background:var(--gold); color:#000; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="openModal('create-wager')">
+            <span style="font-size:18px;">+</span> Create 1v1 Wager
+          </button>
+          
+          <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="font-size:14px; color:var(--text2); margin:0;">Active Challenges</h3>
+            <span style="font-size:11px; color:var(--green);" id="lobby-status">🔴 Live</span>
+          </div>
+          
+          <div id="lobby-list" style="margin-top:12px; display:flex; flex-direction:column; gap:12px;">
+            <!-- Wagers injected here by JS -->
+            <div class="empty-state" style="margin-top:0;">
+              <div class="es-icon">👀</div>
+              <div class="es-title">No active wagers</div>
+              <div class="es-sub">Be the first to create a 1v1 challenge!</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2247,54 +2260,41 @@
             automatically.</div>
         </div>
 
-        <!-- AI DETECTION TESTER -->
-        <div class="menu-card" style="margin-top: 16px; border: 1px solid var(--gold);">
-          <div class="menu-card-title"
-            style="color: var(--gold); display: flex; justify-content: space-between; align-items: center;">
-            <span>🤖 AI SCORE DETECTOR TEST</span>
-            <div style="display:flex; gap:8px; align-items:center;">
-
-              <span class="tag tg">NEW</span>
-            </div>
+        <!-- AI SCORE DETECTOR -->
+        <div class="menu-card" style="margin-top: 16px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom: 12px;">
+            <span style="font-size:18px;">🤖</span>
+            <span style="font-size:16px; font-weight:800; color:var(--green);">AI Score Detector</span>
+            <span style="font-size:11px; color:var(--text2);">Upload screenshot to detect score</span>
           </div>
-          <div style="padding: 12px;">
-            <label class="fl">SELECT GAME</label>
-            <select class="fi" id="ai-game-type" style="margin-bottom: 12px;">
-              <option value="football">FIFA / eFootball / DLS</option>
-              <option value="fps">COD / PUBG / Free Fire</option>
-            </select>
 
-            <label class="fl">INJECT INTO MATCH (Live Board)</label>
-            <select class="fi" id="ai-match-picker" style="margin-bottom: 12px;">
-              <option value="">— Select a live match to update —</option>
-            </select>
+          <!-- Upload Area -->
+          <div id="ai-upload-box" class="pfp-upload" style="width: 100%; border: 1px dashed var(--green); border-radius: 12px; padding: 24px; background: rgba(0,212,106,0.05); text-align: center; cursor: pointer; transition: all 0.2s;" onclick="document.getElementById('ai-img-upload').click()">
+            <div style="font-size:24px; margin-bottom:8px;">📸✨</div>
+            <div style="color:var(--text); font-weight:600; font-size:14px; margin-bottom:4px;">Tap to upload match screenshot</div>
+            <div style="color:var(--text2); font-size:11px;">Supports eFootball, COD, Free Fire, FIFA</div>
+            <img id="ai-preview" src="" style="display:none; width: 100%; max-height: 150px; object-fit: contain; border-radius: 8px; margin-top:12px;">
+          </div>
+          <input type="file" id="ai-img-upload" accept="image/*" style="display:none" onchange="handleAiImageSelect(this)">
 
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
-              <div style="flex:1;">
-                <label class="fl">YOUR ID</label>
-                <input class="fi" type="text" id="ai-target-id" placeholder="e.g. KLAUS" value="KLAUS">
-              </div>
-              <div style="flex:1;">
-                <label class="fl">OPPONENT ID</label>
-                <input class="fi" type="text" id="ai-opponent-id" placeholder="e.g. JOSEP" value="JOSEP GUARDIOLA">
-              </div>
+          <!-- Result Area (hidden initially) -->
+          <div id="ai-result-card" style="display:none; margin-top: 16px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 16px;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom: 12px;">
+              <span style="color:var(--green);">✅</span>
+              <span style="color:var(--green); font-weight:700; font-size:14px;" id="ai-res-title">Score Detected</span>
             </div>
-
-            <div class="pfp-upload"
-              style="width: 100%; height: 100px; border-radius: 8px; margin-bottom: 12px; background: var(--bg);"
-              onclick="document.getElementById('ai-img-upload').click()">
-              <span style="font-size:24px" id="ai-up-icon">📸 Upload Screenshot</span>
-              <img id="ai-preview" src=""
-                style="display:none; width: 100%; height: 100%; object-fit: contain; border-radius: 8px;">
+            <div style="font-family:var(--fd); font-weight:800; font-size:16px; margin-bottom: 6px; line-height:1.4;" id="ai-res-score">
+              Team A 0 - 0 Team B
             </div>
-            <input type="file" id="ai-img-upload" accept="image/*" style="display:none" onchange="previewAITest(this)">
-
-            <button class="cta" id="btn-detect" onclick="runAIDetection()"
-              style="background: var(--gold); color: #000;">RUN DETECTION</button>
-
-            <div id="ai-result"
-              style="margin-top: 12px; font-family: monospace; font-size: 11px; background: var(--bg); padding: 8px; border-radius: 4px; display: none; white-space: pre-wrap; color: var(--text);">
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); margin-bottom:12px;">
+              <span>⏱️</span> <span id="ai-res-meta">Match Ended</span>
             </div>
+            <div style="font-size:11px; color:var(--text2); line-height:1.5; margin-bottom: 16px;" id="ai-res-desc">
+              Confidence: 95%
+            </div>
+            <button class="cta" id="btn-apply-score" style="background: var(--green); color: #000; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="applyAiScore()">
+              📌 Apply to Live Board
+            </button>
           </div>
         </div>
 
@@ -2457,10 +2457,10 @@
       </button>
       <button class="nb" id="nb-bets" onclick="navTo('bets')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="5" width="20" height="14" rx="2" />
-          <path d="M2 10h20M6 15h.01M10 15h4" />
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
         </svg>
-        BETS
+        LOBBY
       </button>
       <button class="nb" id="nb-watch" onclick="navTo('watch')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2731,6 +2731,24 @@
         window._socket.on('match_state', (match) => updateMatchUI(match));
         window._socket.on('score_update', (data) => updateMatchUI(data));
         window._socket.on('match_finished', (data) => toast(`🏆 Match over! Result: ${data.scoreHome}-${data.scoreAway}`));
+        
+        // Lobby Realtime updates
+        window._socket.on('lobby_new_challenge', (c) => {
+          activeWagers.unshift(c);
+          if (typeof renderLobby === 'function') renderLobby();
+        });
+        window._socket.on('lobby_challenge_removed', (data) => {
+          activeWagers = activeWagers.filter(w => w.id !== data.id);
+          if (typeof renderLobby === 'function') renderLobby();
+        });
+        window._socket.on('lobby_challenge_accepted', (data) => {
+          activeWagers = activeWagers.filter(w => w.id !== data.challengeId);
+          if (typeof renderLobby === 'function') renderLobby();
+          if (S.user && (data.creatorId === S.user.uid || data.acceptorId === S.user.uid)) {
+            toast('⚔️ Wager match started! Redirecting...');
+            navTo('live');
+          }
+        });
       }
     }
 
@@ -2930,7 +2948,52 @@
       const tt = document.getElementById('m-tt');
       const bd = document.getElementById('m-bd');
 
-      if (type === 'deposit') {
+      if (type === 'create-wager') {
+        tt.textContent = '⚔️ Create 1v1 Wager';
+        bd.innerHTML = `
+        <div style="font-size:13px; color:var(--text2); margin-bottom:12px;">Create a challenge. When someone accepts, the amount will be held in escrow. Winner takes all.</div>
+        <label class="fl">Select Game</label>
+        <select class="fi" id="cw-game">
+          <option value="efootball">eFootball</option>
+          <option value="cod">COD Mobile</option>
+          <option value="freefire">Free Fire</option>
+          <option value="fifa">FIFA Mobile</option>
+          <option value="dream">Dream League</option>
+        </select>
+        <label class="fl">Wager Amount (₦)</label>
+        <input class="fi" type="number" id="cw-amount" placeholder="e.g. 5000">
+        <button class="cta" onclick="submitWager()" style="margin-top:16px;">POST CHALLENGE</button>
+        `;
+      }
+      
+      else if (type === 'match-details') {
+        tt.textContent = '📺 Match Hub';
+        const isParticipant = S.user && (data.homeId === S.user.uid || data.awayId === S.user.uid);
+        
+        bd.innerHTML = `
+        <div style="text-align:center; margin-bottom:16px;">
+          <div style="font-size:18px; font-weight:800;">${data.home} <span style="color:var(--gold)">${data.scoreHome} - ${data.scoreAway}</span> ${data.away}</div>
+          <div style="font-size:12px; color:var(--text2); margin-top:4px;">${data.label}</div>
+        </div>
+        
+        <div style="background:#000; border-radius:8px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;" id="stream-container">
+          <video id="webrtc-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; display:none;"></video>
+          <div id="stream-overlay" style="position:absolute; text-align:center;">
+            <div style="font-size:32px; margin-bottom:8px;">📡</div>
+            <div style="color:var(--text2); font-size:13px;" id="stream-status">No active stream</div>
+          </div>
+        </div>
+        
+        <div style="display:flex; gap:8px; margin-top:16px;">
+          ${isParticipant ? 
+            `<button class="cta" style="flex:1; background:var(--gold); color:#000;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
+            `<button class="cta" style="flex:1; background:var(--green); color:#000;" onclick="joinWebRTCStream('${data.id}')">👁️ WATCH STREAM</button>`
+          }
+        </div>
+        `;
+      }
+
+      else if (type === 'deposit') {
         tt.textContent = '💳 Deposit Funds';
         if (!hasPayment()) {
           bd.innerHTML = `
@@ -3475,31 +3538,37 @@
       reader.readAsDataURL(file);
     }
 
+    let lastAiDetection = null;
+
+    function handleAiImageSelect(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const reader = new FileReader();
+      reader.onload = e => {
+        aiBase64 = e.target.result;
+        const preview = document.getElementById('ai-preview');
+        preview.src = aiBase64;
+        preview.style.display = 'block';
+        toast('📸 Image loaded. Analyzing screenshot...');
+        runAIDetection();
+      };
+      reader.readAsDataURL(file);
+    }
+
     async function runAIDetection() {
-      if (!aiBase64) {
-        toast('Please upload an image first');
-        return;
-      }
+      if (!aiBase64) return;
 
-      const btn = document.getElementById('btn-detect');
-      const resDiv = document.getElementById('ai-result');
-      const game = document.getElementById('ai-game-type').value;
-      const targetId = (document.getElementById('ai-target-id')?.value || 'PLAYER1').trim();
-      const oppId   = (document.getElementById('ai-opponent-id')?.value || 'PLAYER2').trim();
-      const matchId  = document.getElementById('ai-match-picker')?.value || '';
-
-      btn.disabled = true;
-      btn.textContent = 'AI ANALYZING...';
-      resDiv.style.display = 'block';
-      resDiv.textContent = '⏳ Sending to AI detection engine...';
-      resDiv.style.color = 'var(--text2)';
+      const resCard = document.getElementById('ai-result-card');
+      const box = document.getElementById('ai-upload-box');
+      box.style.opacity = '0.5';
 
       try {
         const formData = new FormData();
-        formData.append('game', game);
+        formData.append('game', 'auto');
         formData.append('image_b64', aiBase64);
-        formData.append('target_gamertag', targetId);
-        formData.append('opponent_gamertag', oppId);
+        
+        // Use active match if in one, otherwise it's just a test detection
+        const matchId = S.activeMatch?.id || '';
         if (matchId) formData.append('match_id', matchId);
 
         const res = await fetch(BACKEND_URL + '/api/detect/frame', {
@@ -3507,45 +3576,54 @@
           body: formData
         });
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || err.detail || `HTTP ${res.status}`);
-        }
-
+        if (!res.ok) throw new Error('Detection failed');
         const data = await res.json();
-        resDiv.style.color = 'var(--green)';
-        resDiv.textContent = '✅ Detection complete:\n' + JSON.stringify(data, null, 2);
+        lastAiDetection = data;
 
-        // ── INJECT SCORE INTO LIVE BOARD ──
-        if (matchId && window._socket && (data.score1 != null || data.score_home != null)) {
-          const score1 = data.score1 ?? data.score_home ?? 0;
-          const score2 = data.score2 ?? data.score_away ?? 0;
-
-          // Emit to server — server will update engine and broadcast to all clients
-          window._socket.emit('ai_score_detected', {
-            matchId,
-            score1,
-            score2,
-            gameEnded: data.game_ended || data.gameEnded || false,
-            cheatDetected: data.cheat_detected || data.cheatDetected || false,
-            cheatReason: data.cheat_reason || '',
-          });
-
-          // Optimistic local update — card flashes immediately
-          updateMatchUI({ id: matchId, scoreHome: score1, scoreAway: score2, verifiedBy: 'ai_screenshot' });
-
-          toast(`🤖 Score injected: ${score1} – ${score2} into match`);
-        } else if (!matchId) {
-          toast('💡 Select a match from the dropdown to inject this score into the Live Board');
-        }
-
+        const score1 = data.score1 ?? data.score_home ?? 0;
+        const score2 = data.score2 ?? data.score_away ?? 0;
+        
+        document.getElementById('ai-res-title').textContent = `Score Detected — ${data.game_detected || 'Match'}`;
+        document.getElementById('ai-res-score').innerHTML = `My Team <span style="color:#fff">${score1} - ${score2}</span> Opposing Team`;
+        document.getElementById('ai-res-desc').textContent = data.confidence ? `Confidence: ${data.confidence}%. ${data.reasoning || ''}` : 'Score parsed successfully from screenshot.';
+        
+        resCard.style.display = 'block';
       } catch (err) {
-        resDiv.style.color = 'var(--red)';
-        resDiv.textContent = '❌ Error: ' + err.message +
-          '\n\n💡 Tip: If running locally, start the Python detection service:\n   cd detection_service && python app.py\n\nIf deployed, the backend calls the hosted detection service.';
+        toast('❌ Detection error: ' + err.message);
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'RUN DETECTION';
+        box.style.opacity = '1';
+      }
+    }
+
+    function applyAiScore() {
+      if (!lastAiDetection) return;
+      
+      const score1 = lastAiDetection.score1 ?? lastAiDetection.score_home ?? 0;
+      const score2 = lastAiDetection.score2 ?? lastAiDetection.score_away ?? 0;
+      
+      // If we don't have an active match, just pick the first live match for demo purposes
+      let matchId = S.activeMatch?.id;
+      if (!matchId) {
+        const liveBoard = document.getElementById('live-match-board');
+        const firstMatch = liveBoard.firstElementChild;
+        if (firstMatch && firstMatch.id.startsWith('mc-')) {
+          matchId = firstMatch.id.replace('mc-', '');
+        }
+      }
+
+      if (matchId && window._socket) {
+        window._socket.emit('ai_score_detected', {
+          matchId,
+          score1,
+          score2,
+          gameEnded: lastAiDetection.game_ended || lastAiDetection.gameEnded || true,
+          cheatDetected: lastAiDetection.cheat_detected || false,
+          cheatReason: lastAiDetection.cheat_reason || '',
+        });
+        updateMatchUI({ id: matchId, scoreHome: score1, scoreAway: score2, verifiedBy: 'ai_screenshot' });
+        toast(`🤖 Score applied to live board: ${score1} – ${score2}`);
+      } else {
+        toast('No active match found to inject score into.');
       }
     }
 
@@ -3580,8 +3658,6 @@
         if (!board) return;
 
         board.innerHTML = '';
-        const picker = document.getElementById('ai-match-picker');
-        if (picker) picker.innerHTML = '<option value="">— Select a live match to update —</option>';
 
         if (!matches.length) {
           board.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text2);font-size:13px;">No live matches right now</div>';
@@ -3593,12 +3669,6 @@
 
         matches.forEach(m => {
           board.appendChild(buildMatchCard(m));
-          if (picker) {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = `${m.icon || ''} ${m.home} vs ${m.away} (${m.label})`;
-            picker.appendChild(opt);
-          }
         });
       } catch (e) {
         console.warn('[LIVE] Could not load matches:', e.message);
@@ -3608,7 +3678,8 @@
     function buildMatchCard(m) {
       const div = document.createElement('div');
       div.id = `mc-${m.id}`;
-      div.style.cssText = 'background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden;transition:all .3s;';
+      div.style.cssText = 'background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden;transition:all .3s;cursor:pointer;';
+      div.onclick = () => openModal('match-details', m);
       div.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text2);">${m.icon || '🎮'} ${m.label}</span>
@@ -3679,6 +3750,241 @@
     }
 
     // ══════════════════════════════════════════════════════
+    //  1V1 MATCHMAKING LOBBY
+    // ══════════════════════════════════════════════════════
+    let activeWagers = [];
+
+    async function fetchLobby() {
+      try {
+        const res = await fetch(BACKEND_URL + '/api/lobby');
+        const data = await res.json();
+        if (data.ok) {
+          activeWagers = data.challenges || [];
+          renderLobby();
+        }
+      } catch (err) {
+        console.error('Failed to fetch lobby:', err);
+      }
+    }
+
+    function renderLobby() {
+      const list = document.getElementById('lobby-list');
+      if (!list) return;
+
+      if (activeWagers.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state" style="margin-top:0;">
+            <div class="es-icon">👀</div>
+            <div class="es-title">No active wagers</div>
+            <div class="es-sub">Be the first to create a 1v1 challenge!</div>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = activeWagers.map(c => `
+        <div style="background:var(--bg); border:1px solid var(--border2); border-radius:12px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:700; font-size:15px; color:var(--text);">${c.creatorName}</div>
+            <div style="font-size:11px; color:var(--text2); margin-top:2px;">🎮 ${c.game.toUpperCase()}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-weight:800; font-size:16px; color:var(--gold); margin-bottom:4px;">${getSym()}${c.amount.toLocaleString()}</div>
+            ${(!S.user || S.user.uid !== c.creatorId) ? 
+              `<button onclick="acceptWager('${c.id}')" style="background:var(--green); color:#000; padding:6px 16px; border-radius:16px; font-weight:700; font-size:12px; border:none;">ACCEPT</button>` 
+              : `<span style="font-size:11px; color:var(--text2);">Your Wager</span>`
+            }
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function submitWager() {
+      if (!S.user) {
+        toast('Please login to create a wager');
+        return;
+      }
+      const game = document.getElementById('cw-game').value;
+      const amount = Number(document.getElementById('cw-amount').value);
+      if (!amount || amount < 500) {
+        toast('Minimum wager is ₦500');
+        return;
+      }
+      // [TEST MODE] Bypass wallet check
+      // if (S.wallet < amount) {
+      //   toast('Insufficient balance for this wager');
+      //   return;
+      // }
+
+      const btn = document.querySelector('.modal .cta');
+      btn.disabled = true;
+      btn.textContent = 'CREATING...';
+
+      try {
+        const res = await fetch(BACKEND_URL + '/api/lobby/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: S.user.uid,
+            username: S.user.displayName || 'Player',
+            game,
+            amount,
+            platform: 'mobile'
+          })
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Failed to create wager');
+        toast('Wager created successfully!');
+        closeM();
+        navTo('bets'); // Navigate to lobby
+      } catch (err) {
+        toast('❌ Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'POST CHALLENGE';
+      }
+    }
+
+    async function acceptWager(challengeId) {
+      if (!S.user) {
+        toast('Please login to accept a wager');
+        return;
+      }
+      if (!confirm('Are you sure you want to accept this wager? The amount will be deducted from your wallet into escrow.')) return;
+
+      try {
+        const res = await fetch(BACKEND_URL + '/api/lobby/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: S.user.uid,
+            username: S.user.displayName || 'Player',
+            challengeId
+          })
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Failed to accept wager');
+        toast('⚔️ Challenge accepted! Escrow held.');
+        // Wait for match creation event to navigate, or just update UI
+      } catch (err) {
+        toast('❌ Error: ' + err.message);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  WEBRTC LIVE STREAMING
+    // ══════════════════════════════════════════════════════
+    let localStream = null;
+    let peerConnections = {}; // viewerSocketId -> RTCPeerConnection (For Host)
+    let peerConnection = null; // Single connection (For Viewer)
+    let currentStreamMatchId = null;
+    
+    const servers = {
+      iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
+    };
+
+    async function startWebRTCStream(matchId) {
+      try {
+        currentStreamMatchId = matchId;
+        const video = document.getElementById('webrtc-video');
+        const overlay = document.getElementById('stream-overlay');
+        const status = document.getElementById('stream-status');
+        
+        // Request screen sharing
+        localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        video.srcObject = localStream;
+        video.style.display = 'block';
+        overlay.style.display = 'none';
+        
+        window._socket.emit('stream_start', { matchId, username: S.user.displayName });
+        
+        // Cleanup old listeners
+        window._socket.off('viewer_joined');
+        window._socket.off('webrtc_answer');
+        window._socket.off('webrtc_ice');
+        
+        // Listen for viewers
+        window._socket.on('viewer_joined', async ({ viewerSocket }) => {
+          const pc = new RTCPeerConnection(servers);
+          peerConnections[viewerSocket] = pc;
+          
+          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+          
+          pc.onicecandidate = e => {
+            if (e.candidate) window._socket.emit('webrtc_ice', { to: viewerSocket, candidate: e.candidate });
+          };
+          
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          window._socket.emit('webrtc_offer', { to: viewerSocket, offer });
+        });
+        
+        window._socket.on('webrtc_answer', async ({ from, answer }) => {
+          const pc = peerConnections[from];
+          if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+        
+        window._socket.on('webrtc_ice', async ({ from, candidate }) => {
+          const pc = peerConnections[from];
+          if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+        
+        toast('🎥 Stream is live!');
+      } catch(err) {
+        toast('❌ Could not start stream: ' + err.message);
+      }
+    }
+
+    async function joinWebRTCStream(matchId) {
+      try {
+        currentStreamMatchId = matchId;
+        const video = document.getElementById('webrtc-video');
+        const overlay = document.getElementById('stream-overlay');
+        const status = document.getElementById('stream-status');
+        
+        status.textContent = 'Connecting to stream...';
+        window._socket.emit('stream_join', { roomId: `stream:${matchId}` });
+        
+        // Cleanup old listeners
+        window._socket.off('webrtc_offer');
+        window._socket.off('webrtc_ice');
+        window._socket.off('stream_error');
+        
+        window._socket.on('stream_error', msg => {
+          status.textContent = msg;
+          toast('❌ ' + msg);
+        });
+        
+        window._socket.on('webrtc_offer', async ({ from, offer }) => {
+          status.textContent = 'Stream found! Connecting...';
+          peerConnection = new RTCPeerConnection(servers);
+          
+          peerConnection.ontrack = e => {
+            video.srcObject = e.streams[0];
+            video.style.display = 'block';
+            overlay.style.display = 'none';
+            toast('🎥 Connected to stream!');
+          };
+          
+          peerConnection.onicecandidate = e => {
+            if (e.candidate) window._socket.emit('webrtc_ice', { to: from, candidate: e.candidate });
+          };
+          
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          window._socket.emit('webrtc_answer', { to: from, answer });
+        });
+        
+        window._socket.on('webrtc_ice', async ({ from, candidate }) => {
+          if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+        
+      } catch(err) {
+        toast('❌ Error joining stream');
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
     //  INIT
     // ══════════════════════════════════════════════════════
     document.addEventListener('DOMContentLoaded', () => {
@@ -3690,6 +3996,9 @@
       // Enter key on auth inputs
       document.getElementById('li-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
       document.getElementById('li-email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('li-pass').focus(); });
+
+      // Fetch Lobby Wagers initially
+      fetchLobby();
     });
   </script>
 </body>

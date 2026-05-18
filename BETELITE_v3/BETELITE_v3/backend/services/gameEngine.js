@@ -128,6 +128,45 @@ class GameEngine {
     return [shuffled[0], shuffled[1]];
   }
 
+  // ── P2P Match Creation
+  createP2PMatch(params) {
+    const { gameType, home, away, homeId, awayId, wagerPool, wagerAmount, status } = params;
+    const cfg = GAME_CONFIGS[gameType] || GAME_CONFIGS.efootball;
+    
+    const match = {
+      id: `mc-${uuid().substring(0,6)}`,
+      gameType,
+      label: '1v1 Wager Match',
+      icon: cfg.icon,
+      home: home || 'Player 1',
+      away: away || 'Player 2',
+      homeId,
+      awayId,
+      scoreHome: 0,
+      scoreAway: 0,
+      minute: 0,
+      displayTime: "0'",
+      status: status || MATCH_STATUS.SCHEDULED,
+      stats: { home: this._randStats(cfg), away: this._randStats(cfg) },
+      cheatFlags: [],
+      verifiedBy: 'engine',
+      lastUpdate: Date.now(),
+      createdAt: Date.now(),
+      isP2P: true,
+      wagerPool,
+      wagerAmount,
+    };
+    
+    this.matches.set(match.id, match);
+    this.io.emit('score_update', match);
+    
+    if (this.db) {
+      this.db.ref(`live_matches/${match.id}`).set(match).catch(()=>{});
+    }
+    
+    return match;
+  }
+
   // ══════════════════════════════════════════
   //  TICK — called every 30 seconds by cron
   // ══════════════════════════════════════════
@@ -252,6 +291,51 @@ class GameEngine {
 
     // Settle bets via Firebase
     this._settleBets(match);
+    
+    // Settle P2P Escrow Wager
+    if (match.isP2P && match.wagerPool && this.db) {
+      (async () => {
+        try {
+          let winnerId = null;
+          if (match.scoreHome > match.scoreAway) winnerId = match.homeId;
+          else if (match.scoreAway > match.scoreHome) winnerId = match.awayId;
+
+          if (winnerId) {
+            const winRef = this.db.ref(`users/${winnerId}`);
+            const snap = await winRef.once('value');
+            const user = snap.val() || {};
+            // Take 10% platform fee
+            const fee = match.wagerPool * 0.1;
+            const payout = match.wagerPool - fee;
+            await winRef.update({ balance: (user.balance || 0) + payout });
+            
+            // Log transaction
+            await this.db.ref('transactions').push().set({
+              type: 'wager_win',
+              amount: payout,
+              user: winnerId,
+              timestamp: Date.now(),
+              matchId: match.id
+            });
+            console.log(`[ENGINE] Payout of $${payout} awarded to ${winnerId} for match ${match.id}`);
+          } else {
+            // Draw: refund amounts
+            const homeRef = this.db.ref(`users/${match.homeId}`);
+            const awayRef = this.db.ref(`users/${match.awayId}`);
+            const [hSnap, aSnap] = await Promise.all([homeRef.once('value'), awayRef.once('value')]);
+            const hUser = hSnap.val() || {};
+            const aUser = aSnap.val() || {};
+            await Promise.all([
+              homeRef.update({ balance: (hUser.balance || 0) + match.wagerAmount }),
+              awayRef.update({ balance: (aUser.balance || 0) + match.wagerAmount })
+            ]);
+            console.log(`[ENGINE] Match ${match.id} ended in draw. Escrow refunded.`);
+          }
+        } catch(e) {
+          console.error('[ENGINE] Escrow payout failed:', e.message);
+        }
+      })();
+    }
 
     // Persist final result
     this._persist(match);

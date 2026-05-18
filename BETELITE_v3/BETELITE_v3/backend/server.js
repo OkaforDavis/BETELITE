@@ -54,13 +54,16 @@ app.use('/api/', limiter);
 
 // ── API Routes
 const settingsRoutes = require('./routes/settings');
+const lobbyRoutes = require('./routes/lobby');
+
 app.use('/api/settings',    settingsRoutes);
 app.use('/api/matches',     matchRoutes(io, engine));
 app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));
 app.use('/api/detect',      detectRoutes(io, engine));
-app.use('/api/stream',      streamRoutes(io));
 app.use('/api/football',    footballRoutes(io, engine));
+app.use('/api/stream',      streamRoutes(io));
+app.use('/api/lobby',       lobbyRoutes(io, engine, db));
 
 // Payment routes (if available)
 if (paymentsRoutes) {
@@ -79,8 +82,15 @@ app.get('/health', (req, res) => res.json({
 const axios = require('axios');
 app.get('/api/geo', async (req, res) => {
   try {
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const resp = await axios.get(`https://ipapi.co/${ip}/json/`, { timeout: 3000 });
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    if (ip.includes('::1') || ip.includes('127.0.0.1')) ip = ''; // avoid reserved IP error
+
+    const url = ip ? `https://ipapi.co/${ip}/json/` : 'https://ipapi.co/json/';
+    const resp = await axios.get(url, { timeout: 3000 });
+    
+    if (resp.data.error || !resp.data.country_code) {
+      throw new Error(resp.data.reason || 'Missing country code');
+    }
     res.json({ country_code: resp.data.country_code, country_name: resp.data.country_name });
   } catch (e) {
     res.json({ country_code: 'NG', country_name: 'Nigeria' }); // default
