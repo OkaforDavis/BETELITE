@@ -14,5 +14,33 @@ module.exports = (io, engine) => {
       res.json({ ok: true, match: result });
     } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
   });
+
+  r.post('/locked-room', (req, res) => {
+    const { hostName, gameType, roomId } = req.body;
+    if (!roomId || !hostName) return res.status(400).json({ error: 'Missing room data' });
+    
+    // Create an ad-hoc match for the live board
+    const roomMatch = {
+      id: roomId,
+      game: gameType || 'CrestArena',
+      label: 'Private Stream',
+      home: hostName,
+      away: 'Waiting...',
+      scoreHome: 0,
+      scoreAway: 0,
+      status: 'live',
+      minute: 0,
+      isLockedRoom: true,
+      verifiedBy: 'host'
+    };
+    
+    // Inject it into the live matches map
+    engine.liveMatches.set(roomId, roomMatch);
+    
+    // Broadcast to everyone so the Live Board updates
+    io.emit('score_update', roomMatch);
+    
+    res.json({ ok: true, match: roomMatch });
+  });
   return r;
 };

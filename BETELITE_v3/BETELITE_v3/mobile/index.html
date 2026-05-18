@@ -2129,8 +2129,13 @@
           <span class="tag tg" id="live-online-tag">🟢 Loading...</span>
         </div>
 
+        <!-- LOCKED ROOM BUTTON -->
+        <button class="btn" style="width:100%; margin-bottom:16px; background:rgba(0,212,106,0.1); border:1px solid var(--green); color:var(--green); font-weight:700;" onclick="createLockedRoom()">
+          🔒 Start Locked Room (Stream)
+        </button>
+
         <!-- LIVE MATCH CARDS — dynamically populated -->
-        <div id="live-match-board" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+        <div id="live-games-container"></div>
 
         <!-- EMPTY STATE — no live games yet -->
         <div class="empty-state"
@@ -3659,25 +3664,86 @@
         if (!res.ok) throw new Error('fetch failed');
         const body = await res.json();
         const matches = body.matches || body || [];
-        const board = document.getElementById('live-match-board');
-        const tag   = document.getElementById('live-online-tag');
-        if (!board) return;
+        const container = document.getElementById('live-games-container');
+        const tag = document.getElementById('live-online-tag');
+        const emptyState = document.querySelector('#tab-live .empty-state');
+        if (!container) return;
 
-        board.innerHTML = '';
+        container.innerHTML = '';
 
         if (!matches.length) {
-          board.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text2);font-size:13px;">No live matches right now</div>';
+          if (emptyState) emptyState.style.display = 'block';
           if (tag) tag.textContent = '⚪ No Matches';
           return;
         }
 
+        if (emptyState) emptyState.style.display = 'none';
         if (tag) { tag.textContent = `🟢 ${matches.length} Live`; tag.style.background = 'var(--green)'; tag.style.color = '#000'; }
 
+        // Group matches by game type
+        const grouped = {};
         matches.forEach(m => {
-          board.appendChild(buildMatchCard(m));
+          const gName = m.game || m.label || 'Other Games';
+          if (!grouped[gName]) grouped[gName] = [];
+          grouped[gName].push(m);
         });
+
+        for (const [gameName, gameMatches] of Object.entries(grouped)) {
+          // Create Section Header
+          const header = document.createElement('div');
+          header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:16px; margin-bottom:8px;';
+          header.innerHTML = `
+            <div style="font-family:var(--fd); font-weight:800; font-size:14px; text-transform:uppercase;">${gameName} <span style="color:var(--text2); font-weight:400; font-size:12px;">(${gameMatches.length})</span></div>
+            <div style="font-size:11px; color:var(--green); font-weight:600; cursor:pointer;">View All</div>
+          `;
+          container.appendChild(header);
+
+          // Create Scrollable Horizontal Row
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex; overflow-x:auto; gap:12px; scroll-snap-type:x mandatory; padding-bottom:8px; scrollbar-width:none; -ms-overflow-style:none;';
+          
+          gameMatches.forEach(m => {
+            const card = buildMatchCard(m);
+            // Override card styles for horizontal scroll compatibility
+            card.style.minWidth = '260px';
+            card.style.maxWidth = '260px';
+            card.style.scrollSnapAlign = 'start';
+            card.style.flexShrink = '0';
+            row.appendChild(card);
+          });
+          
+          container.appendChild(row);
+        }
       } catch (e) {
         console.warn('[LIVE] Could not load matches:', e.message);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  LOCKED ROOM (STREAMING)
+    // ══════════════════════════════════════════════════════
+    async function createLockedRoom() {
+      if (!auth.currentUser) return showAuth();
+      const roomId = 'room_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+      
+      const hostName = S.user?.displayName || 'Player';
+      const gameType = prompt("Enter Game Name (e.g. FIFA, COD Mobile):", "FIFA 1v1");
+      if (!gameType) return;
+      
+      try {
+        const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostName, gameType, roomId })
+        });
+        
+        if (!res.ok) throw new Error('Failed to create room');
+        const data = await res.json();
+        
+        // Instantly open the Match Hub as the Host
+        openModal('match-details', data.match);
+      } catch (err) {
+        toast('❌ Error starting Locked Room: ' + err.message);
       }
     }
 
