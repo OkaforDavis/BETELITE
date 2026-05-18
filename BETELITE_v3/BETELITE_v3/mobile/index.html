@@ -3578,6 +3578,12 @@
 
         if (!res.ok) throw new Error('Detection failed');
         const data = await res.json();
+        if (data.error && !data.demo) {
+          throw new Error(data.error);
+        }
+        if (data.error && data.demo) {
+          toast('⚠️ API Error: ' + data.error + '. Showing demo result.');
+        }
         lastAiDetection = data;
 
         const score1 = data.score1 ?? data.score_home ?? 0;
