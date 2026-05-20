@@ -1,20 +1,20 @@
 {
   "name": "CrestArena",
   "short_name": "CrestArena",
-  "description": "Premium 1v1 and Tournament Matchmaking Platform",
-  "start_url": "/index.html",
+  "description": "Premium Mobile Esports Arena — Stream, Compete, Win",
+  "start_url": "/mobile/",
   "display": "standalone",
   "background_color": "#080C14",
   "theme_color": "#00E575",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/crestarena-logo.png",
+      "src": "crestarena-icon.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/crestarena-logo.png",
+      "src": "crestarena-icon.png",
       "sizes": "512x512",
       "type": "image/png"
     }
