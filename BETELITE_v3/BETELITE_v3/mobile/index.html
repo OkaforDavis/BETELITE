@@ -1431,8 +1431,9 @@
       display: none;
       position: fixed;
       top: 0;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
+      right: 0;
+      margin: 0 auto;
       width: 100%;
       max-width: 430px;
       height: 100vh;
@@ -3025,6 +3026,7 @@
             <div style="font-size:32px; margin-bottom:8px;">📡</div>
             <div style="color:var(--text2); font-size:13px;" id="stream-status">No active stream</div>
           </div>
+          <button onclick="toggleStreamFullscreen()" style="position:absolute; top:8px; right:8px; width:32px; height:32px; border-radius:6px; background:rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.2); color:#fff; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5;" title="Fullscreen">⛶</button>
         </div>
         
         <div style="display:flex; gap:8px; margin-top:16px;">
@@ -4281,21 +4283,7 @@
           _attachHostListeners();
           return;
         } catch(camErr) {
-          const wdData = {
-        amount: amt,
-        bank: bank,
-        acct: acct,
-        name: name,
-        status: 'pending',
-        timestamp: Date.now()
-      };
-      
-      const p = db.ref('users/' + S.user.uid + '/withdrawals').push();
-      p.set(wdData).then(() => {
-        toast('Withdrawal request submitted!');
-        pushNotification('withdrawal', 'Withdrawal Request 💸', `Your request to withdraw ₦${amt.toLocaleString()} to ${name} (${acct}) has been received.`);
-        closeM();
-      }); showStreamError('Camera access denied. Enable camera permission in your browser settings.');
+          showStreamError('Camera access denied. Enable camera permission in your browser settings.');
           return;
         }
       }
@@ -4341,6 +4329,21 @@
       if (overlay) overlay.style.display = 'flex';
       toast('⚠️ ' + msg.substring(0, 60));
       console.warn('[STREAM]', msg);
+    }
+
+    function toggleStreamFullscreen() {
+      const container = document.getElementById('stream-container');
+      if (!container) return;
+      
+      if (container.dataset.fullscreen === 'true') {
+        // Exit fullscreen
+        container.style.cssText = 'background:#000; border-radius:8px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;';
+        container.dataset.fullscreen = 'false';
+      } else {
+        // Enter fullscreen - fill the entire viewport within app axis
+        container.style.cssText = 'position:fixed; top:0; left:0; right:0; margin:0 auto; max-width:430px; width:100%; height:100vh; height:100dvh; background:#000; z-index:500; display:flex; flex-direction:column; justify-content:center; align-items:center;';
+        container.dataset.fullscreen = 'true';
+      }
     }
 
     function stopLocalStream() {
