@@ -1429,10 +1429,16 @@
 ═══════════════════════════════════ */
     #mw {
       display: none;
-      position: absolute;
-      inset: 0;
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      height: 100vh;
+      height: 100dvh;
       background: rgba(0, 0, 0, .84);
-      z-index: 100;
+      z-index: 200;
       align-items: flex-end;
       justify-content: center;
       backdrop-filter: blur(6px);
@@ -2487,7 +2493,7 @@
     <div id="toast"></div>
 
     <!-- NOTIFICATIONS PANEL -->
-    <div id="notif-panel" style="position:absolute; top:0; right:-100%; width:100%; height:100%; background:var(--bg); z-index:2000; transition:right 0.3s ease; box-shadow:-5px 0 25px rgba(0,0,0,0.5); display:flex; flex-direction:column;">
+    <div id="notif-panel" style="position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; height:100vh; height:100dvh; background:var(--bg); z-index:250; transition:opacity 0.3s ease, visibility 0.3s ease; box-shadow:-5px 0 25px rgba(0,0,0,0.5); display:flex; flex-direction:column; opacity:0; visibility:hidden;">
       <div style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
         <div style="font-family:var(--fd); font-weight:800; font-size:18px;">🔔 Notifications</div>
         <button onclick="toggleNotifications()" style="font-size:24px; color:var(--text2);">&times;</button>
@@ -3830,10 +3836,14 @@
       const allMatches = _latestGroupedMatches[groupKey] || [];
       if (!allMatches.length) { toast('No matches found for ' + gameName); return; }
 
-      // Create fullscreen overlay
+      // Remove any existing overlay
+      const existing = document.getElementById('view-all-overlay');
+      if (existing) existing.remove();
+
+      // Create overlay constrained to app axis
       const overlay = document.createElement('div');
       overlay.id = 'view-all-overlay';
-      overlay.style.cssText = 'position:absolute; inset:0; background:rgba(0,0,0,0.92); z-index:999; display:flex; flex-direction:column; animation:fadeIn .2s ease;';
+      overlay.style.cssText = 'position:fixed; top:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px; height:100vh; height:100dvh; background:rgba(0,0,0,0.95); z-index:300; display:flex; flex-direction:column;';
 
       // Header
       const hdr = document.createElement('div');
@@ -3858,12 +3868,12 @@
 
       // Floating close button at bottom
       const closeBtn = document.createElement('button');
-      closeBtn.style.cssText = 'position:absolute; bottom:24px; left:50%; transform:translateX(-50%); padding:10px 32px; background:var(--red); color:#fff; border:none; border-radius:25px; font-family:var(--fd); font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 20px rgba(255,42,84,0.3); z-index:10;';
+      closeBtn.style.cssText = 'flex-shrink:0; padding:12px 32px; margin:12px auto 24px; background:var(--red); color:#fff; border:none; border-radius:25px; font-family:var(--fd); font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 20px rgba(255,42,84,0.3);';
       closeBtn.textContent = '✕ Close';
       closeBtn.onclick = () => overlay.remove();
       overlay.appendChild(closeBtn);
 
-      document.getElementById('app').appendChild(overlay);
+      document.body.appendChild(overlay);
     }
 
     // ══════════════════════════════════════════════════════
@@ -4463,8 +4473,9 @@
 
     function toggleNotifications() {
       const panel = document.getElementById('notif-panel');
-      const isVisible = panel.style.right === '0px';
-      panel.style.right = isVisible ? '-100%' : '0px';
+      const isVisible = panel.style.opacity === '1';
+      panel.style.opacity = isVisible ? '0' : '1';
+      panel.style.visibility = isVisible ? 'hidden' : 'visible';
       
       // Mark all as read if we're opening
       if (!isVisible && S.user && db) {
