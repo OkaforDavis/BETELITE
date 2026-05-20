@@ -28,7 +28,7 @@ module.exports = (io, engine, db) => {
       if (db) {
         const snap = await db.ref(`users/${uid}`).once('value');
         const user = snap.val() || {};
-        if ((user.balance || 0) < Number(amount)) {
+        if ((user.wallet || user.balance || 0) < Number(amount)) {
           return res.status(400).json({ error: 'Insufficient balance to post this challenge' });
         }
       }
@@ -77,20 +77,20 @@ module.exports = (io, engine, db) => {
         const aUser = aSnap.val() || {};
 
         // Re-validate both balances at accept time
-        if ((cUser.balance || 0) < challenge.amount) {
+        if ((cUser.wallet || cUser.balance || 0) < challenge.amount) {
           lobbyChallenges.delete(challengeId);
           io.emit('lobby_challenge_removed', { id: challengeId });
           return res.status(400).json({ error: 'Challenger no longer has sufficient funds' });
         }
-        if ((aUser.balance || 0) < challenge.amount) {
+        if ((aUser.wallet || aUser.balance || 0) < challenge.amount) {
           return res.status(400).json({ error: 'Insufficient balance to accept this challenge' });
         }
 
         // Atomic multi-path update: deduct both + record escrow
         const escrowId = `esc_${challengeId}`;
         await db.ref().update({
-          [`users/${challenge.creatorId}/balance`]: (cUser.balance || 0) - challenge.amount,
-          [`users/${uid}/balance`]:                 (aUser.balance || 0) - challenge.amount,
+          [`users/${challenge.creatorId}/wallet`]: (cUser.wallet || cUser.balance || 0) - challenge.amount,
+          [`users/${uid}/wallet`]:                 (aUser.wallet || aUser.balance || 0) - challenge.amount,
           [`escrow/${escrowId}`]: {
             challengeId,
             creatorId:  challenge.creatorId,
