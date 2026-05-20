@@ -2250,18 +2250,23 @@
       <!-- WATCH -->
       <div class="pg" id="pg-watch">
         <div class="sh">
-          <div class="st">📺 Watch Live</div><span class="tag to">Coming Soon</span>
-        </div>
-        <div class="empty-state" style="padding-bottom:16px; margin-bottom: 16px;">
-          <div class="es-icon">📡</div>
-          <div class="es-title">Live Streaming</div>
-          <div class="es-sub">Watch matches live via WebRTC.<br>Or create your own Locked Room to start streaming your gameplay.</div>
+          <div class="st">📺 Watch Live</div><span class="tag tg" id="watch-stream-count">⚪ 0 Streams</span>
         </div>
 
         <!-- LOCKED ROOM BUTTON -->
         <button class="btn" style="width:100%; margin-bottom:16px; background:rgba(0,212,106,0.1); border:1px solid var(--green); color:var(--green); font-weight:700;" onclick="createLockedRoom()">
           🔒 Start Locked Room (Stream)
         </button>
+
+        <!-- LIVE STREAMS — dynamically populated -->
+        <div id="watch-streams-container"></div>
+
+        <!-- EMPTY STATE for no streams -->
+        <div id="watch-empty" class="empty-state" style="padding-bottom:16px; margin-bottom: 16px;">
+          <div class="es-icon">📡</div>
+          <div class="es-title">No Active Streams</div>
+          <div class="es-sub">Create a Locked Room above to start streaming your gameplay.<br>Active streams will appear here.</div>
+        </div>
 
         <!-- AI SCORE DETECTOR -->
         <div class="menu-card" style="margin-top: 16px;">
@@ -2299,35 +2304,6 @@
               📌 Apply to Live Board
             </button>
           </div>
-        </div>
-
-        <!-- Watch previews -->
-        <div class="watch-promo">
-          <div class="watch-promo-thumb">
-            <div class="big-ico">⚽</div>
-            <div class="watch-promo-overlay">
-              <div class="watch-promo-badge" style="background:var(--red);">LIVE NOW</div>
-            </div>
-          </div>
-          <div class="watch-promo-body">
-            <div class="watch-promo-title">eFootball Live Stream</div>
-            <div class="watch-promo-sub">Share your screen · AI tracks score · Viewers bet live</div>
-          </div>
-          <button class="watch-notify" onclick="toast('🔔 Streaming feature coming soon!')">🔔 Notify Me</button>
-        </div>
-
-        <div class="watch-promo">
-          <div class="watch-promo-thumb">
-            <div class="big-ico">🎯</div>
-            <div class="watch-promo-overlay">
-              <div class="watch-promo-badge" style="background:var(--red);">LIVE NOW</div>
-            </div>
-          </div>
-          <div class="watch-promo-body">
-            <div class="watch-promo-title">COD Mobile Pro Stream</div>
-            <div class="watch-promo-sub">Live kills · Score detection · Anti-cheat monitoring</div>
-          </div>
-          <button class="watch-notify" onclick="toast('🔔 Streaming feature coming soon!')">🔔 Notify Me</button>
         </div>
       </div>
 
@@ -2752,6 +2728,14 @@
             navTo('live');
           }
         });
+        
+        // Watch tab real-time updates
+        window._socket.on('stream_live', () => {
+          if (document.getElementById('pg-watch')?.classList.contains('on')) loadWatchStreams();
+        });
+        window._socket.on('stream_ended', () => {
+          if (document.getElementById('pg-watch')?.classList.contains('on')) loadWatchStreams();
+        });
       }
     }
 
@@ -2936,6 +2920,9 @@
       document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
       document.getElementById(`pg-${n}`).classList.add('on');
       document.getElementById(`nb-${n}`).classList.add('on');
+      // Load data for specific tabs
+      if (n === 'watch') loadWatchStreams();
+      if (n === 'live')  loadLiveMatches();
     }
     function fGame(el, g) {
       document.querySelectorAll('.gtab').forEach(t => t.classList.remove('on'));
@@ -2971,6 +2958,7 @@
       
       else if (type === 'match-details') {
         tt.textContent = '📺 Match Hub';
+        S.activeMatch = data; // Store for stream_start to reference
         const isParticipant = S.user && (data.homeId === S.user.uid || data.awayId === S.user.uid);
         
         bd.innerHTML = `
@@ -3746,6 +3734,111 @@
       }
     }
 
+    // ══════════════════════════════════════════════════════
+    //  WATCH TAB — LIVE STREAM LISTING
+    // ══════════════════════════════════════════════════════
+    async function loadWatchStreams() {
+      const container = document.getElementById('watch-streams-container');
+      const emptyEl   = document.getElementById('watch-empty');
+      const countTag  = document.getElementById('watch-stream-count');
+      if (!container) return;
+
+      try {
+        const res = await fetch(BACKEND_URL + '/api/streams');
+        if (!res.ok) throw new Error('fetch failed');
+        const body = await res.json();
+        const streams = body.streams || [];
+
+        container.innerHTML = '';
+
+        if (!streams.length) {
+          if (emptyEl) emptyEl.style.display = 'block';
+          if (countTag) countTag.textContent = '⚪ 0 Streams';
+          return;
+        }
+
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (countTag) { countTag.textContent = `🔴 ${streams.length} Live`; countTag.style.background = 'var(--red)'; countTag.style.color = '#fff'; }
+
+        // Group streams by game
+        const grouped = {};
+        streams.forEach(s => {
+          const gName = s.game || 'Other Games';
+          if (!grouped[gName]) grouped[gName] = [];
+          grouped[gName].push(s);
+        });
+
+        for (const [gameName, gameStreams] of Object.entries(grouped)) {
+          // Section header
+          const header = document.createElement('div');
+          header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:16px; margin-bottom:10px;';
+          header.innerHTML = `
+            <div style="font-family:var(--fd); font-weight:800; font-size:14px; text-transform:uppercase; color:var(--text);">${gameName} <span style="color:var(--text2); font-weight:400; font-size:12px;">(${gameStreams.length} live)</span></div>
+          `;
+          container.appendChild(header);
+
+          // Stream cards for this game
+          gameStreams.forEach(s => {
+            const card = document.createElement('div');
+            card.style.cssText = 'background:var(--bg2); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:12px; cursor:pointer; transition:all .3s; position:relative; overflow:hidden;';
+            card.onmouseenter = () => card.style.borderColor = 'var(--green)';
+            card.onmouseleave = () => card.style.borderColor = 'var(--border2)';
+
+            // Avatar fallback
+            const avatarHtml = s.streamerAvatar
+              ? `<img src="${s.streamerAvatar}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid var(--green);">`
+              : `<div style="width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg, var(--green), #0a0a0a); display:flex; align-items:center; justify-content:center; font-size:18px; border:2px solid var(--green);">🎮</div>`;
+
+            card.innerHTML = `
+              <div style="display:flex; align-items:center; gap:12px;">
+                ${avatarHtml}
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:700; font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.streamer}</div>
+                  <div style="font-size:11px; color:var(--text2); margin-top:2px;">${s.home} vs ${s.away}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:9px; padding:2px 8px; border-radius:4px; font-weight:700; background:var(--red); color:#fff; display:inline-block; margin-bottom:4px;">🔴 LIVE</div>
+                  <div style="font-size:11px; color:var(--text2);">👁 ${s.viewers} watching</div>
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:12px;">
+                <button class="cta" style="flex:1; font-size:12px; padding:8px; background:var(--green); color:#000;" onclick="event.stopPropagation(); joinStreamFromWatch('${s.roomId}', '${s.matchId}')">👁️ WATCH STREAM</button>
+              </div>
+            `;
+            container.appendChild(card);
+          });
+        }
+      } catch (e) {
+        console.warn('[WATCH] Could not load streams:', e.message);
+      }
+    }
+
+    // Join a stream from the Watch tab
+    function joinStreamFromWatch(roomId, matchId) {
+      // Open match-details modal and join the WebRTC stream
+      const matchData = {
+        id: matchId,
+        home: 'Streamer',
+        away: '',
+        scoreHome: 0,
+        scoreAway: 0,
+        label: 'Live Stream',
+        status: 'live'
+      };
+      // Try to get real match data first
+      fetch(BACKEND_URL + '/api/matches/' + matchId)
+        .then(r => r.ok ? r.json() : matchData)
+        .then(data => {
+          openModal('match-details', data);
+          // Auto-join stream after modal opens
+          setTimeout(() => joinWebRTCStream(matchId), 500);
+        })
+        .catch(() => {
+          openModal('match-details', matchData);
+          setTimeout(() => joinWebRTCStream(matchId), 500);
+        });
+    }
+
     function buildMatchCard(m) {
       const div = document.createElement('div');
       div.id = `mc-${m.id}`;
@@ -3973,7 +4066,7 @@
           video.srcObject = localStream;
           video.style.display = 'block';
           if (overlay) overlay.style.display = 'none';
-          window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'camera' });
+          window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'camera', avatar: S.user?.photoURL || null, game: S.activeMatch?.game || '' });
           toast('📷 Camera stream is live (screen share not supported on this device)');
           _attachHostListeners();
           return;
@@ -4000,7 +4093,7 @@
           stopLocalStream();
         });
 
-        window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'screen' });
+        window._socket.emit('stream_start', { matchId, username: S.user?.displayName || 'Player', mode: 'screen', avatar: S.user?.photoURL || null, game: S.activeMatch?.game || '' });
         toast('🎥 Stream is live!');
         _attachHostListeners();
 

@@ -107,6 +107,29 @@ app.get('/api/matches/live', (req, res) => {
   }
 });
 
+// ── Active streams list (for Watch tab)
+app.get('/api/streams', (req, res) => {
+  const streams = [];
+  streamRooms.forEach((room, roomId) => {
+    // Look up the match data from the engine
+    const match = engine.getMatch(room.matchId);
+    streams.push({
+      roomId,
+      matchId: room.matchId,
+      streamer: room.username || 'Unknown',
+      streamerAvatar: room.avatar || null,
+      viewers: room.viewers || 0,
+      game: match?.game || room.game || 'CrestArena',
+      label: match?.label || 'Live Stream',
+      home: match?.home || room.username || 'Player',
+      away: match?.away || 'Waiting...',
+      scoreHome: match?.scoreHome || 0,
+      scoreAway: match?.scoreAway || 0,
+    });
+  });
+  res.json({ ok: true, streams });
+});
+
 // ── Serve mobile frontend
 app.use('/mobile', express.static(path.join(__dirname, '../mobile')));
 app.get('/', (req, res) => res.redirect('/mobile'));
@@ -169,9 +192,9 @@ io.on('connection', (socket) => {
   // ══ STREAMING (WebRTC signaling) ══
 
   // Host starts stream
-  socket.on('stream_start', ({ matchId, username }) => {
+  socket.on('stream_start', ({ matchId, username, mode, avatar, game }) => {
     const roomId = `stream:${matchId}`;
-    streamRooms.set(roomId, { hostSocket: socket.id, username, viewers: 0, matchId });
+    streamRooms.set(roomId, { hostSocket: socket.id, username, avatar: avatar || null, game: game || '', viewers: 0, matchId });
     socket.join(roomId);
     socket.emit('stream_ready', { roomId, matchId });
     io.emit('stream_live', { matchId, username, roomId });
