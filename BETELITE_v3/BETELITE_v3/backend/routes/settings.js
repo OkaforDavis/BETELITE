@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 
 // In-memory global settings (will reset on server restart unless we use a DB)
-// Eventually, this should be pushed to Firebase or a local JSON file.
 let globalSettings = {
   paystackKey: process.env.PAYSTACK_PUBLIC_KEY || null,
+  paystackKeyGH: process.env.PAYSTACK_PUBLIC_KEY_GH || null,
 };
 
 router.get('/', (req, res) => {
@@ -16,9 +16,12 @@ router.post('/', (req, res) => {
     const { key, value } = req.body;
     if (!key) return res.status(400).json({ error: 'Missing key' });
 
-    // Validate the key being set
     if (key === 'paystackKey') {
       globalSettings.paystackKey = value;
+      return res.json({ success: true, settings: globalSettings });
+    }
+    if (key === 'paystackKeyGH') {
+      globalSettings.paystackKeyGH = value;
       return res.json({ success: true, settings: globalSettings });
     }
 

@@ -3330,14 +3330,17 @@
       let checkoutAmt = amt;
       let checkoutCcy = ccy;
 
-      if (ccy !== 'NGN') {
+      // For Ghana users, use GHS directly with the GH Paystack key
+      if (ccy === 'GHS' && PAYMENT_CONFIG.paystackKeyGH) {
+        checkoutCcy = 'GHS';
+      } else if (ccy !== 'NGN') {
         // Convert back to base NGN for the actual charge
         checkoutAmt = Math.round(amt * CCY_DATA[ccy].ngnValue);
         checkoutCcy = 'NGN';
       }
 
       const handler = PaystackPop.setup({
-        key: PAYMENT_CONFIG.paystackKey,
+        key: (ccy === 'GHS' && PAYMENT_CONFIG.paystackKeyGH) ? PAYMENT_CONFIG.paystackKeyGH : PAYMENT_CONFIG.paystackKey,
         email: S.user?.email || 'guest@crestarena.com',
         amount: checkoutAmt * 100, // Paystack works in kobo/pesewas
         currency: checkoutCcy,     // Forces NGN to prevent "Currency not supported" error
@@ -3760,6 +3763,10 @@
         if (settings?.paystackKey) {
           PAYMENT_CONFIG.paystackKey = settings.paystackKey;
           console.log('[SETTINGS] Paystack key loaded from server ✅');
+        }
+        if (settings?.paystackKeyGH) {
+          PAYMENT_CONFIG.paystackKeyGH = settings.paystackKeyGH;
+          console.log('[SETTINGS] Paystack GH key loaded from server ✅');
         }
       } catch (e) {
         console.warn('[SETTINGS] Could not load backend settings:', e.message);
@@ -4255,7 +4262,12 @@
     let currentStreamMatchId = null;
     
     const servers = {
-      iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
+      iceServers: [
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      ]
     };
 
     async function startWebRTCStream(matchId) {
