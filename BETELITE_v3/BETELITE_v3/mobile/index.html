@@ -5,9 +5,14 @@
   <meta charset="UTF-8">
   <meta name="viewport"
     content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#07080F">
+  <meta name="theme-color" content="#080C14">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="CrestArena — Premium Mobile Esports Arena. Stream, Compete, Win.">
   <title>CrestArena</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="crestarena-logo.png">
+  <link rel="apple-touch-icon" href="crestarena-logo.png">
   <link
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap"
     rel="stylesheet">
@@ -24,21 +29,21 @@
    ROOT VARIABLES
 ═══════════════════════════════════ */
     :root {
-      --bg: #07080F;
-      --bg2: #0D0F1C;
-      --bg3: #131629;
-      --bg4: #1A1E35;
-      --gold: #F5C518;
-      --gold2: #C9A010;
-      --gf: rgba(245, 197, 24, .1);
-      --red: #FF3B3B;
-      --green: #00D46A;
+      --bg: #080C14;
+      --bg2: #0E1420;
+      --bg3: #141C2E;
+      --bg4: #1A2438;
+      --gold: #00E575;
+      --gold2: #00C963;
+      --gf: rgba(0, 229, 117, .1);
+      --red: #FF2A54;
+      --green: #00E575;
       --blue: #00AFFF;
       --orange: #FF7A00;
       --text: #EEF0F8;
-      --text2: #7A86A0;
+      --text2: #8E9BB0;
       --text3: #4A5470;
-      --border: rgba(245, 197, 24, .12);
+      --border: rgba(0, 229, 117, .12);
       --border2: rgba(255, 255, 255, .07);
       --r: 12px;
       --fd: 'Barlow Condensed', sans-serif;
@@ -98,7 +103,7 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: var(--gold2);
+      background: var(--green);
       border-radius: 1px;
     }
 
@@ -1424,7 +1429,7 @@
 ═══════════════════════════════════ */
     #mw {
       display: none;
-      position: fixed;
+      position: absolute;
       inset: 0;
       background: rgba(0, 0, 0, .84);
       z-index: 100;
@@ -1949,10 +1954,12 @@
    TOAST
 ═══════════════════════════════════ */
     #toast {
-      position: fixed;
-      bottom: calc(var(--nav-h) + 16px + max(env(safe-area-inset-bottom, 0px), 6px));
+      position: absolute;
+      top: -100px;
       left: 50%;
-      transform: translateX(-50%) translateY(10px);
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
       background: var(--bg2);
       border: 1px solid var(--gold2);
       border-radius: 9px;
@@ -1966,13 +1973,12 @@
       transition: .22s;
       pointer-events: none;
       white-space: nowrap;
-      max-width: calc(100vw - 32px);
       text-align: center;
     }
 
     #toast.on {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      top: 16px;
     }
   </style>
 </head>
@@ -1984,7 +1990,7 @@
 ════════════════════════════════════════ -->
   <div id="auth-screen">
     <div class="auth-logo">
-      <img src="logo.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
+      <img src="crestarena-logo.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
       <div class="auth-logo-wm" style="letter-spacing:1px; font-size:28px;">Crest<em>Arena</em></div>
       <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
     </div>
@@ -2069,17 +2075,30 @@
   <!-- ════════════════════════════════════════
      MAIN APP
 ════════════════════════════════════════ -->
-  <div id="app" style="display:none">
+  <div id="app" style="display:none; position:relative;">
+    
+    <!-- Modals -->
+    <div id="mw"></div>
+    <!-- Toast -->
+    <div id="toast"></div>
+    <!-- Notifications -->
+    <div id="notif-panel"></div>
 
     <!-- HEADER -->
     <div id="hd">
       <div class="hd-top">
         <div class="logo">
-          <img src="logo.png" alt="CrestArena" class="logo-svg"
-            style="border-radius:6px; background:#000; padding:2px;">
-          <span class="logo-wm" style="letter-spacing:1px; font-size:20px;">Crest<em>Arena</em></span>
+          <img src="crestarena-icon.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
         </div>
         <div class="hd-r">
+          <!-- Notification Bell -->
+          <div class="bell-btn" onclick="toggleNotifications()" style="position:relative; cursor:pointer; padding:6px; color:var(--text); display:flex; align-items:center; justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <div id="notif-badge" style="display:none; position:absolute; top:2px; right:4px; width:8px; height:8px; background:var(--red); border-radius:50%; box-shadow: 0 0 4px var(--red);"></div>
+          </div>
 
           <div class="w-pill" onclick="navTo('account')">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
@@ -2195,11 +2214,13 @@
 
       <!-- TOURNAMENTS -->
       <div class="pg" id="pg-tournaments">
-        <div class="sh">
+        <div class="sh" style="flex-direction:column; align-items:flex-start; gap:12px;">
           <div class="st">🏆 Tournaments</div>
-          <button class="tag tg" onclick="loadTournaments()"
-            style="cursor:pointer; border:none; background:var(--green); color:#000; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:900;">🔄
-            REFRESH</button>
+          
+          <div style="display:flex; gap:12px; border-bottom:1px solid var(--border); width:100%;">
+            <div class="t-subtab active" id="tsub-active" onclick="switchTourneyTab('active')" style="padding-bottom:8px; color:var(--green); border-bottom:2px solid var(--green); font-weight:700; cursor:pointer;">Active</div>
+            <div class="t-subtab" id="tsub-past" onclick="switchTourneyTab('past')" style="padding-bottom:8px; color:var(--text3); font-weight:700; cursor:pointer;">Past</div>
+          </div>
         </div>
 
         <!-- My Active Fixtures (if joined a tournament) -->
@@ -2254,8 +2275,8 @@
         </div>
 
         <!-- LOCKED ROOM BUTTON -->
-        <button class="btn" style="width:100%; margin-bottom:16px; background:rgba(0,212,106,0.1); border:1px solid var(--green); color:var(--green); font-weight:700;" onclick="createLockedRoom()">
-          🔒 Start Locked Room (Stream)
+        <button style="width:100%; margin-bottom:16px; background:transparent; border:1px solid var(--green); color:var(--green); font-weight:700; padding:12px; border-radius:2px; font-size:16px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="createLockedRoom()">
+          <span style="font-size:18px;">🔒</span> Start Locked Room (Stream)
         </button>
 
         <!-- LIVE STREAMS — dynamically populated -->
@@ -2456,23 +2477,38 @@
         ACCOUNT
       </button>
     </nav>
-  </div><!-- #app -->
-
-  <!-- MODAL -->
-  <div id="mw" onclick="closeMOut(event)">
-    <div class="modal">
-      <div class="m-hd">
-        <div class="m-tt" id="m-tt">—</div>
-        <button class="m-x" onclick="closeM()">×</button>
+    
+    <!-- MODAL -->
+    <div id="mw" onclick="closeMOut(event)">
+      <div class="modal">
+        <div class="m-hd">
+          <div class="m-tt" id="m-tt">—</div>
+          <button class="m-x" onclick="closeM()">×</button>
+        </div>
+        <div id="m-bd"></div>
       </div>
-      <div id="m-bd"></div>
     </div>
-  </div>
 
-  <!-- FILE INPUT for avatar -->
-  <input type="file" id="ava-file" accept="image/*" style="display:none" onchange="handleAvaUpload(this)">
-  <!-- TOAST -->
-  <div id="toast"></div>
+    <!-- FILE INPUT for avatar -->
+    <input type="file" id="ava-file" accept="image/*" style="display:none" onchange="handleAvaUpload(this)">
+    <!-- TOAST -->
+    <div id="toast"></div>
+
+    <!-- NOTIFICATIONS PANEL -->
+    <div id="notif-panel" style="position:absolute; top:0; right:-100%; width:100%; height:100%; background:var(--bg); z-index:2000; transition:right 0.3s ease; box-shadow:-5px 0 25px rgba(0,0,0,0.5); display:flex; flex-direction:column;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid var(--border2); background:var(--bg2);">
+        <div style="font-family:var(--fd); font-weight:800; font-size:18px;">🔔 Notifications</div>
+        <button onclick="toggleNotifications()" style="font-size:24px; color:var(--text2);">&times;</button>
+      </div>
+      <div id="notif-list" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;">
+        <div class="empty-state" style="margin-top:40px;">
+          <div class="es-icon">📭</div>
+          <div class="es-title">No Notifications Yet</div>
+          <div class="es-sub">When you deposit, win, or join tournaments, alerts will appear here.</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- #app -->
 
   <script>
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.protocol === 'file:';
@@ -2702,6 +2738,7 @@
       buildTicker();
       loadLiveMatches();       // populate live board cards from backend
       fetchBackendSettings();  // auto-load Paystack key + any server config
+      listenToNotifications(user); // start listening for deposits, wins, etc.
 
       // Admin check
       if (user.email === ADMIN_EMAIL) {
@@ -2718,7 +2755,14 @@
         });
         window._socket.on('match_state', (match) => updateMatchUI(match));
         window._socket.on('score_update', (data) => updateMatchUI(data));
-        window._socket.on('match_finished', (data) => toast(`🏆 Match over! Result: ${data.scoreHome}-${data.scoreAway}`));
+        window._socket.on('match_finished', (data) => {
+          toast(`🏆 Match over! Result: ${data.scoreHome}-${data.scoreAway}`);
+          // Remove the finished match card from the DOM
+          const cardEl = document.getElementById(`mc-${data.id}`);
+          if (cardEl) cardEl.remove();
+          // Refresh live matches to get updated list
+          setTimeout(() => loadLiveMatches(), 2000);
+        });
         
         // Lobby Realtime updates
         window._socket.on('lobby_new_challenge', (c) => {
@@ -2932,6 +2976,7 @@
       // Load data for specific tabs
       if (n === 'watch') loadWatchStreams();
       if (n === 'live')  loadLiveMatches();
+      if (n === 'tournaments') loadTournaments();
     }
     function fGame(el, g) {
       document.querySelectorAll('.gtab').forEach(t => t.classList.remove('on'));
@@ -3035,10 +3080,10 @@
         <label class="fl">Amount</label>
         <input class="fi" type="number" id="wth-a" placeholder="Amount to withdraw">
         <label class="fl">Account Number</label>
-        <input class="fi" type="text" placeholder="0123456789">
+        <input class="fi" type="text" id="wth-acct" placeholder="0123456789">
         <label class="fl">Bank</label>
-        <input class="fi" type="text" placeholder="GTBank / Access / Zenith / UBA...">
-        <button class="cta" onclick="toast('Withdrawal submitted! Processing in 1-3 days.');closeM()">WITHDRAW</button>`;
+        <input class="fi" type="text" id="wth-bank" placeholder="GTBank / Access / Zenith / UBA...">
+        <button class="cta" onclick="submitWithdrawal()">WITHDRAW</button>`;
         }
       }
 
@@ -3304,6 +3349,10 @@
           S.wallet += n;
           saveProfile({ wallet: S.wallet });
           updateWallet();
+          
+          // Send notification
+          pushNotification('deposit', 'Deposit Successful 💰', `Your deposit of ${getSym()}${amt.toLocaleString()} has been credited to your account.`);
+          
           closeM();
         },
         onClose: function () {
@@ -3316,6 +3365,38 @@
       const v = parseFloat(document.getElementById('dep-c')?.value) || 0;
       if (v < 50) { toast('Minimum deposit: ' + getSym() + '50'); return; }
       doDeposit(v);
+    }
+
+    function submitWithdrawal() {
+      const amt = parseFloat(document.getElementById('wth-a')?.value) || 0;
+      const acct = document.getElementById('wth-acct')?.value || 'N/A';
+      const bank = document.getElementById('wth-bank')?.value || 'N/A';
+      
+      if (amt < 1000) { toast('Minimum withdrawal is ₦1,000'); return; }
+      if (S.wallet < amt) { toast('Insufficient funds'); return; }
+      
+      S.wallet -= amt;
+      saveProfile({ wallet: S.wallet });
+      updateWallet();
+      
+      const wdData = {
+        amount: amt,
+        bank: bank,
+        acct: acct,
+        status: 'pending',
+        timestamp: Date.now()
+      };
+      
+      if (db && S.user) {
+        db.ref('users/' + S.user.uid + '/withdrawals').push(wdData).then(() => {
+          toast('Withdrawal request submitted!');
+          pushNotification('withdrawal', 'Withdrawal Request 💸', `Your request to withdraw ₦${amt.toLocaleString()} to ${bank} (${acct}) has been received.`);
+          closeM();
+        });
+      } else {
+        toast('Withdrawal submitted (Local Mode)');
+        closeM();
+      }
     }
 
     function closeM() { document.getElementById('mw').classList.remove('on'); }
@@ -3369,15 +3450,31 @@
     // ===== TOURNAMENTS - Live Data =====
     let _activeTournamentId = null;
     let _fixtureImages = {};
+    let _allTournaments = [];
+    let _currentTourneyTab = 'active';
+
+    function switchTourneyTab(tab) {
+      _currentTourneyTab = tab;
+      document.getElementById('tsub-active').classList.toggle('active', tab === 'active');
+      document.getElementById('tsub-active').style.borderBottom = tab === 'active' ? '2px solid var(--green)' : 'none';
+      document.getElementById('tsub-active').style.color = tab === 'active' ? 'var(--green)' : 'var(--text3)';
+      
+      document.getElementById('tsub-past').classList.toggle('active', tab === 'past');
+      document.getElementById('tsub-past').style.borderBottom = tab === 'past' ? '2px solid var(--green)' : 'none';
+      document.getElementById('tsub-past').style.color = tab === 'past' ? 'var(--green)' : 'var(--text3)';
+      
+      renderTournamentList(_allTournaments);
+    }
 
     async function loadTournaments() {
       var listEl = document.getElementById('tournament-list');
       if (!listEl) return;
       listEl.innerHTML = '<div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">Loading...</div></div>';
       try {
-        var res = await fetch('/api/tournaments');
+        var res = await fetch(BACKEND_URL + '/api/tournaments');
         var data = await res.json();
-        renderTournamentList(data.tournaments);
+        _allTournaments = data.tournaments;
+        renderTournamentList(_allTournaments);
         if (_activeTournamentId) loadMyFixtures(_activeTournamentId);
       } catch (e) {
         listEl.innerHTML = '<div class="empty-state"><div class="es-icon">❌</div><div class="es-title">Backend offline</div><div class="es-sub">Start the Node.js server</div></div>';
@@ -3387,8 +3484,19 @@
     function renderTournamentList(list) {
       var listEl = document.getElementById('tournament-list');
       if (!list || !list.length) { listEl.innerHTML = '<div class="empty-state"><div class="es-title">No tournaments</div></div>'; return; }
+      
+      var filtered = list.filter(function(t) {
+        if (_currentTourneyTab === 'active') return t.status !== 'finished';
+        return t.status === 'finished';
+      });
+
+      if (!filtered.length) {
+        listEl.innerHTML = '<div class="empty-state"><div class="es-icon">📭</div><div class="es-title">No ' + _currentTourneyTab + ' tournaments</div></div>';
+        return;
+      }
+
       var html = '';
-      list.forEach(function (t) {
+      filtered.forEach(function (t) {
         var isJoined = S.user && t.players.find(function (p) { return p.userId === S.user.uid; });
         var sc = t.status === 'open' ? 'var(--green)' : t.status === 'active' ? 'var(--gold)' : 'var(--text3)';
         var ep = Math.round(t.entryFeeNGN * (ccy === 'GHS' ? 0.037 : 1));
@@ -3402,6 +3510,11 @@
         } else {
           joinBtn = '<button class="trn-notify-btn" disabled style="opacity:.5;">🔒 ' + t.status.toUpperCase() + '</button>';
         }
+        
+        if (t.status === 'finished') {
+          joinBtn = '<button class="trn-notify-btn" style="background:var(--bg3); color:var(--text);" disabled>🏆 WON BY ' + (t.winnerName || 'UNKNOWN') + '</button>';
+        }
+
         html += '<div class="trn-preview" style="border-top:2px solid ' + sc + ';">' +
           '<div class="trn-soon-badge" style="background:' + sc + ';color:#000;">' + t.status.toUpperCase() + ' · ' + t.playerCount + '/' + t.maxPlayers + '</div>' +
           '<div class="trn-icon">' + t.icon + '</div>' +
@@ -3417,7 +3530,7 @@
       if (!S.user) { toast('Please login first'); return; }
       btn.disabled = true; btn.textContent = 'Joining...';
       try {
-        var res = await fetch('/api/tournaments/' + id + '/join', {
+        var res = await fetch(BACKEND_URL + '/api/tournaments/' + id + '/join', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: S.user.uid, username: S.profile.displayName })
         });
@@ -3439,7 +3552,7 @@
     async function loadMyFixtures(id) {
       if (!S.user) return;
       try {
-        var res = await fetch('/api/tournaments/' + id + '/fixtures?userId=' + encodeURIComponent(S.user.uid));
+        var res = await fetch(BACKEND_URL + '/api/tournaments/' + id + '/fixtures?userId=' + encodeURIComponent(S.user.uid));
         var data = await res.json();
         renderMyFixtures(id, data.fixtures);
       } catch (e) { console.error('[Fixtures]', e); }
@@ -3682,6 +3795,9 @@
           if (!grouped[gName]) grouped[gName] = [];
           grouped[gName].push(m);
         });
+        
+        // Cache for View All popup
+        _latestGroupedMatches = grouped;
 
         for (const [gameName, gameMatches] of Object.entries(grouped)) {
           // Create Section Header
@@ -3689,7 +3805,7 @@
           header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:16px; margin-bottom:8px;';
           header.innerHTML = `
             <div style="font-family:var(--fd); font-weight:800; font-size:14px; text-transform:uppercase;">${gameName} <span style="color:var(--text2); font-weight:400; font-size:12px;">(${gameMatches.length})</span></div>
-            <div style="font-size:11px; color:var(--green); font-weight:600; cursor:pointer;">View All</div>
+            <div style="font-size:11px; color:var(--green); font-weight:600; cursor:pointer;" onclick="openViewAllPopup('${gameName}', '${gameName}')">View All ›</div>
           `;
           container.appendChild(header);
 
@@ -3712,6 +3828,50 @@
       } catch (e) {
         console.warn('[LIVE] Could not load matches:', e.message);
       }
+    }
+
+    // Store latest matches for View All popup
+    let _latestGroupedMatches = {};
+
+    function openViewAllPopup(gameName, groupKey) {
+      // Get matches for this game from cached data
+      const allMatches = _latestGroupedMatches[groupKey] || [];
+      if (!allMatches.length) { toast('No matches found for ' + gameName); return; }
+
+      // Create fullscreen overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'view-all-overlay';
+      overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:999; display:flex; flex-direction:column; animation:fadeIn .2s ease;';
+
+      // Header
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border2);';
+      hdr.innerHTML = `
+        <div style="font-family:var(--fd); font-weight:800; font-size:18px; color:var(--text);">${gameName} <span style="color:var(--green);">(${allMatches.length})</span></div>
+        <button style="width:32px; height:32px; border-radius:50%; background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;" onclick="document.getElementById('view-all-overlay').remove()">×</button>
+      `;
+      overlay.appendChild(hdr);
+
+      // Scrollable grid container
+      const grid = document.createElement('div');
+      grid.style.cssText = 'flex:1; overflow-y:auto; padding:16px 20px; display:grid; grid-template-columns:1fr 1fr; gap:12px; align-content:start;';
+
+      allMatches.forEach(m => {
+        const card = buildMatchCard(m);
+        card.style.minWidth = 'unset';
+        card.style.maxWidth = 'unset';
+        grid.appendChild(card);
+      });
+      overlay.appendChild(grid);
+
+      // Floating close button at bottom
+      const closeBtn = document.createElement('button');
+      closeBtn.style.cssText = 'position:absolute; bottom:24px; left:50%; transform:translateX(-50%); padding:10px 32px; background:var(--red); color:#fff; border:none; border-radius:25px; font-family:var(--fd); font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 20px rgba(255,42,84,0.3); z-index:10;';
+      closeBtn.textContent = '✕ Close';
+      closeBtn.onclick = () => overlay.remove();
+      overlay.appendChild(closeBtn);
+
+      document.body.appendChild(overlay);
     }
 
     // ══════════════════════════════════════════════════════
@@ -3760,66 +3920,105 @@
 
         container.innerHTML = '';
 
-        if (!streams.length) {
+        const liveStreams = streams.filter(s => s.status === 'live');
+        const endedStreams = streams.filter(s => s.status === 'ended');
+        const totalStreams = streams.length;
+
+        if (!totalStreams) {
           if (emptyEl) emptyEl.style.display = 'block';
           if (countTag) countTag.textContent = '⚪ 0 Streams';
           return;
         }
 
         if (emptyEl) emptyEl.style.display = 'none';
-        if (countTag) { countTag.textContent = `🔴 ${streams.length} Live`; countTag.style.background = 'var(--red)'; countTag.style.color = '#fff'; }
+        if (countTag) {
+          countTag.innerHTML = liveStreams.length
+            ? `<span style="color:var(--red);">🔴 ${liveStreams.length} Live Streams</span> <span style="color:var(--text2); font-size:10px;">· ${totalStreams} total</span>`
+            : `⚪ ${endedStreams.length} Ended`;
+          countTag.style.background = liveStreams.length ? 'transparent' : 'var(--bg3)';
+          countTag.style.color = 'var(--text)';
+        }
 
-        // Group streams by game
-        const grouped = {};
-        streams.forEach(s => {
-          const gName = s.game || 'Other Games';
-          if (!grouped[gName]) grouped[gName] = [];
-          grouped[gName].push(s);
-        });
+        // === LIVE STREAMS ===
+        if (liveStreams.length) {
+          liveStreams.forEach(s => {
+            const card = _buildStreamCard(s, 'live');
+            container.appendChild(card);
+          });
+        }
 
-        for (const [gameName, gameStreams] of Object.entries(grouped)) {
-          // Section header
-          const header = document.createElement('div');
-          header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:16px; margin-bottom:10px;';
-          header.innerHTML = `
-            <div style="font-family:var(--fd); font-weight:800; font-size:14px; text-transform:uppercase; color:var(--text);">${gameName} <span style="color:var(--text2); font-weight:400; font-size:12px;">(${gameStreams.length} live)</span></div>
+        // === ENDED STREAMS ===
+        if (endedStreams.length) {
+          const endedHeader = document.createElement('div');
+          endedHeader.style.cssText = 'display:flex; align-items:center; gap:8px; margin-top:20px; margin-bottom:10px;';
+          endedHeader.innerHTML = `
+            <div style="font-family:var(--fd); font-weight:700; font-size:13px; color:var(--text2); text-transform:uppercase; letter-spacing:1px;">Recently Ended</div>
+            <div style="flex:1; height:1px; background:var(--border2);"></div>
           `;
-          container.appendChild(header);
+          container.appendChild(endedHeader);
 
-          // Stream cards for this game
-          gameStreams.forEach(s => {
-            const card = document.createElement('div');
-            card.style.cssText = 'background:var(--bg2); border:1px solid var(--border2); border-radius:14px; padding:14px; margin-bottom:12px; cursor:pointer; transition:all .3s; position:relative; overflow:hidden;';
-            card.onmouseenter = () => card.style.borderColor = 'var(--green)';
-            card.onmouseleave = () => card.style.borderColor = 'var(--border2)';
-
-            // Avatar fallback
-            const avatarHtml = s.streamerAvatar
-              ? `<img src="${s.streamerAvatar}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid var(--green);">`
-              : `<div style="width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg, var(--green), #0a0a0a); display:flex; align-items:center; justify-content:center; font-size:18px; border:2px solid var(--green);">🎮</div>`;
-
-            card.innerHTML = `
-              <div style="display:flex; align-items:center; gap:12px;">
-                ${avatarHtml}
-                <div style="flex:1; min-width:0;">
-                  <div style="font-weight:700; font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.streamer}</div>
-                  <div style="font-size:11px; color:var(--text2); margin-top:2px;">${s.home} vs ${s.away}</div>
-                </div>
-                <div style="text-align:right;">
-                  <div style="font-size:9px; padding:2px 8px; border-radius:4px; font-weight:700; background:var(--red); color:#fff; display:inline-block; margin-bottom:4px;">🔴 LIVE</div>
-                  <div style="font-size:11px; color:var(--text2);">👁 ${s.viewers} watching</div>
-                </div>
-              </div>
-              <div style="display:flex; gap:8px; margin-top:12px;">
-                <button class="cta" style="flex:1; font-size:12px; padding:8px; background:var(--green); color:#000;" onclick="event.stopPropagation(); joinStreamFromWatch('${s.roomId}', '${s.matchId}')">👁️ WATCH STREAM</button>
-              </div>
-            `;
+          endedStreams.forEach(s => {
+            const card = _buildStreamCard(s, 'ended');
             container.appendChild(card);
           });
         }
       } catch (e) {
         console.warn('[WATCH] Could not load streams:', e.message);
       }
+    }
+
+    function _buildStreamCard(s, status) {
+      const isLive = status === 'live';
+      const card = document.createElement('div');
+      card.style.cssText = `background:var(--bg2); border:1px solid ${isLive ? 'rgba(0,229,117,0.15)' : 'var(--border2)'}; border-radius:14px; padding:14px; margin-bottom:12px; transition:all .3s; position:relative; overflow:hidden;`;
+      if (isLive) {
+        card.onmouseenter = () => card.style.borderColor = 'var(--green)';
+        card.onmouseleave = () => card.style.borderColor = 'rgba(0,229,117,0.15)';
+      }
+
+      // Avatar
+      const avatarBorder = isLive ? 'var(--green)' : 'var(--text3)';
+      const avatarHtml = s.streamerAvatar
+        ? `<img src="${s.streamerAvatar}" style="width:42px; height:42px; border-radius:50%; object-fit:cover; border:2px solid ${avatarBorder};">`
+        : `<div style="width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg, ${isLive ? 'var(--green)' : '#555'}, #0a0a0a); display:flex; align-items:center; justify-content:center; font-size:18px; border:2px solid ${avatarBorder};">⚡</div>`;
+
+      // Badge
+      const badgeHtml = isLive
+        ? `<div style="font-size:9px; padding:3px 8px; border-radius:4px; font-weight:700; background:rgba(255,42,84,0.15); border:1px solid var(--red); color:var(--red); display:inline-block;">🔴 LIVE</div>`
+        : `<div style="font-size:9px; padding:3px 8px; border-radius:4px; font-weight:700; background:rgba(255,255,255,0.05); border:1px solid var(--text3); color:var(--text2); display:inline-block;">ENDED</div>`;
+
+      // Match context
+      const matchContext = s.game ? `${s.game} 1v1: ${s.home} vs ${s.away}` : `${s.home} vs ${s.away}`;
+
+      // Time since ended
+      let endedAgo = '';
+      if (!isLive && s.endedAt) {
+        const mins = Math.round((Date.now() - s.endedAt) / 60000);
+        endedAgo = mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
+      }
+
+      // Action button
+      const btnHtml = isLive
+        ? `<button class="cta" style="flex:1; font-size:12px; padding:10px; background:var(--green); color:#000; font-weight:700; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="event.stopPropagation(); joinStreamFromWatch('${s.roomId}', '${s.matchId}')">⊙ WATCH STREAM</button>`
+        : `<button class="cta" style="flex:1; font-size:12px; padding:10px; background:transparent; color:var(--text2); font-weight:600; border-radius:10px; border:1px solid var(--border2); display:flex; align-items:center; justify-content:center; gap:6px;" onclick="event.stopPropagation(); toast('📼 Replay coming soon!')">⊙ View Replay</button>`;
+
+      card.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px;">
+          ${avatarHtml}
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:700; font-size:15px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.streamer}</div>
+            <div style="font-size:11px; color:var(--text2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${matchContext}</div>
+          </div>
+          <div style="text-align:right; flex-shrink:0;">
+            ${badgeHtml}
+            <div style="font-size:11px; color:var(--text2); margin-top:4px;">👁 ${s.viewers}${isLive ? '' : ' total'}${endedAgo ? ' · ' + endedAgo : ''}</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          ${btnHtml}
+        </div>
+      `;
+      return card;
     }
 
     // Join a stream from the Watch tab
@@ -4080,7 +4279,21 @@
           _attachHostListeners();
           return;
         } catch(camErr) {
-          showStreamError('Camera access denied. Enable camera permission in your browser settings.');
+          const wdData = {
+        amount: amt,
+        bank: bank,
+        acct: acct,
+        name: name,
+        status: 'pending',
+        timestamp: Date.now()
+      };
+      
+      const p = db.ref('users/' + S.user.uid + '/withdrawals').push();
+      p.set(wdData).then(() => {
+        toast('Withdrawal request submitted!');
+        pushNotification('withdrawal', 'Withdrawal Request 💸', `Your request to withdraw ₦${amt.toLocaleString()} to ${name} (${acct}) has been received.`);
+        closeM();
+      }); showStreamError('Camera access denied. Enable camera permission in your browser settings.');
           return;
         }
       }
@@ -4231,9 +4444,127 @@
       document.getElementById('li-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
       document.getElementById('li-email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('li-pass').focus(); });
 
-      // Fetch Lobby Wagers initially
+    // Fetch Lobby Wagers initially
       fetchLobby();
     });
+
+    // Push notification to Firebase
+    function pushNotification(type, title, message, metadata = {}) {
+      if (!db || !S.user) return;
+      const notifId = 'notif_' + Date.now() + Math.floor(Math.random()*1000);
+      db.ref(`users/${S.user.uid}/notifications/${notifId}`).set({
+        id: notifId,
+        type,
+        title,
+        message,
+        metadata,
+        read: false,
+        timestamp: Date.now()
+      });
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  NOTIFICATIONS SYSTEM
+    // ══════════════════════════════════════════════════════
+    let _notifications = [];
+    let _notifListenerRef = null;
+
+    function toggleNotifications() {
+      const panel = document.getElementById('notif-panel');
+      const isVisible = panel.style.right === '0px';
+      panel.style.right = isVisible ? '-100%' : '0px';
+      
+      // Mark all as read if we're opening
+      if (!isVisible && S.user && db) {
+        _notifications.forEach(n => {
+          if (!n.read) {
+            db.ref(`users/${S.user.uid}/notifications/${n.id}/read`).set(true);
+          }
+        });
+        document.getElementById('notif-badge').style.display = 'none';
+      }
+    }
+
+    function listenToNotifications(user) {
+      if (!db || !user) return;
+      
+      if (_notifListenerRef) _notifListenerRef.off();
+      
+      _notifListenerRef = db.ref(`users/${user.uid}/notifications`);
+      _notifListenerRef.on('value', (snap) => {
+        const data = snap.val();
+        if (!data) {
+          _notifications = [];
+          renderNotifications();
+          return;
+        }
+
+        const newNotifs = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Check if there are any brand new unread notifications that we haven't seen yet
+        const unreadCount = newNotifs.filter(n => !n.read).length;
+        
+        // Show toast for newly arrived notifications (not just unread from history)
+        if (newNotifs.length > _notifications.length && _notifications.length > 0) {
+          const latest = newNotifs[0];
+          if (!latest.read) toast(`🔔 ${latest.title}: ${latest.message}`);
+        }
+
+        _notifications = newNotifs;
+        document.getElementById('notif-badge').style.display = unreadCount > 0 ? 'block' : 'none';
+        
+        renderNotifications();
+      });
+    }
+
+    function renderNotifications() {
+      const listEl = document.getElementById('notif-list');
+      if (!listEl) return;
+
+      if (!_notifications.length) {
+        listEl.innerHTML = `
+          <div class="empty-state" style="margin-top:40px;">
+            <div class="es-icon">📭</div>
+            <div class="es-title">No Notifications Yet</div>
+            <div class="es-sub">When you deposit, win, or join tournaments, alerts will appear here.</div>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = '';
+      _notifications.forEach(n => {
+        let icon = '🔔';
+        if (n.type === 'deposit' || n.type === 'withdrawal') icon = '💰';
+        if (n.type === 'tournament') icon = '🏆';
+        if (n.type === 'wager') icon = '⚔️';
+
+        const timeStr = new Date(n.timestamp).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+        
+        const div = document.createElement('div');
+        div.style.cssText = `background:var(--bg3); border-radius:12px; padding:16px; border-left:4px solid ${n.read ? 'transparent' : 'var(--green)'};`;
+        div.innerHTML = `
+          <div style="display:flex; gap:12px;">
+            <div style="font-size:20px;">${icon}</div>
+            <div style="flex:1;">
+              <div style="font-weight:700; color:var(--text); font-size:14px; margin-bottom:4px;">${n.title}</div>
+              <div style="color:var(--text2); font-size:12px; line-height:1.4; margin-bottom:8px;">${n.message}</div>
+              <div style="color:var(--text3); font-size:10px;">${timeStr}</div>
+            </div>
+          </div>
+        `;
+        listEl.appendChild(div);
+      });
+    }
+
+    // Register PWA Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.warn('Service Worker registration failed:', err);
+        });
+      });
+    }
   </script>
 </body>
 

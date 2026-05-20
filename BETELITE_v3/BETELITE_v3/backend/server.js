@@ -107,11 +107,11 @@ app.get('/api/matches/live', (req, res) => {
   }
 });
 
-// ── Active streams list (for Watch tab)
+// ── Active + ended streams (for Watch tab)
 app.get('/api/streams', (req, res) => {
   const streams = [];
+  // Live streams
   streamRooms.forEach((room, roomId) => {
-    // Look up the match data from the engine
     const match = engine.getMatch(room.matchId);
     streams.push({
       roomId,
@@ -125,6 +125,31 @@ app.get('/api/streams', (req, res) => {
       away: match?.away || 'Waiting...',
       scoreHome: match?.scoreHome || 0,
       scoreAway: match?.scoreAway || 0,
+      status: 'live',
+    });
+  });
+  // Ended streams (keep for 24h)
+  const now = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  endedStreams.forEach((room, roomId) => {
+    if (now - room.endedAt > DAY_MS) {
+      endedStreams.delete(roomId);
+      return;
+    }
+    streams.push({
+      roomId,
+      matchId: room.matchId,
+      streamer: room.streamer || 'Unknown',
+      streamerAvatar: room.streamerAvatar || null,
+      viewers: room.totalViewers || 0,
+      game: room.game || 'CrestArena',
+      label: room.label || 'Stream',
+      home: room.home || 'Player',
+      away: room.away || 'Opponent',
+      scoreHome: room.scoreHome || 0,
+      scoreAway: room.scoreAway || 0,
+      status: 'ended',
+      endedAt: room.endedAt,
     });
   });
   res.json({ ok: true, streams });
@@ -140,6 +165,7 @@ app.get('/', (req, res) => res.redirect('/mobile'));
 // ══════════════════════════════════════════
 const connectedUsers = new Map();  // socketId → { userId, room }
 const streamRooms    = new Map();  // roomId → { host, viewers }
+const endedStreams   = new Map();  // roomId → { ...streamData, endedAt, totalViewers }
 
 io.on('connection', (socket) => {
   console.log(`[SOCKET] Connected: ${socket.id}`);
@@ -251,6 +277,24 @@ io.on('connection', (socket) => {
     streamRooms.forEach((room, roomId) => {
       if (room.hostSocket === socket.id) {
         io.to(roomId).emit('stream_ended', { roomId });
+        // Save to ended streams before deleting
+        const endedRoom = streamRooms.get(roomId);
+        if (endedRoom) {
+          const match = engine.getMatch(endedRoom.matchId);
+          endedStreams.set(roomId, {
+            matchId: endedRoom.matchId,
+            streamer: endedRoom.username || 'Unknown',
+            streamerAvatar: endedRoom.avatar || null,
+            totalViewers: endedRoom.viewers || 0,
+            game: match?.game || endedRoom.game || 'CrestArena',
+            label: match?.label || 'Stream',
+            home: match?.home || endedRoom.username || 'Player',
+            away: match?.away || 'Opponent',
+            scoreHome: match?.scoreHome || 0,
+            scoreAway: match?.scoreAway || 0,
+            endedAt: Date.now(),
+          });
+        }
         streamRooms.delete(roomId);
       }
     });

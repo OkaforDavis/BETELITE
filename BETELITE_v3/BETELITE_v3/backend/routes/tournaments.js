@@ -1,6 +1,7 @@
 const express = require('express');
 const { v4: uuid } = require('uuid');
 const axios = require('axios');
+const { sendNotification } = require('../services/notifications');
 
 // In-memory store
 const tournaments = new Map();
@@ -55,7 +56,7 @@ module.exports = (io, engine) => {
   });
 
   // ── Join tournament
-  r.post('/:id/join', (req, res) => {
+  r.post('/:id/join', async (req, res) => {
     const t = tournaments.get(req.params.id);
     if (!t) return res.status(404).json({ error: 'Not found' });
     if (t.status !== 'open') return res.status(400).json({ error: 'Tournament not open' });
@@ -72,7 +73,16 @@ module.exports = (io, engine) => {
       io.emit('tournament_started', { id: t.id, name: t.name });
     }
 
+    sendNotification(userId, 'tournament', 'Tournament Joined', `You successfully registered for the ${t.name} tournament. Get ready!`, { tournamentId: t.id });
+
     io.emit('tournament_update', formatT(t));
+
+    try {
+      await sendNotification(userId, 'tournament', 'Tournament Registration', `You successfully joined the ${t.name} tournament. Get ready!`, { tournamentId: t.id });
+    } catch (err) {
+      console.error('[NOTIF] Error:', err.message);
+    }
+
     res.json({ ok: true, tournament: formatT(t), myFixtures: getMyFixtures(t.id, userId) });
   });
 
@@ -166,7 +176,7 @@ module.exports = (io, engine) => {
     });
 
     // Check if round is complete and auto-advance bracket
-    checkProgression(t, io, engine);
+    await checkProgression(t, io, engine);
 
     res.json({ ok: true, fixture, aiVerified, finalScore: `${finalHome}-${finalAway}`, aiResult });
   });
@@ -216,7 +226,7 @@ function generateFixtures(t) {
 }
 
 // ── After each result, check if the round is complete and advance
-function checkProgression(t, io, engine) {
+async function checkProgression(t, io, engine) {
   const roundFixtures = [...fixtures.values()].filter(
     f => f.tournamentId === t.id && f.round === t.currentRound
   );
@@ -240,8 +250,16 @@ function checkProgression(t, io, engine) {
     t.status    = 'finished';
     t.winnerId  = winners[0].userId;
     t.winnerName= winners[0].username;
-    distributePrizes(t, io);
+    await distributePrizes(t, io);
     io.emit('tournament_finished', { id: t.id, name: t.name, winner: winners[0] });
+
+    try {
+      const prize = t.payouts && t.payouts.length > 0 ? t.payouts[0].amount : t.prizePool;
+      await sendNotification(t.winnerId, 'tournament', 'Tournament Champion! 🏆', `You won the ${t.name} tournament! Prize money of ₦${prize} has been deposited.`, { tournamentId: t.id, prize });
+    } catch (err) {
+      console.error('[NOTIF] Error:', err.message);
+    }
+
     return;
   }
 
@@ -275,6 +293,14 @@ function checkProgression(t, io, engine) {
     fixtures: [...fixtures.values()].filter(f => f.tournamentId === t.id && f.round === t.currentRound),
   });
   io.emit('tournament_update', formatT(t));
+
+  for (const w of winners) {
+    try {
+      await sendNotification(w.userId, 'tournament', 'Match Won!', `You won your match and advanced to the next round of ${t.name}!`, { tournamentId: t.id });
+    } catch (err) {
+      console.error('[NOTIF] Error:', err.message);
+    }
+  }
 }
 
 // ── Distribute prizes to top finishers
@@ -291,6 +317,9 @@ async function distributePrizes(t, io) {
     const player = standings[i];
     const amount = Math.round(netPool * PRIZE_CUTS[i]);
     payouts.push({ position: i + 1, userId: player.userId, username: player.username, amount });
+    
+    // Send Notification
+    sendNotification(player.userId, 'tournament', `Tournament Finished - #${i + 1}`, `You finished #${i + 1} in ${t.name}! Prize money of ₦${amount} has been deposited.`, { tournamentId: t.id, prize: amount });
   }
 
   io.emit('tournament_prizes', { id: t.id, payouts, netPool });
