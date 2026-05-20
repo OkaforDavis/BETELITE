@@ -2661,9 +2661,18 @@
       if (!auth) { showAuthOk('Password reset email sent! (Demo mode)'); return; }
       try {
         await auth.sendPasswordResetEmail(email);
-        showAuthOk(`Password reset email sent to ${email}. Check your inbox!`);
+        showAuthOk(`✅ Password reset email sent to ${email}. Check your inbox (and spam folder)!`);
       } catch (e) {
-        showAuthErr('Could not send reset email. Check the address is correct.');
+        console.error('[AUTH] Password reset error:', e);
+        if (e.code === 'auth/user-not-found') {
+          showAuthErr('No account found with this email address.');
+        } else if (e.code === 'auth/invalid-email') {
+          showAuthErr('Please enter a valid email address.');
+        } else if (e.code === 'auth/too-many-requests') {
+          showAuthErr('Too many attempts. Please wait a moment and try again.');
+        } else {
+          showAuthErr('Could not send reset email: ' + (e.message || 'Unknown error'));
+        }
       }
     }
 
@@ -3669,7 +3678,7 @@
         // Group matches by game type
         const grouped = {};
         matches.forEach(m => {
-          const gName = m.game || m.label || 'Other Games';
+          const gName = m.label || m.game || m.gameType || 'Other Games';
           if (!grouped[gName]) grouped[gName] = [];
           grouped[gName].push(m);
         });
@@ -3859,7 +3868,7 @@
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
-          <span style="font-size:10px;color:var(--text2);">${m.displayTime || m.minute + "'"}</span>
+          <span style="font-size:10px;color:var(--text2);">${m.displayTime || (typeof m.minute === 'number' && !isNaN(m.minute) ? m.minute + "'" : '🔴 LIVE')}</span>
           <span style="font-size:9px;color:${m.verifiedBy === 'ai_screenshot' ? 'var(--green)' : 'var(--text3)'};">${m.verifiedBy === 'ai_screenshot' ? '🤖 AI Verified' : m.verifiedBy === 'engine' ? '⚙ Engine' : '✓ Verified'}</span>
         </div>`;
       return div;

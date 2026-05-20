@@ -28,3 +28,14 @@ services:
       # Detection service URL (leave empty to use Anthropic fallback on server)
       - key: DETECTION_SERVICE_URL
         value: ""
+      # Paystack Payment Processing
+      - key: PAYSTACK_PUBLIC_KEY
+        value: pk_live_e2ebd7a376bd6f1e106400bba86935f9e6df381d
+      - key: PAYSTACK_SECRET_KEY
+        sync: false  # Set this secret in Render dashboard
+      # CORS origins (add Render URL)
+      - key: CORS_ORIGINS
+        value: "http://localhost:3000,https://okafordavis.github.io,https://betelite-backend.onrender.com"
+      # Gemini AI (free fallback for score detection)
+      - key: GEMINI_API_KEY
+        sync: false  # Set this in Render dashboard — get from https://aistudio.google.com/apikey

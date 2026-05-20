@@ -1,5 +1,7 @@
 const { v4: uuid } = require('uuid');
 const Anthropic = require('@anthropic-ai/sdk');
+let GoogleGenAI;
+try { GoogleGenAI = require('@google/genai').GoogleGenAI; } catch(e) { /* optional */ }
 
 const GAME_CONFIGS = {
   efootball: {
@@ -46,6 +48,10 @@ class GameEngine {
     this.throttles= new Map();  // key → timestamp
     this.client   = process.env.ANTHROPIC_API_KEY
       ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      : null;
+    // Gemini fallback — free tier vision API
+    this.gemini   = (process.env.GEMINI_API_KEY && GoogleGenAI)
+      ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
       : null;
   }
 
@@ -369,8 +375,15 @@ class GameEngine {
     // Persist final result
     this._persist(match);
 
-    // Replace with a new scheduled match after 30s
-    setTimeout(() => this._scheduleNewMatch(match.gameType), 30000);
+    // Replace with a new scheduled match after 30s, then remove the finished one
+    const finishedId = match.id;
+    setTimeout(() => {
+      this._scheduleNewMatch(match.gameType);
+      // Clean up the finished match from memory to prevent pileup
+      this.matches.delete(finishedId);
+      // Also remove from Firebase
+      if (this.db) this.db.ref(`live_matches/${finishedId}`).remove().catch(() => {});
+    }, 30000);
   }
 
   _scheduleNewMatch(gameType) {
@@ -466,7 +479,51 @@ Respond with ONLY valid JSON. No markdown. No explanation.`,
       const parsed = JSON.parse(raw);
       return { ...parsed, source: 'anthropic_vision', matchId };
     } catch (e) {
-      console.error('[AI] Screenshot analysis error:', e.message);
+      console.error('[AI] Anthropic analysis error:', e.message);
+      // Fallback to Gemini if Anthropic fails (e.g. credits exhausted)
+      if (this.gemini) {
+        console.log('[AI] Trying Gemini fallback...');
+        return this.analyzeWithGemini(matchId, imageBase64, mimeType);
+      }
+      return { error: e.message, demo: true, ...this._mockAI() };
+    }
+  }
+
+  // ── Gemini Vision Fallback (free tier)
+  async analyzeWithGemini(matchId, imageBase64, mimeType = 'image/jpeg') {
+    if (!this.gemini) return { error: 'Gemini not configured', demo: true, ...this._mockAI() };
+    try {
+      const prompt = `You are a game score detection AI for mobile esports.
+Analyze this screenshot and extract ALL of the following:
+1. game: exact game name (eFootball / COD Mobile / Free Fire / FIFA Mobile / Dream League Soccer / other)
+2. team1: home team or player name
+3. team2: away team or player name
+4. score1: home score (number)
+5. score2: away score (number)
+6. gameTime: current time/round shown
+7. gameEnded: true if this shows final result / game over screen
+8. finalResult: true if match is definitively over
+9. cheatDetected: true if you see any suspicious editing or anomalies
+10. cheatReason: explain any suspicious findings
+11. confidence: 0.0-1.0 how confident you are
+12. notes: any other relevant info
+Respond with ONLY valid JSON. No markdown. No explanation.`;
+
+      const response = await this.gemini.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [{
+          parts: [
+            { inlineData: { mimeType, data: imageBase64 } },
+            { text: prompt },
+          ],
+        }],
+      });
+
+      const raw = response.text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(raw);
+      return { ...parsed, source: 'gemini_vision', matchId };
+    } catch (e) {
+      console.error('[AI] Gemini analysis error:', e.message);
       return { error: e.message, demo: true, ...this._mockAI() };
     }
   }
@@ -574,29 +631,36 @@ JSON only.`,
 
   // ── Getters
   getMatch(id) { return this._publicMatch(this.matches.get(id)); }
-  getAllMatches() { return [...this.matches.values()].map(m => this._publicMatch(m)); }
+  getAllMatches() { return [...this.matches.values()].filter(m => m.status !== MATCH_STATUS.FINISHED).map(m => this._publicMatch(m)); }
   getActiveMatchCount() { return [...this.matches.values()].filter(m => m.status !== MATCH_STATUS.FINISHED).length; }
 
   _publicMatch(m) {
     if (!m) return null;
+    const safeMinute = (typeof m.minute === 'number' && !isNaN(m.minute)) ? m.minute : 0;
+    const safeMax = (typeof m.maxDuration === 'number' && !isNaN(m.maxDuration)) ? m.maxDuration : 90;
     return {
-      id: m.id, gameType: m.gameType, icon: m.icon, label: m.label,
+      id: m.id, gameType: m.gameType, game: m.game || m.label, icon: m.icon, label: m.label,
       home: m.home, away: m.away,
-      scoreHome: m.scoreHome, scoreAway: m.scoreAway,
-      minute: Math.min(Math.round(m.minute), m.maxDuration),
+      homeId: m.homeId, awayId: m.awayId,
+      scoreHome: m.scoreHome || 0, scoreAway: m.scoreAway || 0,
+      minute: Math.min(Math.round(safeMinute), safeMax),
       addedTime: m.addedTime || 0,
       displayTime: this._displayTime(m),
       status: m.status, result: m.result || null,
-      stats: m.stats, cheatFlags: m.cheatFlags,
+      stats: m.stats, cheatFlags: m.cheatFlags || [],
       verifiedBy: m.verifiedBy, lastUpdate: m.lastUpdate,
+      isLockedRoom: m.isLockedRoom || false,
     };
   }
 
   _displayTime(m) {
+    const safeMin = (typeof m.minute === 'number' && !isNaN(m.minute)) ? Math.round(m.minute) : 0;
+    const safeMax = (typeof m.maxDuration === 'number' && !isNaN(m.maxDuration)) ? m.maxDuration : 90;
     if (m.status === MATCH_STATUS.UPDATING) return 'Updating scores...';
-    if (m.status === MATCH_STATUS.FINISHED) return `FT ${m.maxDuration}+${Math.ceil(m.addedTime||0)}'`;
-    if (m.status === MATCH_STATUS.ADDED_TIME) return `${m.maxDuration}+${Math.ceil(m.addedTime)}'`;
-    return `${Math.min(Math.round(m.minute), m.maxDuration)}'`;
+    if (m.status === MATCH_STATUS.FINISHED) return `FT ${safeMax}+${Math.ceil(m.addedTime||0)}'`;
+    if (m.status === MATCH_STATUS.ADDED_TIME) return `${safeMax}+${Math.ceil(m.addedTime||0)}'`;
+    if (m.isLockedRoom) return '🔴 LIVE';
+    return `${Math.min(safeMin, safeMax)}'`;
   }
 
   isThrottled(key, ms) { return this.throttles.has(key) && Date.now() - this.throttles.get(key) < ms; }
