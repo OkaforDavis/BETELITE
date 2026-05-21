@@ -55,6 +55,22 @@ module.exports = (io, engine, db) => {
     }
   });
 
+  // Delete a challenge (only by creator)
+  router.post('/delete', (req, res) => {
+    try {
+      const { challengeId, uid } = req.body;
+      const challenge = lobbyChallenges.get(challengeId);
+      if (!challenge) return res.status(404).json({ ok: false, error: 'Wager not found' });
+      if (challenge.creatorId !== uid) return res.status(403).json({ ok: false, error: 'You can only delete your own wagers' });
+      
+      lobbyChallenges.delete(challengeId);
+      io.emit('lobby_challenge_removed', { id: challengeId });
+      console.log(`[LOBBY] Wager ${challengeId} deleted by ${uid}`);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
   // Accept a challenge
   router.post('/accept', async (req, res) => {
     try {
