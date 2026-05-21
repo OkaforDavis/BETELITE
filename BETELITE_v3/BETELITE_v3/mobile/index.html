@@ -2513,7 +2513,8 @@
 
   <script>
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.protocol === 'file:';
-    const BACKEND_URL = window.location.origin;
+    const BACKEND_URL = isLocal ? 'http://localhost:3000' : 'https://betelite-backend.onrender.com';
+    const STREAMING_URL = isLocal ? 'http://localhost:3001' : window.location.origin;
 
     // ══════════════════════════════════════════════════════
     //  FIREBASE CONFIG
@@ -4362,8 +4363,9 @@
 
     function connectChat() {
       if (chatWs) return;
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      chatWs = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+      const wsProtocol = STREAMING_URL.startsWith('https') ? 'wss:' : 'ws:';
+      const wsHost = STREAMING_URL.replace(/^https?:\/\//, '');
+      chatWs = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
       
       chatWs.onmessage = (event) => {
         try {
@@ -4440,7 +4442,7 @@
 
     async function connectToLiveKit(matchId, isHost, localMediaStream) {
       try {
-        const res = await fetch(BACKEND_URL + '/api/stream/token', {
+        const res = await fetch(STREAMING_URL + '/api/stream/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomName: matchId, identity: S.user?.displayName || 'Viewer_' + Math.floor(Math.random()*100), isHost })
