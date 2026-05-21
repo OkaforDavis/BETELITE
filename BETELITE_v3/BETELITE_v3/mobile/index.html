@@ -1998,7 +1998,7 @@
 ════════════════════════════════════════ -->
   <div id="auth-screen">
     <div class="auth-logo">
-      <img src="crestarena-logo.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
+      <img src="crestarena-icon.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
       <div class="auth-logo-wm" style="letter-spacing:1px; font-size:28px;">Crest<em>Arena</em></div>
       <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
     </div>
@@ -2089,7 +2089,7 @@
     <div id="hd">
       <div class="hd-top">
         <div class="logo">
-          <img src="crestarena-icon.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
+          <img src="crestarena-logo.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
         </div>
         <div class="hd-r">
           <!-- Notification Bell -->
@@ -2513,7 +2513,7 @@
 
   <script>
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.protocol === 'file:';
-    const BACKEND_URL = isLocal ? (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin.replace(/:\d+$/, ':3000')) : 'https://betelite-backend.onrender.com';
+    const BACKEND_URL = window.location.origin;
 
     // ══════════════════════════════════════════════════════
     //  FIREBASE CONFIG
@@ -3043,7 +3043,7 @@
         
         <div style="display:flex; gap:8px; margin-top:16px;">
           ${isParticipant ? 
-            `<button style="flex:1; background:linear-gradient(135deg, #FFD700, #FDB931); color:#000; font-weight:800; font-size:14px; padding:14px 20px; border-radius:30px; border:none; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4); text-transform:uppercase; letter-spacing:1px; cursor:pointer;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
+            `<button style="flex:1; background:linear-gradient(90deg, #00FF87 0%, #60EFFF 100%); color:#000; font-weight:800; font-size:14px; padding:14px 20px; border-radius:30px; border:none; box-shadow: 0 4px 15px rgba(0, 255, 135, 0.4); text-transform:uppercase; letter-spacing:1px; cursor:pointer;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
             `<button class="cta" style="flex:1; background:var(--green); color:#000;" onclick="joinWebRTCStream('${data.id}')">👁️ WATCH STREAM</button>`
           }
         </div>
