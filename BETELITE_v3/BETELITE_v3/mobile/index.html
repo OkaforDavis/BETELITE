@@ -2922,6 +2922,13 @@
       ccy = c;
       updateWallet();
       updateDynamicPrices();
+      // Update settings currency display
+      const symEl = document.getElementById('currency-symbol');
+      const codeEl = document.getElementById('currency-code');
+      const dispEl = document.getElementById('currency-display');
+      if (symEl) symEl.textContent = CCY_DATA[ccy].sym;
+      if (codeEl) codeEl.textContent = ccy;
+      if (dispEl) dispEl.textContent = CCY_DATA[ccy].name;
     }
     function getSym() { return CCY_DATA[ccy].sym; }
     function fmt(n) { return getSym() + (ccy === 'NGN' ? n : Math.round(n / CCY_DATA[ccy].ngnValue)).toLocaleString(); }
@@ -3039,6 +3046,21 @@
           }
         </div>
         `;
+        // Auto-check if a stream is already live for this match
+        setTimeout(() => {
+          fetch(BACKEND_URL + '/api/streams')
+            .then(r => r.json())
+            .then(resp => {
+              const streams = resp.streams || resp || [];
+              const active = streams.find(s => s.matchId === data.id && s.live);
+              if (active && !isParticipant) {
+                document.getElementById('stream-status').textContent = 'Stream found! Connecting...';
+                joinWebRTCStream(data.id);
+              } else if (active && isParticipant) {
+                document.getElementById('stream-status').textContent = 'Stream is live — you can also start your own';
+              }
+            }).catch(() => {});
+        }, 300);
       }
 
       else if (type === 'deposit') {
@@ -3078,7 +3100,7 @@
         } else {
           bd.innerHTML = `
         <div style="margin-bottom:12px;font-size:13px;color:var(--text2)">
-          Balance: <strong style="color:var(--gold)">₦${S.wallet.toLocaleString()}</strong>
+          Balance: <strong style="color:var(--gold)">${fmt(S.wallet)}</strong>
         </div>
         <label class="fl">Amount</label>
         <input class="fi" type="number" id="wth-a" placeholder="Amount to withdraw">
@@ -3378,7 +3400,8 @@
       const acct = document.getElementById('wth-acct')?.value || 'N/A';
       const bank = document.getElementById('wth-bank')?.value || 'N/A';
       
-      if (amt < 1000) { toast('Minimum withdrawal is ₦1,000'); return; }
+      const minWithdraw = ccy === 'NGN' ? 1000 : Math.ceil(1000 / CCY_DATA[ccy].ngnValue);
+      if (amt < minWithdraw) { toast('Minimum withdrawal is ' + getSym() + minWithdraw.toLocaleString()); return; }
       if (S.wallet < amt) { toast('Insufficient funds'); return; }
       
       S.wallet -= amt;
@@ -3396,7 +3419,7 @@
       if (db && S.user) {
         db.ref('users/' + S.user.uid + '/withdrawals').push(wdData).then(() => {
           toast('Withdrawal request submitted!');
-          pushNotification('withdrawal', 'Withdrawal Request 💸', `Your request to withdraw ₦${amt.toLocaleString()} to ${bank} (${acct}) has been received.`);
+          pushNotification('withdrawal', 'Withdrawal Request 💸', `Your request to withdraw ${getSym()}${amt.toLocaleString()} to ${bank} (${acct}) has been received.`);
           closeM();
         });
       } else {
@@ -4184,7 +4207,7 @@
             <div style="font-size:11px; color:var(--text2); margin-top:2px;">🎮 ${c.game.toUpperCase()}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-weight:800; font-size:16px; color:var(--gold); margin-bottom:4px;">${getSym()}${c.amount.toLocaleString()}</div>
+            <div style="font-weight:800; font-size:16px; color:var(--gold); margin-bottom:4px;">${fmt(c.amount)}</div>
             ${(!S.user || S.user.uid !== c.creatorId) ? 
               `<button onclick="acceptWager('${c.id}')" style="background:var(--green); color:#000; padding:6px 16px; border-radius:16px; font-weight:700; font-size:12px; border:none;">ACCEPT</button>` 
               : `<span style="font-size:11px; color:var(--text2);">Your Wager</span>`
