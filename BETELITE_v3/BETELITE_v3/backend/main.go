@@ -211,6 +211,12 @@ func main() {
 		}
 	}()
 
+	// Serve mobile frontend
+	app.Static("/mobile", "../mobile")
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Redirect("/mobile")
+	})
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
