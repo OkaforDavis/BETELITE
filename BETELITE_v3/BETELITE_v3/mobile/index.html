@@ -1987,6 +1987,8 @@
       transform: translateX(-50%) translateY(0);
     }
   </style>
+  <!-- LiveKit Client SDK for WebRTC Streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 </head>
 
 <body>
@@ -3041,7 +3043,7 @@
         
         <div style="display:flex; gap:8px; margin-top:16px;">
           ${isParticipant ? 
-            `<button class="cta" style="flex:1; background:var(--gold); color:#000;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
+            `<button style="flex:1; background:linear-gradient(135deg, #FFD700, #FDB931); color:#000; font-weight:800; font-size:14px; padding:14px 20px; border-radius:30px; border:none; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4); text-transform:uppercase; letter-spacing:1px; cursor:pointer;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
             `<button class="cta" style="flex:1; background:var(--green); color:#000;" onclick="joinWebRTCStream('${data.id}')">👁️ WATCH STREAM</button>`
           }
         </div>

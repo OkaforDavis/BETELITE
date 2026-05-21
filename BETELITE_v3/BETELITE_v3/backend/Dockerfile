@@ -1,8 +1,17 @@
-FROM node:20-alpine
+FROM golang:1.21-alpine
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+
+# Install certificates for secure LiveKit connection
+RUN apk add --no-cache ca-certificates
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
-RUN mkdir -p uploads
+
+RUN go build -o server .
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+
+CMD ["./server"]
