@@ -3364,26 +3364,35 @@
         checkoutCcy = 'NGN';
       }
 
+      console.log('[PAYSTACK] Initiating payment:', { key: (ccy === 'GHS' && PAYMENT_CONFIG.paystackKeyGH) ? 'GH_KEY' : 'NG_KEY', amount: checkoutAmt * 100, currency: checkoutCcy, email: S.user?.email, ref });
+      
       const handler = PaystackPop.setup({
         key: (ccy === 'GHS' && PAYMENT_CONFIG.paystackKeyGH) ? PAYMENT_CONFIG.paystackKeyGH : PAYMENT_CONFIG.paystackKey,
         email: S.user?.email || 'guest@crestarena.com',
-        amount: checkoutAmt * 100, // Paystack works in kobo/pesewas
-        currency: checkoutCcy,     // Forces NGN to prevent "Currency not supported" error
+        amount: checkoutAmt * 100,
+        currency: checkoutCcy,
         ref: ref,
+        channels: ['card', 'bank', 'ussd', 'bank_transfer', 'qr', 'mobile_money'],
+        metadata: {
+          custom_fields: [
+            { display_name: "User ID", variable_name: "uid", value: S.user?.uid || 'guest' },
+            { display_name: "Platform", variable_name: "platform", value: "CrestArena Mobile" }
+          ]
+        },
         callback: function (response) {
+          console.log('[PAYSTACK] ✅ Success:', response);
           toast(`✅ Payment successful! (Ref: ${response.reference})`);
-          // Update normalized NGN base wallet
           const n = ccy === 'NGN' ? amt : Math.round(amt * CCY_DATA[ccy].ngnValue);
           S.wallet += n;
           saveProfile({ wallet: S.wallet });
           updateWallet();
           
-          // Send notification
           pushNotification('deposit', 'Deposit Successful 💰', `Your deposit of ${getSym()}${amt.toLocaleString()} has been credited to your account.`);
           
           closeM();
         },
         onClose: function () {
+          console.log('[PAYSTACK] ❌ Window closed without completing');
           toast('Payment window closed.');
         }
       });
