@@ -4880,10 +4880,17 @@
         modal.style.opacity = '0';
         setTimeout(() => modal.remove(), 300);
         if (deferredPrompt) {
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          if (outcome === 'accepted') subscribeToPush();
-          deferredPrompt = null;
+          try {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') subscribeToPush();
+            deferredPrompt = null;
+          } catch(e) {
+            console.error('PWA Prompt error:', e);
+          }
+        } else {
+          // Provide fallback instructions if prompt is unavailable
+          showCrestToast('MANUAL INSTALL', 'Tap your browser menu (⋮ or ⇪) and select "Add to Home Screen" or "Install App".', 'info');
         }
       };
     }
