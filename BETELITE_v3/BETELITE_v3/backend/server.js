@@ -241,7 +241,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('stream_end', ({ roomId }) => {
-    if (streamRooms.has(roomId)) {
+    const endedRoom = streamRooms.get(roomId);
+    if (endedRoom) {
+       const match = engine.getMatch(endedRoom.matchId);
+       endedStreams.set(roomId, {
+         matchId: endedRoom.matchId,
+         streamer: endedRoom.username || 'Unknown',
+         streamerAvatar: endedRoom.avatar || null,
+         totalViewers: endedRoom.viewers || 0,
+         game: match?.game || endedRoom.game || 'CrestArena',
+         label: match?.label || 'Stream',
+         home: match?.home || endedRoom.username || 'Player',
+         away: match?.away || 'Opponent',
+         scoreHome: match?.scoreHome || 0,
+         scoreAway: match?.scoreAway || 0,
+         endedAt: Date.now()
+       });
        streamRooms.delete(roomId);
        io.emit('stream_ended', { roomId });
        console.log(`[STREAM] Stream ${roomId} ended.`);
