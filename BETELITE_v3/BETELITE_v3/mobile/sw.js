@@ -1,10 +1,10 @@
 const CACHE_NAME = 'crestarena-v1';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/crestarena-logo.png',
-  '/crestarena-icon.png',
-  '/manifest.json'
+  '/mobile/',
+  '/mobile/index.html',
+  '/mobile/crestarena-logo.png',
+  '/mobile/crestarena-icon.png',
+  '/mobile/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
