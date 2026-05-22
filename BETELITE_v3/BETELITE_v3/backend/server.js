@@ -7,6 +7,13 @@ const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
 const path       = require('path');
 const cron       = require('node-cron');
+const { db } = require('./services/firebase');
+const webPush = require('web-push');
+
+// ── Web Push Setup
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BOd9H-v61Q2P5H-Qc_G8k3HjK4_JvTfH2e8_T5gP4v1fKx8_kP5_V3jX2_HqP5jK8_T3fR2v1fKx8_kP5_V3jX2_HqP5';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'XM6dAKiv7BQl6gwPNARft22R81qMs90L59aBougXPYY';
+webPush.setVapidDetails('mailto:admin@crestarena.com', VAPID_PUBLIC, VAPID_PRIVATE);
 
 const app    = express();
 const server = http.createServer(app);
@@ -57,6 +64,79 @@ const settingsRoutes = require('./routes/settings');
 const lobbyRoutes = require('./routes/lobby');
 
 app.use('/api/settings',    settingsRoutes);
+
+// ── Web Push Subscription Route
+app.post('/api/v1/notifications/subscribe', async (req, res) => {
+  const { uid, subscription } = req.body;
+  if (!uid || !subscription) return res.status(400).json({ error: 'Missing data' });
+  try {
+    if (db) await db.ref(`users/${uid}/push_subscription`).set(subscription);
+    res.json({ ok: true });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Helper to send push
+async function sendPushNotification(uid, payload) {
+  try {
+    if (!db) return;
+    const snap = await db.ref(`users/${uid}/push_subscription`).once('value');
+    const sub = snap.val();
+    if (sub) {
+      await webPush.sendNotification(sub, JSON.stringify(payload));
+    }
+  } catch(e) {
+    console.error('[PUSH] Failed:', e.message);
+  }
+}
+app.locals.sendPushNotification = sendPushNotification;
+
+// ── Action-Trigger Referral System
+app.post('/api/v1/referrals/process', async (req, res) => {
+  const { uid, action } = req.body;
+  if (!uid || !action) return res.status(400).json({ error: 'Missing data' });
+  
+  if (!db) return res.json({ ok: false, error: 'DB not connected' });
+  
+  try {
+    const userSnap = await db.ref(`users/${uid}`).once('value');
+    const user = userSnap.val();
+    if (!user || !user.pending_referral) return res.json({ ok: true, msg: 'No pending referral' });
+
+    const referrerId = user.pending_referral;
+    const rewardAmount = 5; // e.g., $5
+
+    // Transaction to credit referrer
+    const referrerRef = db.ref(`users/${referrerId}/wallet/balance`);
+    await referrerRef.transaction((currentBalance) => {
+      return (currentBalance || 0) + rewardAmount;
+    });
+
+    // Remove pending referral status
+    await db.ref(`users/${uid}/pending_referral`).remove();
+
+    // Fire realtime event and push notification
+    if (io) {
+      io.to(referrerId).emit('referral_completed', {
+        title: 'REFERRAL BONUS',
+        message: `You earned ₵${rewardAmount} from a referral!`,
+        amount: rewardAmount
+      });
+    }
+
+    sendPushNotification(referrerId, {
+      title: 'Referral Bonus Unlocked! 💸',
+      message: `Your referral just made a deposit. ₵${rewardAmount} has been credited to your wallet!`
+    });
+
+    res.json({ ok: true, rewarded: true, referrerId });
+  } catch(e) {
+    console.error('[REFERRAL] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.use('/api/matches',     matchRoutes(io, engine));
 app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));

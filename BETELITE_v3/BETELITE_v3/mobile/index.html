@@ -2794,6 +2794,20 @@
         window._socket.on('stream_ended', () => {
           if (document.getElementById('pg-watch')?.classList.contains('on')) loadWatchStreams();
         });
+
+        // ── Referral Completion Alert
+        window._socket.on('referral_completed', (data) => {
+          showCrestToast(data.title, data.message, 'success');
+          if (S.user) {
+            db.ref(`users/${S.user.uid}/wallet/balance`).once('value', s => {
+              if (s.exists()) {
+                const bal = s.val();
+                const balEl = document.getElementById('h-balance');
+                if(balEl) balEl.textContent = `₵${bal.toFixed(2)}`;
+              }
+            });
+          }
+        });
       }
     }
 
@@ -3668,11 +3682,63 @@
     //  TOAST
     // ══════════════════════════════════════════════════════
     let _tt;
+    function showCrestToast(title, message, type='info') {
+      let container = document.getElementById('crest-toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'crest-toast-container';
+        container.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:99999; display:flex; flex-direction:column; gap:10px; pointer-events:none; align-items:center; width:90%; max-width:400px;';
+        document.body.appendChild(container);
+      }
+
+      const isWin = type === 'success' || type === 'win';
+      const shadowColor = isWin ? 'rgba(0, 229, 117, 0.4)' : 'rgba(0, 175, 255, 0.4)';
+      const subColor = isWin ? '#00E575' : '#00AFFF';
+
+      const toastEl = document.createElement('div');
+      toastEl.style.cssText = `
+        background: #050505;
+        border: 1px solid #8A8D91;
+        box-shadow: 0 4px 15px ${shadowColor};
+        border-radius: 12px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+      `;
+
+      toastEl.innerHTML = `
+        <img src="/mobile/crestarena-icon.png" style="width:32px; height:32px; border-radius:50%; border:1px solid #333; flex-shrink:0;">
+        <div style="flex:1; min-width:0; text-align:left;">
+          <div style="font-family:var(--fd); font-weight:900; font-size:14px; color:#EEF0F8; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">${title}</div>
+          <div style="font-size:12px; color:${subColor}; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">${message}</div>
+        </div>
+      `;
+
+      container.appendChild(toastEl);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          toastEl.style.opacity = '1';
+          toastEl.style.transform = 'translateY(0) scale(1)';
+        });
+      });
+
+      setTimeout(() => {
+        toastEl.style.opacity = '0';
+        toastEl.style.transform = 'translateY(-20px) scale(0.95)';
+        setTimeout(() => toastEl.remove(), 400);
+      }, 4000);
+    }
+
+    // Backwards compatibility
     function toast(msg) {
-      const e = document.getElementById('toast');
-      e.textContent = msg; e.classList.add('on');
-      clearTimeout(_tt);
-      _tt = setTimeout(() => e.classList.remove('on'), 3200);
+      showCrestToast('SYSTEM NOTICE', msg, 'info');
     }
 
     // ══════════════════════════════════════════════════════
@@ -4743,10 +4809,102 @@
       });
     }
 
+    // ══════════════════════════════════════════════════════
+    // PWA & WEB PUSH SUBSCRIPTION LOGIC
+    // ══════════════════════════════════════════════════════
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      showCustomPWAModal();
+    });
+
+    function showCustomPWAModal() {
+      if (document.getElementById('pwa-modal')) return;
+      const modal = document.createElement('div');
+      modal.id = 'pwa-modal';
+      modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); z-index:100000; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.3s ease;';
+      modal.innerHTML = `
+        <div style="background:#050505; border:1px solid; border-image:linear-gradient(135deg, #8A8D91, #333) 1; border-radius:16px; width:90%; max-width:340px; padding:24px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); position:relative; transform:scale(0.9); transition:transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+          <img src="/mobile/crestarena-logo.png" style="width:60px; height:60px; margin-bottom:16px;">
+          <h2 style="font-family:var(--fd); font-size:24px; font-weight:900; color:#fff; text-transform:uppercase; letter-spacing:1px; margin:0 0 8px 0;">Premium Experience</h2>
+          <p style="color:var(--text2); font-size:14px; line-height:1.5; margin:0 0 24px 0;">Install CrestArena to unlock background streaming, native push notifications, and maximum performance.</p>
+          <button id="pwa-install-btn" style="width:100%; background:var(--gold); color:#000; font-family:var(--fd); font-size:18px; font-weight:800; text-transform:uppercase; border:none; padding:16px; border-radius:8px; cursor:pointer; box-shadow:0 0 20px rgba(0, 229, 117, 0.4);">INSTALL NOW</button>
+          <button id="pwa-close-btn" style="margin-top:16px; background:transparent; color:var(--text3); border:none; font-size:12px; font-weight:600; text-transform:uppercase; cursor:pointer;">Maybe Later</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      requestAnimationFrame(() => {
+        modal.style.opacity = '1';
+        modal.children[0].style.transform = 'scale(1)';
+      });
+
+      document.getElementById('pwa-close-btn').onclick = () => {
+        modal.style.opacity = '0';
+        setTimeout(() => modal.remove(), 300);
+      };
+
+      document.getElementById('pwa-install-btn').onclick = async () => {
+        modal.style.opacity = '0';
+        setTimeout(() => modal.remove(), 300);
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') subscribeToPush();
+          deferredPrompt = null;
+        }
+      };
+    }
+
+    const VAPID_PUBLIC_KEY = 'BOd9H-v61Q2P5H-Qc_G8k3HjK4_JvTfH2e8_T5gP4v1fKx8_kP5_V3jX2_HqP5jK8_T3fR2v1fKx8_kP5_V3jX2_HqP5'; // Placeholder
+
+    async function subscribeToPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+        if (S.user) {
+          await fetch('/api/v1/notifications/subscribe', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ uid: S.user.uid, subscription: sub })
+          });
+          showCrestToast('NOTIFICATIONS ENABLED', 'You will receive live match alerts.', 'success');
+        }
+      } catch (e) {
+        console.warn('Push subscription failed:', e);
+      }
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                showCrestToast('UPDATE AVAILABLE', 'Tap here to refresh the app.', 'info');
+                document.getElementById('crest-toast-container').lastChild.onclick = () => window.location.reload();
+              }
+            };
+          };
+        }).catch(err => {
           console.warn('Service Worker registration failed:', err);
         });
       });
