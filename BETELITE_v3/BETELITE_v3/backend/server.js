@@ -155,6 +155,19 @@ app.get('/api/streams', (req, res) => {
   res.json({ ok: true, streams });
 });
 
+// ── Admin: Clear stuck P2P matches
+app.get('/api/admin/clear_p2p', (req, res) => {
+  let count = 0;
+  engine.matches.forEach((m, id) => {
+    if (m.isP2P) {
+      engine.matches.delete(id);
+      if (engine.db) engine.db.ref(`live_matches/${id}`).remove();
+      count++;
+    }
+  });
+  res.json({ ok: true, message: `Cleared ${count} stuck P2P matches.` });
+});
+
 // ── Serve mobile frontend
 app.use('/mobile', express.static(path.join(__dirname, '../mobile')));
 app.get('/', (req, res) => res.redirect('/mobile'));

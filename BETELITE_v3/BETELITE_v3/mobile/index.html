@@ -4474,6 +4474,7 @@
           const videoEl = document.getElementById('webrtc-video');
           if (track.kind === 'video') {
             track.attach(videoEl);
+            videoEl.style.display = 'block'; // MAKE SURE IT SHOWS
             document.getElementById('stream-overlay').style.display = 'none';
           } else if (track.kind === 'audio') {
             track.attach(videoEl); // attaches to the same element or audio element
@@ -4506,6 +4507,7 @@
           Array.from(room.localParticipant.videoTrackPublications.values()).forEach(pub => {
              if (pub.videoTrack) pub.videoTrack.attach(videoEl);
           });
+          videoEl.style.display = 'block'; // MAKE SURE HOST CAN SEE IT
           
           document.getElementById('stream-overlay').style.display = 'none';
           toast('Stream is LIVE globally!');

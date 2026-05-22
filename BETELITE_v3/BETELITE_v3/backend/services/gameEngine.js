@@ -183,6 +183,10 @@ class GameEngine {
 
       const cfg = GAME_CONFIGS[match.gameType];
 
+      // If it's a P2P Wager match, DO NOT randomly simulate goals or time.
+      // Wait for player/AI to submit scores explicitly.
+      if (match.isP2P) return;
+
       // Increment game time
       match.minute += 0.5; // 30s real = 0.5 game minutes (compressed)
 
