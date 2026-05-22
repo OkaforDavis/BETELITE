@@ -3734,6 +3734,30 @@
         toastEl.style.transform = 'translateY(-20px) scale(0.95)';
         setTimeout(() => toastEl.remove(), 400);
       }, 4000);
+
+      // ── TRIGGER NATIVE CHROME NOTIFICATION ──
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          triggerNativeNotification(title, message);
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') triggerNativeNotification(title, message);
+          });
+        }
+      }
+    }
+
+    function triggerNativeNotification(title, message) {
+      try {
+        new Notification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+      } catch (e) {
+        // Fallback for Android Chrome which requires Service Worker for notifications
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+          });
+        }
+      }
     }
 
     // Backwards compatibility
