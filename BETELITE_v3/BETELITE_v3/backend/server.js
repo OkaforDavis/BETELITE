@@ -227,6 +227,14 @@ io.on('connection', (socket) => {
     console.log(`[STREAM] ${username} started stream for match ${matchId}`);
   });
 
+  socket.on('stream_end', ({ roomId }) => {
+    if (streamRooms.has(roomId)) {
+       streamRooms.delete(roomId);
+       io.emit('stream_ended', { roomId });
+       console.log(`[STREAM] Stream ${roomId} ended.`);
+    }
+  });
+
   // Viewer joins stream
   socket.on('stream_join', ({ roomId }) => {
     const room = streamRooms.get(roomId);
