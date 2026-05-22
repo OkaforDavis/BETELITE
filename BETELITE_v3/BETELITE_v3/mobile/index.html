@@ -4418,29 +4418,23 @@
 
     async function startWebRTCStream(matchId) {
       currentStreamMatchId = matchId;
-      document.getElementById('stream-overlay').innerHTML = 'Requesting Screen...';
+      document.getElementById('stream-overlay').innerHTML = 'Starting Stream...';
       
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        await connectToLiveKit(matchId, true, stream);
+        await connectToLiveKit(matchId, true);
       } catch (err) {
-        alert('Screen sharing failed. Trying camera fallback...');
-        try {
-          const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          await connectToLiveKit(matchId, true, cam);
-        } catch (e) {
-          alert('Could not start any stream.');
-        }
+        console.error("Start stream failed", err);
+        alert('Could not start any stream.');
       }
     }
 
     async function joinWebRTCStream(matchId) {
       currentStreamMatchId = matchId;
       document.getElementById('stream-overlay').innerHTML = 'Connecting...';
-      await connectToLiveKit(matchId, false, null);
+      await connectToLiveKit(matchId, false);
     }
 
-    async function connectToLiveKit(matchId, isHost, localMediaStream) {
+    async function connectToLiveKit(matchId, isHost) {
       try {
         const res = await fetch(STREAMING_URL + '/api/stream/token', {
           method: 'POST',
@@ -4454,27 +4448,40 @@
           return;
         }
 
-        const room = new LivekitClient.Room();
+        const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
         currentRoom = room;
 
         room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          const videoEl = document.getElementById('webrtc-video');
           if (track.kind === 'video') {
-            const videoEl = document.getElementById('webrtc-video');
             track.attach(videoEl);
             document.getElementById('stream-overlay').style.display = 'none';
+          } else if (track.kind === 'audio') {
+            track.attach(videoEl); // attaches to the same element or audio element
           }
         });
 
         await room.connect('wss://betelite-38umojt1.livekit.cloud', data.token);
 
-        if (isHost && localMediaStream) {
-          const videoTrack = localMediaStream.getVideoTracks()[0];
-          await room.localParticipant.publishTrack(videoTrack, { name: 'screen' });
+        if (isHost) {
+          try {
+             // Try screen share first
+             await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+          } catch(err) {
+             console.log("Screen share rejected or unsupported, trying camera...", err);
+             await room.localParticipant.setCameraEnabled(true);
+             await room.localParticipant.setMicrophoneEnabled(true);
+          }
+          
+          // attach local video so host can see themselves
           const videoEl = document.getElementById('webrtc-video');
-          videoEl.srcObject = localMediaStream;
+          Array.from(room.localParticipant.videoTrackPublications.values()).forEach(pub => {
+             if (pub.videoTrack) pub.videoTrack.attach(videoEl);
+          });
+          
           document.getElementById('stream-overlay').style.display = 'none';
           toast('Stream is LIVE globally!');
-        } else if (!isHost) {
+        } else {
           toast('Connected to stream!');
         }
 
