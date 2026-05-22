@@ -3277,7 +3277,7 @@
         <div class="menu-card-title">NOTIFICATIONS</div>
         <div class="setting-row">
           <div><div class="setting-label">Match Alerts</div><div class="setting-sub">Get notified when matches start</div></div>
-          <div class="toggle ${S.settings.notifications ? 'on' : ''}" onclick="toggleSetting('notifications',this)"></div>
+          <div class="toggle ${S.settings.notifications ? 'on' : ''}" onclick="toggleSetting('notifications',this); if(this.classList.contains('on')) subscribeToPush();"></div>
         </div>
         <div class="setting-row">
           <div><div class="setting-label">Tournament Alerts</div><div class="setting-sub">When your tournament starts</div></div>
@@ -3743,27 +3743,32 @@
       }, 4000);
 
       // ── TRIGGER NATIVE CHROME NOTIFICATION ──
-      if ('Notification' in window) {
-        if (Notification.permission === 'granted') {
-          triggerNativeNotification(title, message);
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(permission => {
-            if (permission === 'granted') triggerNativeNotification(title, message);
-          });
-        }
+      if ('Notification' in window && Notification.permission === 'granted') {
+        triggerNativeNotification(title, message);
       }
     }
 
     function triggerNativeNotification(title, message) {
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg && reg.showNotification) {
+            reg.showNotification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+          } else {
+            fallbackNativeNotification(title, message);
+          }
+        }).catch(err => {
+          fallbackNativeNotification(title, message);
+        });
+      } else {
+        fallbackNativeNotification(title, message);
+      }
+    }
+
+    function fallbackNativeNotification(title, message) {
       try {
         new Notification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
       } catch (e) {
-        // Fallback for Android Chrome which requires Service Worker for notifications
-        if (navigator.serviceWorker) {
-          navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
-          });
-        }
+        console.warn('Native notification error:', e);
       }
     }
 
@@ -4895,11 +4900,17 @@
       };
     }
 
-    const VAPID_PUBLIC_KEY = 'BOd9H-v61Q2P5H-Qc_G8k3HjK4_JvTfH2e8_T5gP4v1fKx8_kP5_V3jX2_HqP5jK8_T3fR2v1fKx8_kP5_V3jX2_HqP5'; // Placeholder
+    const VAPID_PUBLIC_KEY = 'BIhPv97VSOwJU9yWAiYmkdT5Qt5KcbzJiP7reUVlUbqAQUt_1Ij7X512Oj2q22foQUZ03svluzNbplOWbmxLPzU';
 
     async function subscribeToPush() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
       try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          console.warn('Notification permission denied');
+          return;
+        }
+
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
