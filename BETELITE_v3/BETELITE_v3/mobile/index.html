@@ -11,8 +11,8 @@
   <meta name="description" content="CrestArena — Premium Mobile Esports Arena. Stream, Compete, Win.">
   <title>CrestArena</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="crestarena-logo.png">
-  <link rel="apple-touch-icon" href="crestarena-logo.png">
+  <link rel="icon" type="image/png" href="/mobile/crestarena-icon.png">
+  <link rel="apple-touch-icon" href="/mobile/crestarena-icon.png">
   <link
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap"
     rel="stylesheet">
@@ -1998,7 +1998,7 @@
 ════════════════════════════════════════ -->
   <div id="auth-screen">
     <div class="auth-logo">
-      <img src="crestarena-icon.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
+      <img src="/mobile/crestarena-icon.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
       <div class="auth-logo-wm" style="letter-spacing:1px; font-size:28px;">Crest<em>Arena</em></div>
       <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
     </div>
@@ -2089,7 +2089,7 @@
     <div id="hd">
       <div class="hd-top">
         <div class="logo">
-          <img src="crestarena-logo.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
+          <img src="/mobile/crestarenalogo.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
         </div>
         <div class="hd-r">
           <!-- Notification Bell -->
@@ -4406,7 +4406,7 @@
       const div = document.createElement('div');
       div.style.cssText = 'display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; background:rgba(0,0,0,0.5); padding:8px; border-radius:8px;';
       div.innerHTML = `
-        <img src="${msg.avatar || 'crestarena-icon.png'}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
+        <img src="${msg.avatar || '/mobile/crestarena-icon.png'}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
         <div>
           <span style="font-size:12px; font-weight:bold; color:var(--gold);">${msg.username}</span><br>
           <span style="font-size:13px; color:#fff;">${msg.text}</span>
@@ -4448,7 +4448,7 @@
           return;
         }
 
-        const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+        const room = new LivekitClient.Room();
         currentRoom = room;
 
         room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
