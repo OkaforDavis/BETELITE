@@ -4481,8 +4481,21 @@
           
           document.getElementById('stream-overlay').style.display = 'none';
           toast('Stream is LIVE globally!');
+          
+          // Notify Node.js server so it appears in the Active Streams list
+          if (window._socket) {
+            window._socket.emit('stream_start', {
+              matchId,
+              username: S.user?.displayName || 'Host',
+              avatar: S.user?.photoURL || '',
+              game: 'CrestArena Live'
+            });
+          }
         } else {
           toast('Connected to stream!');
+          if (window._socket) {
+            window._socket.emit('stream_join', { roomId: `stream:${matchId}` });
+          }
         }
 
         // Add Chat UI overlay
