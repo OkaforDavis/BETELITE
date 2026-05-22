@@ -3035,6 +3035,7 @@
         
         <div style="background:#000; border-radius:8px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;" id="stream-container">
           <video id="webrtc-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; display:none;"></video>
+          <video id="webrtc-camera-video" autoplay playsinline style="position:absolute; bottom:12px; right:12px; width:90px; height:90px; object-fit:cover; border-radius:8px; border:2px solid var(--gold); display:none; z-index:4; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></video>
           <div id="stream-overlay" style="position:absolute; text-align:center;">
             <div style="font-size:32px; margin-bottom:8px;">📡</div>
             <div style="color:var(--text2); font-size:13px;" id="stream-status">No active stream</div>
@@ -4472,9 +4473,15 @@
 
         room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
           const videoEl = document.getElementById('webrtc-video');
+          const camEl = document.getElementById('webrtc-camera-video');
           if (track.kind === 'video') {
-            track.attach(videoEl);
-            videoEl.style.display = 'block'; // MAKE SURE IT SHOWS
+            if (publication.source === LivekitClient.Track.Source.Camera && camEl) {
+              track.attach(camEl);
+              camEl.style.display = 'block';
+            } else {
+              track.attach(videoEl);
+              videoEl.style.display = 'block';
+            }
             document.getElementById('stream-overlay').style.display = 'none';
           } else if (track.kind === 'audio') {
             track.attach(videoEl); // attaches to the same element or audio element
@@ -4504,10 +4511,18 @@
           
           // attach local video so host can see themselves
           const videoEl = document.getElementById('webrtc-video');
+          const camEl = document.getElementById('webrtc-camera-video');
           Array.from(room.localParticipant.videoTrackPublications.values()).forEach(pub => {
-             if (pub.videoTrack) pub.videoTrack.attach(videoEl);
+             if (pub.videoTrack) {
+                if (pub.source === LivekitClient.Track.Source.Camera && camEl) {
+                  pub.videoTrack.attach(camEl);
+                  camEl.style.display = 'block';
+                } else {
+                  pub.videoTrack.attach(videoEl);
+                  videoEl.style.display = 'block';
+                }
+             }
           });
-          videoEl.style.display = 'block'; // MAKE SURE HOST CAN SEE IT
           
           document.getElementById('stream-overlay').style.display = 'none';
           toast('Stream is LIVE globally!');
@@ -4586,9 +4601,18 @@
       if (container.dataset.fullscreen === 'true') {
         container.style.cssText = 'background:#000; border-radius:8px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;';
         container.dataset.fullscreen = 'false';
+        if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+        if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
       } else {
         container.style.cssText = 'position:fixed; top:0; left:0; right:0; margin:0 auto; max-width:430px; width:100%; height:100vh; height:100dvh; background:#000; z-index:500; display:flex; flex-direction:column; justify-content:center; align-items:center;';
         container.dataset.fullscreen = 'true';
+        if (container.requestFullscreen) {
+            container.requestFullscreen().then(() => {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(e => console.warn(e));
+                }
+            }).catch(()=>{});
+        }
       }
     }
 
