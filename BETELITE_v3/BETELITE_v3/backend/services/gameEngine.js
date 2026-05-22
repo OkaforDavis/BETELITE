@@ -64,6 +64,10 @@ class GameEngine {
         const data = snap.val();
         if (data) {
           Object.entries(data).forEach(([id, m]) => {
+            if (m.isP2P && m.minute >= 90) {
+              this.db.ref(`live_matches/${id}`).remove().catch(()=>{});
+              return;
+            }
             if (m.status !== MATCH_STATUS.FINISHED) this.matches.set(id, m);
           });
           console.log(`[ENGINE] Restored ${this.matches.size} live matches`);
@@ -181,11 +185,10 @@ class GameEngine {
       if (match.status === MATCH_STATUS.FINISHED) return;
       if (match.status === MATCH_STATUS.UPDATING) return;
 
-      const cfg = GAME_CONFIGS[match.gameType];
-
-      // If it's a P2P Wager match, DO NOT randomly simulate goals or time.
-      // Wait for player/AI to submit scores explicitly.
+      // DO NOT automatically simulate goals or time for real P2P wager matches
       if (match.isP2P) return;
+
+      const cfg = GAME_CONFIGS[match.gameType];
 
       // Increment game time
       match.minute += 0.5; // 30s real = 0.5 game minutes (compressed)
