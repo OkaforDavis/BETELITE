@@ -49,17 +49,15 @@ func HandleEscrowPayout(match *models.Match) error {
 	}
 
 	if match.Result.Winner == "draw" {
-		// Refund both players
-		_, err = tx.Exec(ctx, "UPDATE users SET balance = balance + $1 WHERE id IN ($2, $3)", escrow.Amount, escrow.CreatorID, escrow.AcceptorID)
+		err = AdjustBalance(ctx, tx, escrow.CreatorID, escrow.Amount, "wager_refund", match.ChallengeID)
 		if err != nil {
 			return err
 		}
-		// Log transactions
-		_, err = tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id) VALUES ($1, 'wager_refund', $2, $3), ($4, 'wager_refund', $2, $3)",
-			escrow.CreatorID, escrow.Amount, match.ChallengeID, escrow.AcceptorID)
+		err = AdjustBalance(ctx, tx, escrow.AcceptorID, escrow.Amount, "wager_refund", match.ChallengeID)
 		if err != nil {
 			return err
 		}
+
 		// Update escrow status
 		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'refunded' WHERE id = $1", escrow.ID)
 		if err != nil {
@@ -71,16 +69,8 @@ func HandleEscrowPayout(match *models.Match) error {
 		feePercent := 0.135
 		payout := int64(float64(escrow.Pool) * (1.0 - feePercent))
 
-		// Credit winner
-		_, err = tx.Exec(ctx, "UPDATE users SET balance = balance + $1 WHERE id = $2", payout, winnerID)
-		if err != nil {
-			return err
-		}
-
-		// Log transaction
 		metadata := fmt.Sprintf(`{"fee_deducted": %d, "loser_id": "%s"}`, escrow.Pool-payout, loserID)
-		_, err = tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id, metadata) VALUES ($1, 'wager_win', $2, $3, $4)",
-			winnerID, payout, match.ChallengeID, metadata)
+		err = AdjustBalance(ctx, tx, winnerID, payout, "wager_win", match.ChallengeID, metadata)
 		if err != nil {
 			return err
 		}

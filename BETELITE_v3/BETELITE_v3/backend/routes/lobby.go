@@ -11,6 +11,7 @@ import (
 	"betelite-go/middleware"
 	"betelite-go/models"
 	"betelite-go/services"
+	"betelite-go/utils"
 	"betelite-go/ws"
 )
 
@@ -25,7 +26,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			Username string `json:"username"`
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid payload"})
+			return utils.SendError(c, 400, "Invalid payload")
 		}
 
 		uid := middleware.GetUID(c)
@@ -35,7 +36,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		ctx := context.Background()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Database error"})
+			return utils.SendError(c, 500, "Database error")
 		}
 		defer tx.Rollback(ctx)
 
@@ -43,13 +44,12 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		var balance int64
 		err = tx.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&balance)
 		if err != nil || balance < req.Amount {
-			return c.Status(400).JSON(fiber.Map{"error": "Insufficient funds"})
+			return utils.SendError(c, 400, "Insufficient funds")
 		}
 
-		// Deduct balance
-		_, err = tx.Exec(ctx, "UPDATE users SET balance = balance - $1 WHERE id = $2", req.Amount, uid)
+		err = services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", challengeID)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to update balance"})
+			return utils.SendError(c, 500, "Failed to update balance")
 		}
 
 		// Create Escrow
@@ -57,18 +57,11 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			VALUES ($1, $2, $3, $4, 'waiting')`,
 			challengeID, uid, req.Amount, req.Amount) // Pool is just creator's amount for now
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to create escrow"})
-		}
-
-		// Log transaction
-		_, err = tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id) VALUES ($1, 'wager_hold', $2, $3)",
-			uid, -req.Amount, challengeID)
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to log transaction"})
+			return utils.SendError(c, 500, "Failed to create escrow")
 		}
 
 		if err := tx.Commit(ctx); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Transaction commit failed"})
+			return utils.SendError(c, 500, "Transaction commit failed")
 		}
 
 		challenge := models.Challenge{
@@ -84,7 +77,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		// Broadcast new challenge
 		ws.BroadcastEvent(hub, "lobby_update", challenge)
 
-		return c.JSON(fiber.Map{"success": true, "challenge": challenge})
+		return utils.SendSuccess(c, fiber.Map{
+			"challengeId": challengeID,
+		})
 	})
 
 	// Accept challenge
@@ -94,7 +89,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			Username    string `json:"username"`
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid payload"})
+			return utils.SendError(c, 400, "Invalid payload")
 		}
 
 		uid := middleware.GetUID(c)
@@ -102,53 +97,48 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Database error"})
+			return utils.SendError(c, 500, "Database error")
 		}
 		defer tx.Rollback(ctx)
 
 		// Get Escrow details
 		var escrow models.Escrow
+		var status string
+		var player1ID string
+		var amount int64
 		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
-			Scan(&escrow.ID, &escrow.CreatorID, &escrow.Amount, &escrow.Status)
-		if err != nil || escrow.Status != "waiting" {
-			return c.Status(400).JSON(fiber.Map{"error": "Challenge not available"})
+			Scan(&escrow.ID, &player1ID, &amount, &status)
+		if err != nil || status != "pending" {
+			return utils.SendError(c, 400, "Challenge not available")
 		}
 
-		if escrow.CreatorID == uid {
-			return c.Status(400).JSON(fiber.Map{"error": "Cannot accept your own challenge"})
+		if player1ID == uid {
+			return utils.SendError(c, 400, "Cannot accept your own challenge")
 		}
 
 		// Check acceptor's balance
 		var balance int64
 		err = tx.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&balance)
-		if err != nil || balance < escrow.Amount {
-			return c.Status(400).JSON(fiber.Map{"error": "Insufficient funds"})
+		if err != nil || balance < amount {
+			return utils.SendError(c, 400, "Insufficient funds")
 		}
 
-		// Deduct balance
-		_, err = tx.Exec(ctx, "UPDATE users SET balance = balance - $1 WHERE id = $2", escrow.Amount, uid)
+		err = services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to update balance"})
+			return utils.SendError(c, 500, "Failed to update balance")
 		}
 
 		// Update Escrow
 		matchID := fmt.Sprintf("match_%d", time.Now().UnixNano())
-		pool := escrow.Amount * 2
+		pool := amount * 2
 		_, err = tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = $2, status = 'held', match_id = $3 WHERE id = $4",
 			uid, pool, matchID, escrow.ID)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to update escrow"})
-		}
-
-		// Log transaction
-		_, err = tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id) VALUES ($1, 'wager_hold', $2, $3)",
-			uid, -escrow.Amount, req.ChallengeID)
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to log transaction"})
+			return utils.SendError(c, 500, "Failed to update escrow")
 		}
 
 		if err := tx.Commit(ctx); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Transaction commit failed"})
+			return utils.SendError(c, 500, "Transaction commit failed")
 		}
 
 		// Create match in Engine
@@ -169,6 +159,6 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		// Broadcast removal of challenge
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": req.ChallengeID})
 
-		return c.JSON(fiber.Map{"success": true, "matchId": matchID})
+		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
 	})
 }

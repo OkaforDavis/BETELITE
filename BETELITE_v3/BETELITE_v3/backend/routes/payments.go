@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,6 +16,7 @@ import (
 	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
+	"betelite-go/utils"
 )
 
 func SetupPaymentRoutes(api fiber.Router) {
@@ -29,9 +31,12 @@ func SetupPaymentRoutes(api fiber.Router) {
 		
 		geoInfo, err := services.DetectCurrency(ip)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to detect geo info"})
+			return utils.SendError(c, 500, "Failed to detect geo info")
 		}
-		return c.JSON(fiber.Map{"success": true, "geo": geoInfo})
+		return utils.SendSuccess(c, fiber.Map{
+			"currency": geoInfo.Currency,
+			"country":  geoInfo.CountryCode,
+		})
 	})
 
 	// Protected routes
@@ -43,13 +48,13 @@ func SetupPaymentRoutes(api fiber.Router) {
 			Amount int64 `json:"amount"` // in kobo/pesewas
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid payload"})
+			return utils.SendError(c, 400, "Invalid payload")
 		}
 
 		uid := middleware.GetUID(c)
 		email := middleware.GetEmail(c)
 		if email == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "User email required for payment"})
+			return utils.SendError(c, 400, "User email required for payment")
 		}
 
 		ip := c.IP()
@@ -80,7 +85,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 		client := &http.Client{}
 		resp, err := client.Do(httpReq)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to connect to payment gateway"})
+			return utils.SendError(c, 500, "Failed to connect to payment gateway")
 		}
 		defer resp.Body.Close()
 
@@ -95,14 +100,17 @@ func SetupPaymentRoutes(api fiber.Router) {
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&pResp); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to parse payment response"})
+			return utils.SendError(c, 500, "Failed to parse payment response")
 		}
 
 		if !pResp.Status {
-			return c.Status(400).JSON(fiber.Map{"error": pResp.Message})
+			return utils.SendError(c, 400, pResp.Message)
 		}
 
-		return c.JSON(fiber.Map{"success": true, "data": pResp.Data})
+		return utils.SendSuccess(c, fiber.Map{
+			"authorization_url": pResp.Data.AuthorizationUrl,
+			"reference":         pResp.Data.Reference,
+		})
 	})
 
 	// Webhook for Paystack (Public, protected by HMAC signature)
@@ -129,7 +137,9 @@ func SetupPaymentRoutes(api fiber.Router) {
 				Reference string `json:"reference"`
 				Amount    int64  `json:"amount"`
 				Status    string `json:"status"`
+				UserID    string `json:"user_id"`
 				Metadata  struct {
+					UserID       string `json:"user_id"`
 					CustomFields []struct {
 						VariableName string `json:"variable_name"`
 						Value        string `json:"value"`
@@ -143,11 +153,13 @@ func SetupPaymentRoutes(api fiber.Router) {
 		}
 
 		if event.Event == "charge.success" && event.Data.Status == "success" {
-			var uid string
-			for _, field := range event.Data.Metadata.CustomFields {
-				if field.VariableName == "user_id" {
-					uid = field.Value
-					break
+			uid := event.Data.Metadata.UserID
+			if uid == "" {
+				for _, field := range event.Data.Metadata.CustomFields {
+					if field.VariableName == "user_id" {
+						uid = field.Value
+						break
+					}
 				}
 			}
 
@@ -156,18 +168,13 @@ func SetupPaymentRoutes(api fiber.Router) {
 				ctx := context.Background()
 				tx, err := db.Pool.Begin(ctx)
 				if err == nil {
-					// Add to balance
-					_, err1 := tx.Exec(ctx, "UPDATE users SET balance = balance + $1 WHERE id = $2", event.Data.Amount, uid)
-					
-					// Insert Transaction log
-					_, err2 := tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id) VALUES ($1, 'deposit', $2, $3)",
-						uid, event.Data.Amount, event.Data.Reference)
-
-					if err1 == nil && err2 == nil {
-						tx.Commit(ctx)
-					} else {
+					err = services.AdjustBalance(ctx, tx, uid, event.Data.Amount, "deposit", event.Data.Reference)
+					if err != nil {
+						log.Printf("[ERROR] Webhook AdjustBalance failed: %v\n", err)
 						tx.Rollback(ctx)
+						return c.SendStatus(500)
 					}
+					tx.Commit(ctx)
 				}
 			}
 		}

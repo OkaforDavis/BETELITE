@@ -5,6 +5,7 @@ import (
 
 	"betelite-go/middleware"
 	"betelite-go/services"
+	"betelite-go/utils"
 )
 
 func SetupFootballRoutes(api fiber.Router) {
@@ -13,8 +14,8 @@ func SetupFootballRoutes(api fiber.Router) {
 	football.Get("/live", func(c *fiber.Ctx) error {
 		fixtures, err := services.FetchLiveFixtures()
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch live fixtures"})
+			return utils.SendError(c, 500, "Failed to fetch live fixtures")
 		}
-		return c.JSON(fiber.Map{"success": true, "fixtures": fixtures})
+		return utils.SendSuccess(c, fiber.Map{"fixtures": fixtures})
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
+	"betelite-go/utils"
 )
 
 func SetupNotificationRoutes(api fiber.Router) {
@@ -30,7 +31,7 @@ func SetupNotificationRoutes(api fiber.Router) {
 		}
 
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid subscription object"})
+			return utils.SendError(c, 400, "Invalid subscription object")
 		}
 
 		uid := middleware.GetUID(c)
@@ -43,9 +44,9 @@ func SetupNotificationRoutes(api fiber.Router) {
 			uid, req.Endpoint, req.Keys.P256dh, req.Keys.Auth)
 
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to save subscription"})
+			return utils.SendError(c, 500, "Failed to save subscription")
 		}
 
-		return c.JSON(fiber.Map{"success": true})
+		return utils.SendSuccess(c, fiber.Map{})
 	})
 }

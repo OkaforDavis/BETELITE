@@ -5,6 +5,7 @@ import (
 
 	"betelite-go/middleware"
 	"betelite-go/services"
+	"betelite-go/utils"
 )
 
 func SetupMatchRoutes(api fiber.Router) {
@@ -13,7 +14,7 @@ func SetupMatchRoutes(api fiber.Router) {
 	// Get all active matches
 	matchGroup.Get("/", func(c *fiber.Ctx) error {
 		activeMatches := services.Engine.GetActiveMatches()
-		return c.JSON(fiber.Map{"success": true, "matches": activeMatches})
+		return utils.SendSuccess(c, fiber.Map{"matches": activeMatches})
 	})
 
 	// Get specific match by ID
@@ -21,8 +22,8 @@ func SetupMatchRoutes(api fiber.Router) {
 		id := c.Params("id")
 		match := services.Engine.GetMatch(id)
 		if match == nil {
-			return c.Status(404).JSON(fiber.Map{"error": "Match not found"})
+			return utils.SendError(c, 404, "Match not found")
 		}
-		return c.JSON(fiber.Map{"success": true, "match": match})
+		return utils.SendSuccess(c, fiber.Map{"match": match})
 	})
 }

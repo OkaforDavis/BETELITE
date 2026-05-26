@@ -7,6 +7,8 @@ import (
 
 	"betelite-go/db"
 	"betelite-go/middleware"
+	"betelite-go/services"
+	"betelite-go/utils"
 )
 
 func SetupAdminRoutes(api fiber.Router) {
@@ -24,8 +26,7 @@ func SetupAdminRoutes(api fiber.Router) {
 		db.Pool.QueryRow(ctx, "SELECT COALESCE(SUM(pool), 0) FROM escrow WHERE status = 'held'").Scan(&totalEscrow)
 		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM escrow WHERE status = 'held'").Scan(&activeMatches)
 
-		return c.JSON(fiber.Map{
-			"success": true,
+		return utils.SendSuccess(c, fiber.Map{
 			"stats": fiber.Map{
 				"users":         userCount,
 				"totalEscrow":   totalEscrow,
@@ -39,7 +40,7 @@ func SetupAdminRoutes(api fiber.Router) {
 		ctx := context.Background()
 		rows, err := db.Pool.Query(ctx, "SELECT id, user_id, type, amount, created_at FROM transactions ORDER BY created_at DESC LIMIT 50")
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch transactions"})
+			return utils.SendError(c, 500, "Failed to fetch transactions")
 		}
 		defer rows.Close()
 
@@ -60,7 +61,7 @@ func SetupAdminRoutes(api fiber.Router) {
 			}
 		}
 
-		return c.JSON(fiber.Map{"success": true, "transactions": txs})
+		return utils.SendSuccess(c, fiber.Map{"transactions": txs})
 	})
 
 	// Add/Remove Balance
@@ -71,28 +72,25 @@ func SetupAdminRoutes(api fiber.Router) {
 			Reason string `json:"reason"`
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid payload"})
+			return utils.SendError(c, 400, "Invalid payload")
 		}
 
 		ctx := context.Background()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Database error"})
+			return utils.SendError(c, 500, "Database error")
 		}
 		defer tx.Rollback(ctx)
 
-		_, err = tx.Exec(ctx, "UPDATE users SET balance = balance + $1 WHERE id = $2", req.Amount, req.UserID)
+		err = services.AdjustBalance(ctx, tx, req.UserID, req.Amount, "admin_adjustment", req.Reason)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Failed to update balance"})
+			return utils.SendError(c, 500, "Failed to update balance")
 		}
-
-		_, err = tx.Exec(ctx, "INSERT INTO transactions (user_id, type, amount, ref_id) VALUES ($1, 'admin_adjustment', $2, $3)",
-			req.UserID, req.Amount, req.Reason)
 
 		if err := tx.Commit(ctx); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "Transaction commit failed"})
+			return utils.SendError(c, 500, "Transaction commit failed")
 		}
 
-		return c.JSON(fiber.Map{"success": true})
+		return utils.SendSuccess(c, fiber.Map{})
 	})
 }

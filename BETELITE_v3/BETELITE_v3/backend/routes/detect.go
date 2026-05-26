@@ -10,6 +10,7 @@ import (
 	"betelite-go/middleware"
 	"betelite-go/models"
 	"betelite-go/services"
+	"betelite-go/utils"
 )
 
 func SetupDetectRoutes(api fiber.Router) {
@@ -19,31 +20,31 @@ func SetupDetectRoutes(api fiber.Router) {
 	detect.Post("/match-result", func(c *fiber.Ctx) error {
 		matchID := c.FormValue("matchId")
 		if matchID == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "matchId is required"})
+			return utils.SendError(c, 400, "matchId is required")
 		}
 
 		file, err := c.FormFile("image")
 		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "image file is required"})
+			return utils.SendError(c, 400, "image file is required")
 		}
 
 		// Save file temporarily
 		tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("upload_%s_%s", matchID, file.Filename))
 		if err := c.SaveFile(file, tempPath); err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "failed to save image"})
+			return utils.SendError(c, 500, "failed to save image")
 		}
 		defer os.Remove(tempPath)
 
 		// Send to AI service
 		aiResult, err := services.VerifyMatchResult(tempPath)
 		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": "AI detection failed: " + err.Error()})
+			return utils.SendError(c, 500, "AI detection failed: "+err.Error())
 		}
 
 		// Verify against Engine
 		match := services.Engine.GetMatch(matchID)
 		if match == nil {
-			return c.Status(404).JSON(fiber.Map{"error": "Match not found in engine"})
+			return utils.SendError(c, 404, "Match not found in engine")
 		}
 
 		// Set the match result
@@ -60,9 +61,8 @@ func SetupDetectRoutes(api fiber.Router) {
 			go services.HandleEscrowPayout(match)
 		}
 
-		return c.JSON(fiber.Map{
-			"success": true,
-			"result":  aiResult,
+		return utils.SendSuccess(c, fiber.Map{
+			"result": aiResult,
 		})
 	})
 }
