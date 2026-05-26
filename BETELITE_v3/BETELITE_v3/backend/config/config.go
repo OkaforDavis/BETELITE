@@ -31,10 +31,10 @@ type Config struct {
 var Cfg Config
 
 func Load() {
-	// Try to load .env from parent directory (since backend/.env already exists)
-	err := godotenv.Load("../backend/.env")
+	// Try to load .env from current directory
+	err := godotenv.Load(".env")
 	if err != nil {
-		log.Println("[WARN] No .env file found in ../backend/.env, relying on system environment variables")
+		log.Println("[WARN] No .env file found, relying on system environment variables")
 	}
 
 	originsStr := getEnv("ALLOWED_ORIGINS", "*")
