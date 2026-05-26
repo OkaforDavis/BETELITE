@@ -7,50 +7,81 @@ const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
 const path       = require('path');
 const cron       = require('node-cron');
-const { db } = require('./services/firebase');
+const { db, admin } = require('./services/firebase');
 const webPush = require('web-push');
 
-// ── Web Push Setup
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BOd9H-v61Q2P5H-Qc_G8k3HjK4_JvTfH2e8_T5gP4v1fKx8_kP5_V3jX2_HqP5jK8_T3fR2v1fKx8_kP5_V3jX2_HqP5';
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'XM6dAKiv7BQl6gwPNARft22R81qMs90L59aBougXPYY';
-webPush.setVapidDetails('mailto:admin@crestarena.com', VAPID_PUBLIC, VAPID_PRIVATE);
+// ── Web Push Setup (require real keys in production)
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webPush.setVapidDetails('mailto:admin@crestarena.com', VAPID_PUBLIC, VAPID_PRIVATE);
+  console.log('[VAPID] ✅ Web Push configured');
+} else {
+  console.warn('[VAPID] ⚠️ VAPID keys missing — Web Push disabled. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env');
+}
+
+// ── CORS — restrict to your domain in production
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['*'];
 
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, {
-  cors: { origin: '*', methods: ['GET','POST'] },
+  cors: { origin: ALLOWED_ORIGINS, methods: ['GET','POST'] },
   pingTimeout: 60000,
   pingInterval: 25000,
 });
+
+// ── Auth middleware: verifies Firebase ID token
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'okafordavis8@gmail.com';
+
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid authorization header' });
+  }
+  const idToken = authHeader.split('Bearer ')[1];
+  try {
+    if (!admin) return next(); // Skip if admin SDK not initialized
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.uid = decoded.uid;
+    req.email = decoded.email;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  if (req.email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
 
 // ── Routes
 const matchRoutes      = require('./routes/matches');
 const tournamentRoutes = require('./routes/tournaments');
 const betRoutes        = require('./routes/bets');
 const detectRoutes     = require('./routes/detect');
-const streamRoutes     = require('./routes/stream');
 const footballRoutes   = require('./routes/football');
 
-// ── Payments & Auth (try to load if available)
+// ── Payments (try to load if available)
 let paymentsRoutes = null;
-let authRoutes = null;
 try {
-  // These may not be compiled yet, will fallback gracefully
   paymentsRoutes = require('./routes/payments');
 } catch (e) {
   console.log('[INFO] Payment routes not available yet');
 }
 
-// ── Firebase
-const { db } = require('./services/firebase');
-
 // ── Game Engine
 const GameEngine = require('./services/gameEngine');
-const engine     = new GameEngine(io, db);
+const engine     = new GameEngine(io, db, admin);
 
 // ── Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -65,10 +96,11 @@ const lobbyRoutes = require('./routes/lobby');
 
 app.use('/api/settings',    settingsRoutes);
 
-// ── Web Push Subscription Route
-app.post('/api/v1/notifications/subscribe', async (req, res) => {
-  const { uid, subscription } = req.body;
-  if (!uid || !subscription) return res.status(400).json({ error: 'Missing data' });
+// ── Web Push Subscription Route (auth-protected: only the user themselves)
+app.post('/api/v1/notifications/subscribe', verifyFirebaseToken, async (req, res) => {
+  const uid = req.uid; // from verified token, not from body
+  const { subscription } = req.body;
+  if (!subscription) return res.status(400).json({ error: 'Missing subscription data' });
   try {
     if (db) await db.ref(`users/${uid}/push_subscription`).set(subscription);
     res.json({ ok: true });
@@ -92,10 +124,11 @@ async function sendPushNotification(uid, payload) {
 }
 app.locals.sendPushNotification = sendPushNotification;
 
-// ── Action-Trigger Referral System
-app.post('/api/v1/referrals/process', async (req, res) => {
-  const { uid, action } = req.body;
-  if (!uid || !action) return res.status(400).json({ error: 'Missing data' });
+// ── Action-Trigger Referral System (auth-protected)
+app.post('/api/v1/referrals/process', verifyFirebaseToken, async (req, res) => {
+  const uid = req.uid; // from verified token
+  const { action } = req.body;
+  if (!action) return res.status(400).json({ error: 'Missing action' });
   
   if (!db) return res.json({ ok: false, error: 'DB not connected' });
   
@@ -105,9 +138,9 @@ app.post('/api/v1/referrals/process', async (req, res) => {
     if (!user || !user.pending_referral) return res.json({ ok: true, msg: 'No pending referral' });
 
     const referrerId = user.pending_referral;
-    const rewardAmount = 5; // e.g., $5
+    const rewardAmount = 5;
 
-    // Transaction to credit referrer
+    // Atomic transaction to credit referrer
     const referrerRef = db.ref(`users/${referrerId}/wallet/balance`);
     await referrerRef.transaction((currentBalance) => {
       return (currentBalance || 0) + rewardAmount;
@@ -142,7 +175,7 @@ app.use('/api/tournaments', tournamentRoutes(io, engine));
 app.use('/api/bets',        betRoutes(io, engine));
 app.use('/api/detect',      detectRoutes(io, engine));
 app.use('/api/football',    footballRoutes(io, engine));
-app.use('/api/stream',      streamRoutes(io));
+// Stream data served by /api/streams endpoint above
 app.use('/api/lobby',       lobbyRoutes(io, engine, db));
 
 // Payment routes (if available)
@@ -235,8 +268,8 @@ app.get('/api/streams', (req, res) => {
   res.json({ ok: true, streams });
 });
 
-// ── Admin: Clear stuck P2P matches
-app.get('/api/admin/clear_p2p', (req, res) => {
+// ── Admin: Clear stuck P2P matches (auth + admin only)
+app.get('/api/admin/clear_p2p', verifyFirebaseToken, requireAdmin, (req, res) => {
   let count = 0;
   engine.matches.forEach((m, id) => {
     if (m.isP2P) {
@@ -423,13 +456,14 @@ io.on('connection', (socket) => {
 //  CRON JOBS
 // ══════════════════════════════════════════
 
-// Every 30s: tick all active matches (increment game time)
+// Every 30s: tick all active matches (increment game time) + cleanup throttles
 cron.schedule('*/30 * * * * *', () => {
   engine.tickAllMatches(io);
+  engine.cleanupThrottles();
 });
 
-// Every 15s: fetch real football scores from API
-cron.schedule('*/15 * * * * *', async () => {
+// Every 2 minutes: fetch real football scores from API (free tier = 100 calls/day)
+cron.schedule('*/2 * * * *', async () => {
   try {
     const { syncFootballScores } = require('./services/footballAPI');
     const updates = await syncFootballScores();

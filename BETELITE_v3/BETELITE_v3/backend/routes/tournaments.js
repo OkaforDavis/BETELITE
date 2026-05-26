@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuid } = require('uuid');
 const axios = require('axios');
 const { sendNotification } = require('../services/notifications');
+const { db } = require('../services/firebase');
 
 // In-memory store
 const tournaments = new Map();
@@ -64,6 +65,19 @@ module.exports = (io, engine) => {
     if (t.players.find(p => p.userId === userId))
       return res.status(400).json({ error: 'Already joined' });
 
+    // Deduct entry fee from wallet atomically
+    if (db && t.entryFeeNGN > 0) {
+      const balRef = db.ref(`users/${userId}/wallet/balance`);
+      const result = await balRef.transaction((currentBalance) => {
+        const bal = currentBalance || 0;
+        if (bal < t.entryFeeNGN) return; // Abort if insufficient
+        return bal - t.entryFeeNGN;
+      });
+      if (!result.committed) {
+        return res.status(400).json({ error: 'Insufficient balance for entry fee' });
+      }
+    }
+
     t.players.push({ userId, username, joinedAt: Date.now(), wins: 0, losses: 0, goals: 0, points: 0 });
     t.prizePool += t.entryFeeNGN;
 
@@ -73,12 +87,11 @@ module.exports = (io, engine) => {
       io.emit('tournament_started', { id: t.id, name: t.name });
     }
 
-    sendNotification(userId, 'tournament', 'Tournament Joined', `You successfully registered for the ${t.name} tournament. Get ready!`, { tournamentId: t.id });
-
     io.emit('tournament_update', formatT(t));
 
+    // Send notification (single call, not duplicated)
     try {
-      await sendNotification(userId, 'tournament', 'Tournament Registration', `You successfully joined the ${t.name} tournament. Get ready!`, { tournamentId: t.id });
+      await sendNotification(userId, 'tournament', 'Tournament Joined', `You successfully registered for the ${t.name} tournament. Get ready!`, { tournamentId: t.id });
     } catch (err) {
       console.error('[NOTIF] Error:', err.message);
     }
@@ -235,8 +248,9 @@ async function checkProgression(t, io, engine) {
 
   // Collect winners of this round
   const winners = roundFixtures.map(f => {
-    const winnerId = f.scoreHome > f.scoreAway ? f.homeId : f.awayId;
-    const winName  = f.scoreHome > f.scoreAway ? f.homeName : f.awayName;
+    // If draw, home player advances (deterministic tiebreak)
+    const winnerId = f.scoreHome >= f.scoreAway ? f.homeId : f.awayId;
+    const winName  = f.scoreHome >= f.scoreAway ? f.homeName : f.awayName;
     return { userId: winnerId, username: winName };
   });
 
@@ -318,6 +332,28 @@ async function distributePrizes(t, io) {
     const amount = Math.round(netPool * PRIZE_CUTS[i]);
     payouts.push({ position: i + 1, userId: player.userId, username: player.username, amount });
     
+    // Actually credit the wallet atomically
+    if (db) {
+      try {
+        const balRef = db.ref(`users/${player.userId}/wallet/balance`);
+        await balRef.transaction((currentBalance) => {
+          return (currentBalance || 0) + amount;
+        });
+
+        // Log the transaction
+        await db.ref('transactions').push().set({
+          type: 'tournament_prize',
+          userId: player.userId,
+          tournamentId: t.id,
+          position: i + 1,
+          amount,
+          timestamp: Date.now(),
+        });
+      } catch (e) {
+        console.error(`[TOURNAMENT] Failed to credit ${player.userId}:`, e.message);
+      }
+    }
+
     // Send Notification
     sendNotification(player.userId, 'tournament', `Tournament Finished - #${i + 1}`, `You finished #${i + 1} in ${t.name}! Prize money of ₦${amount} has been deposited.`, { tournamentId: t.id, prize: amount });
   }
@@ -326,7 +362,6 @@ async function distributePrizes(t, io) {
   t.payouts = payouts;
   t.finalStandings = standings;
   console.log(`[TOURNAMENT] Prize distribution for ${t.name}:`, payouts);
-  // Note: actual wallet credit happens in the payments layer when Firebase is connected
 }
 
 function buildStandings(t) {

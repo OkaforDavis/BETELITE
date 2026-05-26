@@ -67,11 +67,29 @@ async function getGeolocationFromIP(ipAddress) {
 }
 
 /**
- * Middleware: Detect user currency from geolocation
+ * Geo-IP cache to avoid hitting ip-api.com on every request
+ */
+const geoCache = new Map(); // ip -> { data, ts }
+const GEO_CACHE_TTL = 600000; // 10 minutes
+
+/**
+ * Middleware: Detect user currency from geolocation (with caching)
  */
 const detectCurrency = async (req, res, next) => {
   try {
     const clientIP = getClientIP(req);
+    
+    // Check cache first
+    const cached = geoCache.get(clientIP);
+    if (cached && Date.now() - cached.ts < GEO_CACHE_TTL) {
+      req.geoLocation = cached.data;
+      req.userCurrency = cached.data.currency;
+      req.currencySymbol = cached.data.symbol;
+      req.countryCode = cached.data.countryCode;
+      req.countryName = cached.data.countryName;
+      return next();
+    }
+
     const geoLocation = await getGeolocationFromIP(clientIP);
 
     if (geoLocation) {
@@ -81,6 +99,13 @@ const detectCurrency = async (req, res, next) => {
       req.currencySymbol = CURRENCY_SYMBOLS[currencyCode] || currencyCode;
       req.countryCode = geoLocation.countryCode;
       req.countryName = geoLocation.countryName;
+      
+      // Cache the result
+      geoCache.set(clientIP, {
+        data: { ...geoLocation, currency: currencyCode, symbol: CURRENCY_SYMBOLS[currencyCode] || currencyCode },
+        ts: Date.now()
+      });
+      
       console.log(`[CURRENCY] ${geoLocation.countryName} → ${currencyCode}`);
     } else {
       req.userCurrency = 'USD';

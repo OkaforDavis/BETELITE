@@ -26,9 +26,9 @@ module.exports = (io, engine, db) => {
 
       // Check creator balance before allowing challenge post
       if (db) {
-        const snap = await db.ref(`users/${uid}`).once('value');
-        const user = snap.val() || {};
-        if ((user.wallet || user.balance || 0) < Number(amount)) {
+        const snap = await db.ref(`users/${uid}/wallet/balance`).once('value');
+        const balance = snap.val() || 0;
+        if (balance < Number(amount)) {
           return res.status(400).json({ error: 'Insufficient balance to post this challenge' });
         }
       }
@@ -80,42 +80,46 @@ module.exports = (io, engine, db) => {
       if (!challenge) return res.status(404).json({ error: 'Challenge not found or already accepted' });
       if (challenge.creatorId === uid) return res.status(400).json({ error: 'Cannot accept your own challenge' });
 
-      // Atomically deduct from both wallets into escrow
+      // Atomically deduct from both wallets into escrow using transactions
       if (db) {
-        const creatorRef = db.ref(`users/${challenge.creatorId}`);
-        const acceptorRef = db.ref(`users/${uid}`);
-
-        const [cSnap, aSnap] = await Promise.all([
-          creatorRef.once('value'),
-          acceptorRef.once('value'),
-        ]);
-        const cUser = cSnap.val() || {};
-        const aUser = aSnap.val() || {};
-
-        // Re-validate both balances at accept time
-        if ((cUser.wallet || cUser.balance || 0) < challenge.amount) {
+        // Validate and deduct creator balance atomically
+        const creatorBalRef = db.ref(`users/${challenge.creatorId}/wallet/balance`);
+        const creatorResult = await creatorBalRef.transaction((currentBalance) => {
+          const bal = currentBalance || 0;
+          if (bal < challenge.amount) return; // Abort transaction (returns undefined)
+          return bal - challenge.amount;
+        });
+        if (!creatorResult.committed) {
           lobbyChallenges.delete(challengeId);
           io.emit('lobby_challenge_removed', { id: challengeId });
           return res.status(400).json({ error: 'Challenger no longer has sufficient funds' });
         }
-        if ((aUser.wallet || aUser.balance || 0) < challenge.amount) {
+
+        // Validate and deduct acceptor balance atomically
+        const acceptorBalRef = db.ref(`users/${uid}/wallet/balance`);
+        const acceptorResult = await acceptorBalRef.transaction((currentBalance) => {
+          const bal = currentBalance || 0;
+          if (bal < challenge.amount) return; // Abort
+          return bal - challenge.amount;
+        });
+        if (!acceptorResult.committed) {
+          // Refund creator since we already deducted
+          await creatorBalRef.transaction((currentBalance) => {
+            return (currentBalance || 0) + challenge.amount;
+          });
           return res.status(400).json({ error: 'Insufficient balance to accept this challenge' });
         }
 
-        // Atomic multi-path update: deduct both + record escrow
+        // Record escrow
         const escrowId = `esc_${challengeId}`;
-        await db.ref().update({
-          [`users/${challenge.creatorId}/wallet`]: (cUser.wallet || cUser.balance || 0) - challenge.amount,
-          [`users/${uid}/wallet`]:                 (aUser.wallet || aUser.balance || 0) - challenge.amount,
-          [`escrow/${escrowId}`]: {
-            challengeId,
-            creatorId:  challenge.creatorId,
-            acceptorId: uid,
-            amount:     challenge.amount,
-            pool:       challenge.amount * 2,
-            status:     'held',
-            heldAt:     Date.now(),
-          },
+        await db.ref(`escrow/${escrowId}`).set({
+          challengeId,
+          creatorId:  challenge.creatorId,
+          acceptorId: uid,
+          amount:     challenge.amount,
+          pool:       challenge.amount * 2,
+          status:     'held',
+          heldAt:     Date.now(),
         });
         console.log(`[ESCROW] ₦${challenge.amount * 2} held for challenge ${challengeId}`);
 

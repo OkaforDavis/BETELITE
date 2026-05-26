@@ -41,9 +41,10 @@ const MATCH_STATUS = {
 };
 
 class GameEngine {
-  constructor(io, db) {
+  constructor(io, db, admin) {
     this.io       = io;
     this.db       = db;
+    this.admin    = admin;
     this.matches  = new Map();  // matchId → match object
     this.throttles= new Map();  // key → timestamp
     this.client   = process.env.ANTHROPIC_API_KEY
@@ -313,7 +314,6 @@ class GameEngine {
             .orderByChild('challengeId').equalTo(match.challengeId || match.id)
             .once('value');
           const escrowData = escrowSnap.val();
-          const escrowEntry = escrowData ? Object.values(escrowData)[0] : null;
           const escrowKey   = escrowData ? Object.keys(escrowData)[0]   : null;
 
           const PLATFORM_FEE = 0.10; // 10%
@@ -326,16 +326,15 @@ class GameEngine {
           else if (match.scoreAway > match.scoreHome) winnerId = match.awayId;
 
           if (winnerId) {
-            // Atomic: credit winner, close escrow, log fee
-            const winSnap = await this.db.ref(`users/${winnerId}`).once('value');
-            const winUser = winSnap.val() || {};
+            // ATOMIC: Use Firebase transaction to credit winner
+            const winnerBalRef = this.db.ref(`users/${winnerId}/wallet/balance`);
+            await winnerBalRef.transaction((currentBalance) => {
+              return (currentBalance || 0) + payout;
+            });
 
-            const atomicUpdate = {
-              [`users/${winnerId}/balance`]: (winUser.balance || 0) + payout,
-            };
-            if (escrowKey) atomicUpdate[`escrow/${escrowKey}/status`] = 'paid_out';
-
-            await this.db.ref().update(atomicUpdate);
+            if (escrowKey) {
+              await this.db.ref(`escrow/${escrowKey}/status`).set('paid_out');
+            }
 
             await this.db.ref('transactions').push().set({
               type:      'wager_win',
@@ -351,19 +350,22 @@ class GameEngine {
             console.log(`[ESCROW] ₦${payout} paid to ${winnerId} (fee ₦${fee}) for match ${match.id}`);
 
           } else {
-            // Draw — full refund, no platform fee
-            const [hSnap, aSnap] = await Promise.all([
-              this.db.ref(`users/${match.homeId}`).once('value'),
-              this.db.ref(`users/${match.awayId}`).once('value'),
-            ]);
+            // Draw — full refund via transactions, no platform fee
             const refundEach = match.wagerAmount;
-            const atomicUpdate = {
-              [`users/${match.homeId}/balance`]: (hSnap.val()?.balance || 0) + refundEach,
-              [`users/${match.awayId}/balance`]: (aSnap.val()?.balance || 0) + refundEach,
-            };
-            if (escrowKey) atomicUpdate[`escrow/${escrowKey}/status`] = 'refunded';
 
-            await this.db.ref().update(atomicUpdate);
+            const homeBalRef = this.db.ref(`users/${match.homeId}/wallet/balance`);
+            await homeBalRef.transaction((currentBalance) => {
+              return (currentBalance || 0) + refundEach;
+            });
+
+            const awayBalRef = this.db.ref(`users/${match.awayId}/wallet/balance`);
+            await awayBalRef.transaction((currentBalance) => {
+              return (currentBalance || 0) + refundEach;
+            });
+
+            if (escrowKey) {
+              await this.db.ref(`escrow/${escrowKey}/status`).set('refunded');
+            }
 
             await this.db.ref('transactions').push().set({
               type:      'wager_draw_refund',
@@ -605,25 +607,28 @@ JSON only.`,
       const bets = snap.val();
       if (!bets) return;
 
-      const updates = {};
-      Object.entries(bets).forEach(([betId, bet]) => {
-        if (bet.status !== 'pending' && bet.status !== 'live') return;
+      for (const [betId, bet] of Object.entries(bets)) {
+        if (bet.status !== 'pending' && bet.status !== 'live') continue;
         let won = false;
         if (bet.pick === 'home' && match.result.winner === 'home') won = true;
         if (bet.pick === 'away' && match.result.winner === 'away') won = true;
         if (bet.pick === 'draw' && match.result.winner === 'draw') won = true;
 
-        updates[`bets/${betId}/status`] = won ? 'won' : 'lost';
+        // Update bet status
+        await this.db.ref(`bets/${betId}/status`).set(won ? 'won' : 'lost');
+
         if (won) {
           const payout = Math.round(bet.amount * bet.odds);
-          updates[`users/${bet.userId}/wallet`] = (this.db.ServerValue?.increment || 0) + payout;
+          // Use transaction for atomic balance update
+          const balRef = this.db.ref(`users/${bet.userId}/wallet/balance`);
+          await balRef.transaction((currentBalance) => {
+            return (currentBalance || 0) + payout;
+          });
           this.io?.to(`user:${bet.userId}`).emit('bet_won', { betId, payout, match: `${match.home} vs ${match.away}` });
         } else {
           this.io?.to(`user:${bet.userId}`).emit('bet_lost', { betId });
         }
-      });
-
-      await this.db.ref().update(updates);
+      }
     } catch (e) {
       console.error('[ENGINE] Bet settlement error:', e.message);
     }
@@ -672,6 +677,14 @@ JSON only.`,
 
   isThrottled(key, ms) { return this.throttles.has(key) && Date.now() - this.throttles.get(key) < ms; }
   setThrottle(key) { this.throttles.set(key, Date.now()); }
+
+  // Clean up old throttle entries to prevent memory leak
+  cleanupThrottles() {
+    const now = Date.now();
+    for (const [key, ts] of this.throttles) {
+      if (now - ts > 60000) this.throttles.delete(key); // remove entries older than 1 minute
+    }
+  }
 }
 
 module.exports = GameEngine;
