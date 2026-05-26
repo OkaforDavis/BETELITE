@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/livekit/protocol/auth"
 
+	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/models"
@@ -160,5 +162,47 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": req.ChallengeID})
 
 		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
+	})
+
+	// LiveKit Token Generation
+	lobby.Post("/stream/token", func(c *fiber.Ctx) error {
+		var req struct {
+			RoomName string `json:"roomName"`
+			Identity string `json:"identity"`
+			IsHost   bool   `json:"isHost"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid payload")
+		}
+
+		apiKey := config.Cfg.LiveKitAPIKey
+		apiSecret := config.Cfg.LiveKitAPISecret
+		if apiKey == "" || apiSecret == "" {
+			return utils.SendError(c, 500, "LiveKit keys not configured")
+		}
+
+		at := auth.NewAccessToken(apiKey, apiSecret)
+		grant := &auth.VideoGrant{
+			RoomJoin: true,
+			Room:     req.RoomName,
+		}
+		if req.IsHost {
+			grant.CanPublish = &[]bool{true}[0]
+			grant.CanPublishData = &[]bool{true}[0]
+		} else {
+			grant.CanPublish = &[]bool{false}[0]
+			grant.CanPublishData = &[]bool{true}[0] // allow chatting
+		}
+
+		at.AddGrant(grant).
+			SetIdentity(req.Identity).
+			SetValidFor(time.Hour * 4)
+
+		token, err := at.ToJWT()
+		if err != nil {
+			return utils.SendError(c, 500, "Failed to create token")
+		}
+
+		return utils.SendSuccess(c, fiber.Map{"token": token})
 	})
 }

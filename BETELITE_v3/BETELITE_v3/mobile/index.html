@@ -3540,7 +3540,7 @@
         renderTournamentList(_allTournaments);
         if (_activeTournamentId) loadMyFixtures(_activeTournamentId);
       } catch (e) {
-        listEl.innerHTML = '<div class="empty-state"><div class="es-icon">❌</div><div class="es-title">Backend offline</div><div class="es-sub">Start the Node.js server</div></div>';
+        listEl.innerHTML = '<div class="empty-state"><div class="es-icon">❌</div><div class="es-title">Backend offline</div><div class="es-sub">Start the Go server</div></div>';
       }
     }
 
