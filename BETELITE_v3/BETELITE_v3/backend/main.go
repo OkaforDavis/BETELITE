@@ -86,6 +86,11 @@ func main() {
 		})
 	})
 
+	api.Get("/streams", func(c *fiber.Ctx) error {
+		// Mock logic for streams
+		return c.JSON(fiber.Map{"streams": []fiber.Map{}})
+	})
+
 	// Setup Routes
 	routes.SetupMatchRoutes(api)
 	routes.SetupLobbyRoutes(api, hub)

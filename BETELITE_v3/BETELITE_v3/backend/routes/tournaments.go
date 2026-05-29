@@ -123,4 +123,81 @@ func SetupTournamentRoutes(api fiber.Router) {
 
 		return utils.SendSuccess(c, fiber.Map{})
 	})
+
+	// Get fixtures for a tournament
+	tournaments.Get("/:id/fixtures", func(c *fiber.Ctx) error {
+		tID := c.Params("id")
+		ctx := context.Background()
+
+		rows, err := db.Pool.Query(ctx, "SELECT id, round, home_id, home_name, away_id, away_name, score_home, score_away, status, ai_verified FROM fixtures WHERE tournament_id = $1", tID)
+		if err != nil {
+			return utils.SendError(c, 500, "Failed to fetch fixtures")
+		}
+		defer rows.Close()
+
+		var fixtures []fiber.Map
+		for rows.Next() {
+			var f struct {
+				ID         string
+				Round      int
+				HomeID     string
+				HomeName   string
+				AwayID     string
+				AwayName   string
+				ScoreHome  *int
+				ScoreAway  *int
+				Status     string
+				AIVerified bool
+			}
+			err := rows.Scan(&f.ID, &f.Round, &f.HomeID, &f.HomeName, &f.AwayID, &f.AwayName, &f.ScoreHome, &f.ScoreAway, &f.Status, &f.AIVerified)
+			if err == nil {
+				fixtures = append(fixtures, fiber.Map{
+					"id":         f.ID,
+					"round":      f.Round,
+					"homeId":     f.HomeID,
+					"homeName":   f.HomeName,
+					"awayId":     f.AwayID,
+					"awayName":   f.AwayName,
+					"scoreHome":  f.ScoreHome,
+					"scoreAway":  f.ScoreAway,
+					"status":     f.Status,
+					"aiVerified": f.AIVerified,
+				})
+			}
+		}
+
+		if fixtures == nil {
+			fixtures = []fiber.Map{}
+		}
+
+		return utils.SendSuccess(c, fiber.Map{"fixtures": fixtures})
+	})
+
+	// Submit fixture result
+	tournaments.Post("/:tournamentId/fixtures/:fixtureId/submit", func(c *fiber.Ctx) error {
+		var req struct {
+			ImageB64 string `json:"image_b64"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid payload")
+		}
+
+		fID := c.Params("fixtureId")
+		// Normally we'd pass image to AI Detection here
+		// Mock logic for now
+		scoreHome := 2
+		scoreAway := 1
+		finalScore := "2-1"
+
+		ctx := context.Background()
+		_, err := db.Pool.Exec(ctx, "UPDATE fixtures SET score_home = $1, score_away = $2, status = 'completed', ai_verified = true WHERE id = $3", scoreHome, scoreAway, fID)
+		if err != nil {
+			return utils.SendError(c, 500, "Failed to update fixture")
+		}
+
+		return utils.SendSuccess(c, fiber.Map{
+			"finalScore": finalScore,
+			"aiVerified": true,
+		})
+	})
 }

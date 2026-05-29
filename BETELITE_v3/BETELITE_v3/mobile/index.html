@@ -20,8 +20,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-  <!-- Socket.io -->
-  <script src="/socket.io/socket.io.js" onerror="window._noSocket=true"></script>
   <!-- Paystack Inline SDK -->
   <script src="https://js.paystack.co/v1/inline.js"></script>
   <style>
@@ -2751,11 +2749,51 @@
         document.getElementById('conn-bar').className = 'connected';
       }
 
-      // Connect to Socket.io for real-time multiplayer
-      if (typeof io !== 'undefined' && !window._socket) {
-        window._socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+      // Connect to native Go WebSockets
+      if (!window._socket) {
+        class MockSocket {
+          constructor(url) {
+            this.ws = new WebSocket(url);
+            this.handlers = {};
+            this.ws.onopen = () => {
+              console.log('[SOCKET] Connected natively');
+              if (this.handlers['connect']) this.handlers['connect'].forEach(cb => cb());
+              // Automatically identify upon connection
+              if (S.user) {
+                this.emit('identify', { uid: S.user.uid });
+              }
+            };
+            this.ws.onmessage = (e) => {
+              const msgs = e.data.split('\n');
+              for (const msgStr of msgs) {
+                if (!msgStr) continue;
+                try {
+                  const msg = JSON.parse(msgStr);
+                  if (msg.event && this.handlers[msg.event]) {
+                    this.handlers[msg.event].forEach(cb => cb(msg.data));
+                  }
+                } catch(err) { console.error("WS Parse err", err); }
+              }
+            };
+            this.ws.onerror = (err) => console.error('[SOCKET] Error', err);
+            this.ws.onclose = () => console.log('[SOCKET] Closed');
+          }
+          on(event, cb) {
+            if (!this.handlers[event]) this.handlers[event] = [];
+            this.handlers[event].push(cb);
+          }
+          emit(event, data) {
+            if (this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ event, data }));
+            }
+          }
+        }
+        
+        let wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let wsHost = BACKEND_URL.replace(/^https?:\/\//, '');
+        window._socket = new MockSocket(`${wsProto}//${wsHost}/ws`);
+        
         window._socket.on('connect', () => {
-          window._socket.emit('identify', { userId: user.uid, username: S.profile.displayName });
           console.log('[SOCKET] Connected for multiplayer');
         });
         window._socket.on('match_state', (match) => updateMatchUI(match));

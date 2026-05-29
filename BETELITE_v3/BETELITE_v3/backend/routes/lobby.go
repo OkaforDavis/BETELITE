@@ -20,8 +20,41 @@ import (
 func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	lobby := api.Group("/lobby", middleware.AuthRequired())
 
+	// Get active challenges
+	lobby.Get("/", func(c *fiber.Ctx) error {
+		ctx := context.Background()
+		rows, err := db.Pool.Query(ctx, `
+			SELECT e.challenge_id, e.creator_id, e.amount, u.username, e.created_at
+			FROM escrow e
+			JOIN users u ON e.creator_id = u.id
+			WHERE e.status = 'waiting'
+		`)
+		if err != nil {
+			return utils.SendError(c, 500, "Database error")
+		}
+		defer rows.Close()
+
+		var challenges []models.Challenge
+		for rows.Next() {
+			var chal models.Challenge
+			var createdAt time.Time
+			err := rows.Scan(&chal.ID, &chal.CreatorID, &chal.Amount, &chal.CreatorName, &createdAt)
+			if err == nil {
+				chal.Game = "EA FC 24" // default
+				chal.Currency = "NGN"
+				chal.Timestamp = createdAt.UnixMilli()
+				challenges = append(challenges, chal)
+			}
+		}
+		if challenges == nil {
+			challenges = []models.Challenge{}
+		}
+
+		return c.JSON(fiber.Map{"ok": true, "challenges": challenges})
+	})
+
 	// Create a new challenge (Escrow hold)
-	lobby.Post("/challenge", func(c *fiber.Ctx) error {
+	lobby.Post("/create", func(c *fiber.Ctx) error {
 		var req struct {
 			Game     string `json:"game"`
 			Amount   int64  `json:"amount"` // Note: Frontend might send string/float, ensure it's converted to int64 kobo
@@ -77,7 +110,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 
 		// Broadcast new challenge
-		ws.BroadcastEvent(hub, "lobby_update", challenge)
+		ws.BroadcastEvent(hub, "lobby_new_challenge", challenge)
 
 		return utils.SendSuccess(c, fiber.Map{
 			"challengeId": challengeID,
@@ -85,7 +118,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	})
 
 	// Accept challenge
-	lobby.Post("/challenge/accept", func(c *fiber.Ctx) error {
+	lobby.Post("/accept", func(c *fiber.Ctx) error {
 		var req struct {
 			ChallengeID string `json:"challengeId"`
 			Username    string `json:"username"`
@@ -159,9 +192,61 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		services.Engine.AddMatch(match)
 
 		// Broadcast removal of challenge
-		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": req.ChallengeID})
+		ws.BroadcastEvent(hub, "lobby_challenge_accepted", map[string]interface{}{
+			"challengeId": req.ChallengeID,
+			"creatorId":   escrow.CreatorID,
+			"acceptorId":  uid,
+			"matchId":     matchID,
+		})
 
 		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
+	})
+
+	// Delete challenge
+	lobby.Post("/delete", func(c *fiber.Ctx) error {
+		var req struct {
+			ChallengeID string `json:"challengeId"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid payload")
+		}
+
+		uid := middleware.GetUID(c)
+		ctx := context.Background()
+		tx, err := db.Pool.Begin(ctx)
+		if err != nil {
+			return utils.SendError(c, 500, "Database error")
+		}
+		defer tx.Rollback(ctx)
+
+		var amount int64
+		var status string
+		err = tx.QueryRow(ctx, "SELECT amount, status FROM escrow WHERE challenge_id = $1 AND creator_id = $2 FOR UPDATE", req.ChallengeID, uid).Scan(&amount, &status)
+		if err != nil {
+			return utils.SendError(c, 404, "Challenge not found or unauthorized")
+		}
+		if status != "waiting" {
+			return utils.SendError(c, 400, "Challenge already accepted or completed")
+		}
+
+		// Refund
+		err = services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID)
+		if err != nil {
+			return utils.SendError(c, 500, "Failed to refund")
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'cancelled' WHERE challenge_id = $1", req.ChallengeID)
+		if err != nil {
+			return utils.SendError(c, 500, "Failed to cancel escrow")
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return utils.SendError(c, 500, "Transaction commit failed")
+		}
+
+		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": req.ChallengeID})
+
+		return utils.SendSuccess(c, fiber.Map{})
 	})
 
 	// LiveKit Token Generation

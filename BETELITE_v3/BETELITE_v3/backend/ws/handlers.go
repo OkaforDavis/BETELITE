@@ -54,15 +54,25 @@ func HandleMessage(hub *Hub, client *Client, msg WSMessage) {
 			hub.BroadcastToRoom("match:"+data.MatchID, out)
 		}
 
-	case "start_stream", "stop_stream", "stream_signal":
-		// These events were used for WebRTC, if needed we can broadcast to the match room
+	case "stream_start", "stream_end", "stream_join":
+		// Broadcast stream state to match room and all streams observers
 		var data struct {
 			MatchID string `json:"matchId"`
+			RoomID  string `json:"roomId"` // frontend sometimes sends roomId instead
 		}
-		if err := json.Unmarshal(msg.Data, &data); err == nil && data.MatchID != "" {
+		if err := json.Unmarshal(msg.Data, &data); err == nil {
 			out, _ := json.Marshal(msg)
-			hub.BroadcastToRoom("match:"+data.MatchID, out)
+			if data.MatchID != "" {
+				hub.BroadcastToRoom("match:"+data.MatchID, out)
+			} else if data.RoomID != "" {
+				// roomId is formatted as "stream:match_id", but we just broadcast to all for simplicity
+				hub.BroadcastAll(out)
+			}
 		}
+
+	case "ai_score_detected":
+		// Log AI score detection, in a full app we'd trigger the game engine to confirm
+		log.Printf("AI Score detected: %s", string(msg.Data))
 
 	default:
 		log.Printf("Unhandled websocket event: %s", msg.Event)

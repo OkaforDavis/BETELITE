@@ -26,4 +26,19 @@ func SetupMatchRoutes(api fiber.Router) {
 		}
 		return utils.SendSuccess(c, fiber.Map{"match": match})
 	})
+
+	// Locked room (private match)
+	matchGroup.Post("/locked-room", func(c *fiber.Ctx) error {
+		var req struct {
+			OpponentId string `json:"opponentId"`
+			Wager      int64  `json:"wager"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid payload")
+		}
+		
+		// Normally this would create a locked room challenge
+		// For now just return a success
+		return utils.SendSuccess(c, fiber.Map{"ok": true, "matchId": "locked_" + req.OpponentId})
+	})
 }
