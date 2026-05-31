@@ -4,13 +4,13 @@ services:
     env: docker
     rootDir: backend
     plan: free
-    healthCheckPath: /health
+    healthCheckPath: /api/health
     envVars:
       - key: GO_ENV
         value: production
       - key: PORT
         value: 3000
-      - key: CORS_ORIGINS
+      - key: ALLOWED_ORIGINS
         value: "*"
         # Ensure you set DATABASE_URL and other Go backend env vars in the Render dashboard.
 

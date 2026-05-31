@@ -2511,8 +2511,8 @@
 
   <script>
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.protocol === 'file:';
-    const BACKEND_URL = isLocal ? 'http://localhost:3000' : 'https://betelite-backend.onrender.com';
-    const STREAMING_URL = isLocal ? 'http://localhost:3001' : window.location.origin;
+    const BACKEND_URL = isLocal ? 'http://localhost:3000' : 'https://betelite-alvn.onrender.com';
+    const STREAMING_URL = BACKEND_URL; // Streaming is handled by the same Go backend
 
     // ══════════════════════════════════════════════════════
     //  FIREBASE CONFIG
