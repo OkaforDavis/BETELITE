@@ -143,7 +143,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		var amount int64
 		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
 			Scan(&escrow.ID, &player1ID, &amount, &status)
-		if err != nil || status != "pending" {
+		if err != nil || status != "waiting" {
 			return utils.SendError(c, 400, "Challenge not available")
 		}
 

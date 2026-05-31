@@ -26,6 +26,7 @@ type Config struct {
 	GeminiAPIKey               string
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
+	DetectionServiceURL        string
 }
 
 var Cfg Config
@@ -58,6 +59,7 @@ func Load() {
 		GeminiAPIKey:               getEnv("GEMINI_API_KEY", ""),
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
+		DetectionServiceURL:        getEnv("DETECTION_SERVICE_URL", "http://localhost:5000"),
 	}
 }
 

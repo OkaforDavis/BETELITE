@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"betelite-go/config"
 )
 
 type AIResult struct {
@@ -39,8 +41,11 @@ func VerifyMatchResult(imagePath string) (*AIResult, error) {
 	}
 	writer.Close()
 
-	// Assuming AI service runs locally on port 5000
-	req, err := http.NewRequest("POST", "http://localhost:5000/api/detect", body)
+	detectionURL := config.Cfg.DetectionServiceURL
+	if detectionURL == "" {
+		detectionURL = "http://localhost:5000"
+	}
+	req, err := http.NewRequest("POST", detectionURL+"/api/detect", body)
 	if err != nil {
 		return nil, err
 	}

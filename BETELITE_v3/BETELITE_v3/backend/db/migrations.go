@@ -24,6 +24,10 @@ func RunMigrations(ctx context.Context) error {
 			currency TEXT DEFAULT 'NGN',
 			push_sub JSONB,
 			pending_referral TEXT,
+			referral_code TEXT UNIQUE,
+			referred_by TEXT,
+			push_notifications BOOLEAN DEFAULT TRUE,
+			email_notifications BOOLEAN DEFAULT TRUE,
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		);`,
 		`CREATE TABLE IF NOT EXISTS transactions (
@@ -105,6 +109,14 @@ func RunMigrations(ctx context.Context) error {
 			message TEXT NOT NULL,
 			metadata JSONB,
 			read BOOLEAN DEFAULT FALSE,
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		);`,
+		`CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id SERIAL PRIMARY KEY,
+			user_id TEXT REFERENCES users(id),
+			endpoint TEXT NOT NULL UNIQUE,
+			p256dh TEXT NOT NULL,
+			auth TEXT NOT NULL,
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		);`,
 	}

@@ -4667,7 +4667,7 @@
           document.getElementById('stream-overlay').style.display = 'none';
           toast('Stream is LIVE globally!');
           
-          // Notify Node.js server so it appears in the Active Streams list
+          // Notify Go backend so it appears in the Active Streams list
           if (window._socket) {
             window._socket.emit('stream_start', {
               matchId,

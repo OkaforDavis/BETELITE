@@ -5,9 +5,9 @@
 ```
 Your Phone (Player)
       ↓
-mobile/index.html  ←→  Socket.io  ←→  backend/server.js
+mobile/index.html  ←→  WebSocket  ←→  backend (Go / Fiber)
                                             ↓              ↓
-                                       Firebase DB    Anthropic AI
+                                       PostgreSQL     Anthropic AI
                                             ↓
                                        Paystack/Flutterwave
 ```
@@ -58,18 +58,7 @@ const FIREBASE_CONFIG = {
   authDomain:        window.FIREBASE_AUTH_DOMAIN        || "YOUR_PROJECT.firebaseapp.com",
   ...
 ```
-Replace the `"YOUR_..."` values with your real Firebase values:
-```js
-const FIREBASE_CONFIG = {
-  apiKey:            "AIzaSy...",
-  authDomain:        "betelite-xxxxx.firebaseapp.com",
-  databaseURL:       "https://betelite-xxxxx-default-rtdb.firebaseio.com",
-  projectId:         "betelite-xxxxx",
-  storageBucket:     "betelite-xxxxx.appspot.com",
-  messagingSenderId: "123456789",
-  appId:             "1:123456789:web:abcdef",
-};
-```
+Replace the `"YOUR_..."` values with your real Firebase values.
 
 ### 1F — Get server-side credentials (for backend)
 1. **Project Settings** → **Service Accounts** tab
@@ -117,32 +106,50 @@ const PAYMENT_CONFIG = {
 
 ---
 
-## STEP 4 — Run backend locally (Firebase Studio)
+## STEP 4 — Set up PostgreSQL
 
-In Firebase Studio terminal:
+The Go backend uses PostgreSQL (not Firebase Realtime Database) for all data storage.
+
+### 4A — Local Development
+Install PostgreSQL locally or use Docker:
+```bash
+docker run -d --name betelite-pg -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=betelite -p 5432:5432 postgres:16
+```
+
+Set in `backend/.env`:
+```
+DATABASE_URL=postgres://postgres:secret@localhost:5432/betelite?sslmode=disable
+```
+
+### 4B — Production (Render / Supabase / Neon)
+Use a managed PostgreSQL service and set `DATABASE_URL` accordingly.
+
+---
+
+## STEP 5 — Run backend locally
+
+### Using Docker Compose (recommended)
+```bash
+docker-compose up --build -d
+```
+
+### Or run directly with Go
 ```bash
 cd backend
-cp .env.example .env
-# Edit .env with your keys
-
-npm install
-npm run dev
+go build -o betelite.exe .
+./betelite.exe
 ```
 
 You should see:
 ```
-╔═══════════════════════════════════════╗
-║   BETELITE Backend v2.0               ║
-║   Port: 3000                          ║
-║   Mobile: http://localhost:3000/mobile║
-╚═══════════════════════════════════════╝
+Server listening on port 3000
 ```
 
-Open the preview URL → you'll see the login screen.
+Open http://localhost:3000/api/health → you'll see `{"status":"ok","db":true}`
 
 ---
 
-## STEP 5 — First Login as Admin
+## STEP 6 — First Login as Admin
 
 1. Open the site
 2. Click **SIGN IN** tab
@@ -154,7 +161,7 @@ Open the preview URL → you'll see the login screen.
 
 ---
 
-## STEP 6 — Push to GitHub Pages (live test)
+## STEP 7 — Push to GitHub Pages (live test)
 
 ```bash
 # From your BETELITE repo
@@ -170,14 +177,13 @@ GitHub Pages will serve your `mobile/index.html` at:
 
 ---
 
-## STEP 7 — Deploy backend free (Render.com)
+## STEP 8 — Deploy backend free (Render.com)
 
 1. Go to https://render.com → Sign in with GitHub
 2. **New** → **Web Service** → Connect `BETELITE` repo
 3. Settings:
    - **Root Directory**: `backend`
-   - **Build Command**: `npm install`
-   - **Start Command**: `node server.js`
+   - **Environment**: `Docker`
 4. Add environment variables (from your `.env`)
 5. **Deploy** — takes ~3 minutes
 6. Copy your URL: `https://betelite-backend.onrender.com`
@@ -204,9 +210,9 @@ Replace with your actual Render URL.
 ## What needs backend
 
 - 🔄 Live match scores
-- 🔄 Real-time socket updates
+- 🔄 Real-time WebSocket updates
 - 🔄 AI screenshot detection
-- 🔄 Live streaming (WebRTC)
+- 🔄 Live streaming (WebRTC via LiveKit)
 - 🔄 Bet placement on real matches
 
 ---
