@@ -5,7 +5,7 @@ services:
     env: docker
     region: oregon
     plan: free
-    rootDir: BETELITE_v3/BETELITE_v3/backend
+    rootDir: backend
     healthCheckPath: /api/health
     envVars:
       - key: GO_ENV
@@ -14,39 +14,35 @@ services:
         value: 3000
       - key: ALLOWED_ORIGINS
         value: "*"
-      # Firebase
       - key: FIREBASE_PROJECT_ID
         value: betelite-crest
       - key: FIREBASE_DATABASE_URL
         value: https://betelite-crest-default-rtdb.firebaseio.com
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
-        sync: false  # Set this secret in Render dashboard
-      # AI / Detection
+        sync: false
       - key: GEMINI_API_KEY
-        sync: false  # Set in Render dashboard — get from https://aistudio.google.com/apikey
+        sync: false
       - key: DETECTION_SERVICE_URL
-        sync: false  # Set to your detection service URL on Render
+        sync: false
       - key: API_FOOTBALL_KEY
         sync: false
-      # Paystack Payment Processing
       - key: PAYSTACK_PUBLIC_KEY
         value: pk_live_e2ebd7a376bd6f1e106400bba86935f9e6df381d
       - key: PAYSTACK_SECRET_KEY
-        sync: false  # Set this secret in Render dashboard
-      # Database
+        sync: false
       - key: DATABASE_URL
-        sync: false  # Set PostgreSQL connection string in Render dashboard
+        sync: false
 
-  # AI Detection Service (LLM Vision for game score extraction)
+  # AI Detection Service (LLM Vision OCR)
   - type: web
     name: betelite-detection
     env: docker
     region: oregon
     plan: free
-    rootDir: BETELITE_v3/BETELITE_v3/detection_service
+    rootDir: detection_service
     healthCheckPath: /health
     envVars:
       - key: PORT
         value: 8000
       - key: GEMINI_API_KEY
-        sync: false  # Set in Render dashboard
+        sync: false
