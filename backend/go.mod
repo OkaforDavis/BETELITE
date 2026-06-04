@@ -1,6 +1,6 @@
 module betelite-go
 
-go 1.24
+go 1.26
 
 require (
 	firebase.google.com/go/v4 v4.20.0

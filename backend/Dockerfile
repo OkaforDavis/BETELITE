@@ -1,9 +1,6 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
-
-# Allow Go to automatically download newer toolchain if dependencies require it
-ENV GOTOOLCHAIN=auto
 
 # Install dependencies
 COPY go.mod go.sum ./
@@ -15,12 +12,13 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o betelite .
 
-# Run stage
+# Run stage - minimal alpine image
 FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-# Copy the binary from builder
 COPY --from=builder /app/betelite .
 
 EXPOSE 3000
