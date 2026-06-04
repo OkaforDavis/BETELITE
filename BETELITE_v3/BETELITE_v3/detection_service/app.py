@@ -1,22 +1,21 @@
 """
-BETELITE AI Detection Service - FastAPI + EasyOCR
-Detects game scores from uploaded screenshots
+BETELITE AI Detection Service - FastAPI + LLM Vision
+Detects game scores from uploaded screenshots using LLM vision APIs
+(OpenAI, Gemini, Groq) inspired by receipt-ocr approach.
 """
 import os
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 os.environ['PYTHONUTF8'] = '1'
 
-
-import cv2
-import numpy as np
 import base64
-import re
-import io
+import json
 import logging
+from typing import Optional, List
+
 from fastapi import FastAPI, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import easyocr
+from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,197 +31,201 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logger.info("Loading EasyOCR Model (this takes a moment)...")
-# cpu mode for Intel Iris (auto-fallback if no CUDA)
-reader = easyocr.Reader(['en'], gpu=False) 
-logger.info("EasyOCR Initialized.")
+# ─── Pydantic models for structured LLM output ───────────────────────
 
-class GameDetector:
-    def __init__(self):
-        self.confidence_threshold = 0.4
-        
-    def parse_football_score(self, texts, results=None, img_height=None, img_width=None, target_gamertag="", opponent_gamertag=""):
-        """
-        Spatial football score parser (FIFA, eFootball, DLS).
-        Uses bounding box positions to map Left/Right scores to Left/Right players.
-        """
-        import difflib
-        
-        if not (results and img_height and img_width and target_gamertag):
-            return {'detected': False, 'notes': 'Missing required parameters for spatial OCR'}
-            
-        target_gamertag = target_gamertag.upper()
-        opponent_gamertag = opponent_gamertag.upper() if opponent_gamertag else ""
-        
-        # 1. Find all digits <= 20 in the top 30% of the image
-        top_threshold = img_height * 0.35
-        top_scores = []
-        for (bbox, text, conf) in results:
-            if conf < self.confidence_threshold: continue
-            
-            clean_text = "".join(filter(str.isdigit, str(text)))
-            if not clean_text: continue
-            
-            avg_y = sum(pt[1] for pt in bbox) / 4
-            avg_x = sum(pt[0] for pt in bbox) / 4
-            
-            if avg_y < top_threshold:
-                val = int(clean_text)
-                if 0 <= val <= 20:
-                    top_scores.append({'val': val, 'x': avg_x})
-                    
-        # Sort scores from left to right based on X coordinate
-        top_scores.sort(key=lambda s: s['x'])
-        
-        if len(top_scores) < 2:
-            return {'detected': False, 'notes': f'Found {len(top_scores)} top scores, need 2'}
-            
-        left_score = top_scores[0]['val']
-        right_score = top_scores[1]['val']
-        
-        # 2. Find target gamertag side
-        target_x = None
-        for (bbox, text, conf) in results:
-            text_upper = str(text).upper()
-            ratio = difflib.SequenceMatcher(None, target_gamertag, text_upper).ratio()
-            if ratio > 0.75 or (target_gamertag in text_upper and len(target_gamertag) > 3):
-                target_x = sum(pt[0] for pt in bbox) / 4
-                break
-                
-        if target_x is None:
-            return {'detected': False, 'notes': f'Target {target_gamertag} not found'}
-            
-        # 3. Determine if target is Left or Right
-        is_target_left = target_x < (img_width / 2)
-        
-        target_final_score = left_score if is_target_left else right_score
-        opponent_final_score = right_score if is_target_left else left_score
-        
-        return {
-            'detected': True,
-            'target_player': {
-                'gamerTag': target_gamertag,
-                'score': target_final_score,
-                'side': 'LEFT' if is_target_left else 'RIGHT'
-            },
-            'opponent': {
-                'gamerTag': opponent_gamertag or "Opponent",
-                'score': opponent_final_score,
-                'side': 'RIGHT' if is_target_left else 'LEFT'
-            },
-            'notes': f'Spatial OCR success: {target_gamertag} ({target_final_score}) vs Opponent ({opponent_final_score})'
-        }
+class PlayerScore(BaseModel):
+    gamertag: str
+    score: int
+    side: Optional[str] = None  # LEFT / RIGHT for football
 
-    def parse_fps_score(self, texts, results, target_gamertag=""):
-        """Advanced heuristics for FPS scoreboards (COD Mobile, etc)"""
-        import difflib
-        
-        # If target_gamertag is provided, do a fuzzy search to find it in the texts
-        if target_gamertag:
-            target_gamertag = target_gamertag.upper()
-            best_match = None
-            best_ratio = 0
-            best_idx = -1
-            
-            for i, text in enumerate(texts):
-                text_upper = str(text).upper()
-                ratio = difflib.SequenceMatcher(None, target_gamertag, text_upper).ratio()
-                
-                # Check if it's a very close match OR if the gamertag is a direct substring of a longer phrase (like "SQUANTAKAY KILLS 19")
-                if ratio > 0.75 or (target_gamertag in text_upper and len(target_gamertag) > 3):
-                    best_ratio = max(ratio, 1.0 if target_gamertag in text_upper else ratio)
-                    best_match = text
-                    best_idx = i
-                    
-            if best_match:
-                # Look for numbers nearby in the text stream OR inside the same text block
-                found_score = None
-                
-                # First check if the score is in the exact same text block (e.g., "SQUANTAKAY KILLS 19")
-                m_inline = re.search(r'\b(\d+)\b', str(best_match))
-                if m_inline:
-                    found_score = int(m_inline.group(1))
-                else:
-                    # Check up to 5 elements ahead for a number
-                    for j in range(best_idx + 1, min(best_idx + 6, len(texts))):
-                        m = re.search(r'\b(\d+)\b', str(texts[j]))
-                        if m:
-                            found_score = int(m.group(1))
-                            break
-                        
-                if found_score is not None:
-                    return {
-                        'detected': True,
-                        'target_player': { 'gamerTag': best_match, 'score': found_score },
-                        'notes': f'Found target gamertag {best_match} with score {found_score}'
-                    }
-                else:
-                    return {
-                        'detected': False,
-                        'notes': f'Found gamertag {best_match} but could not extract nearby score'
-                    }
-            else:
-                return {
-                    'detected': False,
-                    'notes': f'Target gamertag {target_gamertag} not found in screenshot'
+class GameScoreResult(BaseModel):
+    detected: bool
+    game_type: Optional[str] = None
+    target_player: Optional[PlayerScore] = None
+    opponent: Optional[PlayerScore] = None
+    players: Optional[List[PlayerScore]] = None
+    notes: str = ""
+    raw_text: Optional[List[str]] = None
+
+# ─── LLM Client Setup ────────────────────────────────────────────────
+
+def get_llm_client() -> tuple[OpenAI, str]:
+    """
+    Returns (client, model_name) based on available env vars.
+    Priority: GEMINI_API_KEY > OPENAI_API_KEY > GROQ_API_KEY
+    Uses OpenAI-compatible API for all providers (like receipt-ocr does).
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    groq_key = os.getenv("GROQ_API_KEY", "")
+
+    if gemini_key:
+        return OpenAI(
+            api_key=gemini_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        ), os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    elif openai_key:
+        return OpenAI(api_key=openai_key), os.getenv("OPENAI_MODEL", "gpt-4o")
+    elif groq_key:
+        return OpenAI(
+            api_key=groq_key,
+            base_url="https://api.groq.com/openai/v1"
+        ), os.getenv("GROQ_MODEL", "llama-3.2-90b-vision-preview")
+    else:
+        raise RuntimeError(
+            "No LLM API key found. Set GEMINI_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY."
+        )
+
+# ─── Game Score Extraction ────────────────────────────────────────────
+
+GAME_SCORE_PROMPT = """You are a gaming score detection AI. Analyze this screenshot from a competitive mobile/console game match and extract the scores.
+
+Game type: {game_type}
+Target player gamertag: {target_gamertag}
+Opponent gamertag: {opponent_gamertag}
+
+Instructions:
+1. Identify the scoreboard or result screen in the screenshot
+2. Find the scores for each player/team
+3. If gamertags are provided, match them to the correct scores using fuzzy matching
+4. For football games (FIFA, eFootball, DLS, Dream League), identify LEFT and RIGHT sides
+5. For FPS games (COD Mobile, PUBG, Free Fire), find kill counts or match scores
+
+Return your response as VALID JSON ONLY (no markdown, no backticks, no explanation) with this exact structure:
+{{
+    "detected": true or false,
+    "game_type": "detected game type",
+    "target_player": {{
+        "gamertag": "player name from screenshot",
+        "score": <number>,
+        "side": "LEFT" or "RIGHT" (for football games only)
+    }},
+    "opponent": {{
+        "gamertag": "opponent name from screenshot",
+        "score": <number>,
+        "side": "LEFT" or "RIGHT" (for football games only)
+    }},
+    "notes": "brief description of what you detected"
+}}
+
+If you cannot detect scores, return:
+{{
+    "detected": false,
+    "notes": "reason why detection failed"
+}}
+"""
+
+
+def encode_image_to_base64(image_bytes: bytes) -> str:
+    """Encode image bytes to base64 data URI."""
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    return f"data:image/jpeg;base64,{b64}"
+
+
+def extract_game_score(
+    image_bytes: bytes,
+    game_type: str = "",
+    target_gamertag: str = "",
+    opponent_gamertag: str = ""
+) -> GameScoreResult:
+    """
+    Send screenshot to LLM vision API and extract game scores.
+    Uses the receipt-ocr pattern of OpenAI-compatible API with vision.
+    """
+    try:
+        client, model = get_llm_client()
+    except RuntimeError as e:
+        logger.error(str(e))
+        return GameScoreResult(detected=False, notes=str(e))
+
+    prompt = GAME_SCORE_PROMPT.format(
+        game_type=game_type or "auto-detect",
+        target_gamertag=target_gamertag or "unknown",
+        opponent_gamertag=opponent_gamertag or "unknown"
+    )
+
+    image_data_uri = encode_image_to_base64(image_bytes)
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_data_uri}
+                        }
+                    ]
                 }
+            ],
+            max_tokens=1024,
+            temperature=0.1,  # Low temp for consistent structured output
+        )
 
-        # Fallback to general player extraction
-        tags_and_scores = []
-        for i, text in enumerate(texts):
-            text_str = str(text)
-            if text_str.isdigit() and i > 0 and not str(texts[i-1]).isdigit():
-                tags_and_scores.append({
-                    'gamerTag': texts[i-1],
-                    'score': int(text_str)
-                })
+        raw_response = response.choices[0].message.content.strip()
+        logger.info(f"LLM raw response: {raw_response}")
 
-        if tags_and_scores:
-            return {
-                'detected': True,
-                'players': tags_and_scores,
-                'notes': 'Detected FPS players and scores'
-            }
+        # Clean response — strip markdown code fences if present
+        cleaned = raw_response
+        if cleaned.startswith("```"):
+            # Remove ```json ... ``` wrapper
+            lines = cleaned.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            cleaned = "\n".join(lines)
 
-        return {'detected': False, 'notes': 'No FPS scoreboard detected'}
+        result_data = json.loads(cleaned)
 
-    def analyze_image(self, game_type: str, image_bytes: bytes, target_gamertag: str = "", opponent_gamertag: str = ""):
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return GameScoreResult(
+            detected=result_data.get("detected", False),
+            game_type=result_data.get("game_type"),
+            target_player=PlayerScore(**result_data["target_player"]) if result_data.get("target_player") else None,
+            opponent=PlayerScore(**result_data["opponent"]) if result_data.get("opponent") else None,
+            notes=result_data.get("notes", ""),
+        )
 
-        if img is None:
-            raise ValueError("Invalid image file")
-
-        img_height, img_width = img.shape[:2]
-
-        # Run EasyOCR with full result including bounding boxes
-        results = reader.readtext(img)
-        texts = [res[1] for res in results if res[2] > self.confidence_threshold]
-        logger.info(f"Detected texts: {texts}")
-
-        game_type_lower = game_type.lower() if game_type else ""
-        if any(g in game_type_lower for g in ['fifa', 'efootball', 'dls', 'dream', 'football']):
-            parsed = self.parse_football_score(texts, results, img_height, img_width, target_gamertag, opponent_gamertag)
-        elif any(g in game_type_lower for g in ['cod', 'pubg', 'free fire', 'fps', 'call of duty']):
-            parsed = self.parse_fps_score(texts, results, target_gamertag)
-        else:
-            parsed = {'detected': False, 'notes': f'Unsupported game: {game_type}'}
-
-        parsed['raw_text'] = texts
-        return parsed
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
+        logger.error(f"Raw response was: {raw_response}")
+        return GameScoreResult(detected=False, notes=f"LLM returned invalid JSON: {str(e)}")
+    except Exception as e:
+        logger.error(f"LLM vision API error: {e}")
+        return GameScoreResult(detected=False, notes=f"LLM API error: {str(e)}")
 
 
-detector = GameDetector()
+# ─── API Endpoints ────────────────────────────────────────────────────
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "betelite-ai-fastapi"}
+    """Health check endpoint."""
+    has_key = bool(
+        os.getenv("GEMINI_API_KEY") or
+        os.getenv("OPENAI_API_KEY") or
+        os.getenv("GROQ_API_KEY")
+    )
+    return {
+        "status": "healthy",
+        "service": "betelite-ai-llm-vision",
+        "llm_configured": has_key
+    }
+
 
 @app.post("/api/detect/frame")
-async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), opponent_gamertag: str = Form(""), file: UploadFile = None, image_b64: str = Form("")):
-    """Endpoint to detect scores from either a multipart file or base64 string"""
+async def detect_frame(
+    game: str = Form(""),
+    target_gamertag: str = Form(""),
+    opponent_gamertag: str = Form(""),
+    file: UploadFile = None,
+    image_b64: str = Form("")
+):
+    """
+    Endpoint to detect game scores from either a multipart file or base64 string.
+    Compatible with the existing Go backend contract.
+    """
     image_bytes = None
-    
+
     try:
         if file and file.filename:
             image_bytes = await file.read()
@@ -233,17 +236,25 @@ async def detect_frame(game: str = Form(""), target_gamertag: str = Form(""), op
             image_bytes = base64.b64decode(image_b64)
         else:
             raise HTTPException(status_code=400, detail="No image provided")
-            
-        result = detector.analyze_image(game, image_bytes, target_gamertag, opponent_gamertag)
-        return result
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+
+        result = extract_game_score(
+            image_bytes,
+            game_type=game,
+            target_gamertag=target_gamertag,
+            opponent_gamertag=opponent_gamertag
+        )
+
+        return result.model_dump()
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Analysis error: {e}")
+        logger.error(f"Detection error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during analysis")
+
 
 if __name__ == "__main__":
     import uvicorn
-    print("\\nBETELITE AI Detection (FastAPI + EasyOCR) Starting...")
-    print("API: http://localhost:5000\\n")
+    print("\nBETELITE AI Detection (LLM Vision) Starting...")
+    print("API: http://localhost:5000\n")
     uvicorn.run(app, host="0.0.0.0", port=5000)

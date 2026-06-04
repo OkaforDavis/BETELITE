@@ -23,6 +23,10 @@ func SetupDetectRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "matchId is required")
 		}
 
+		gameType := c.FormValue("game", "")
+		targetGamertag := c.FormValue("target_gamertag", "")
+		opponentGamertag := c.FormValue("opponent_gamertag", "")
+
 		file, err := c.FormFile("image")
 		if err != nil {
 			return utils.SendError(c, 400, "image file is required")
@@ -35,8 +39,8 @@ func SetupDetectRoutes(api fiber.Router) {
 		}
 		defer os.Remove(tempPath)
 
-		// Send to AI service
-		aiResult, err := services.VerifyMatchResult(tempPath)
+		// Send to AI service with game context
+		aiResult, err := services.VerifyMatchResult(tempPath, gameType, targetGamertag, opponentGamertag)
 		if err != nil {
 			return utils.SendError(c, 500, "AI detection failed: "+err.Error())
 		}

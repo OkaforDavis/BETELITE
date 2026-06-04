@@ -74,6 +74,7 @@ func RunMigrations(ctx context.Context) error {
 			status TEXT DEFAULT 'open',
 			current_round INT DEFAULT 0,
 			winner_id TEXT,
+			created_by TEXT,
 			created_at TIMESTAMPTZ DEFAULT NOW()
 		);`,
 		`CREATE TABLE IF NOT EXISTS tournament_players (

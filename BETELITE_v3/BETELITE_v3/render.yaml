@@ -2,7 +2,7 @@ services:
   - type: web
     name: betelite-backend
     env: docker
-    rootDir: backend
+    rootDir: BETELITE_v3/BETELITE_v3/backend
     plan: free
     healthCheckPath: /api/health
     envVars:
@@ -12,11 +12,16 @@ services:
         value: 3000
       - key: ALLOWED_ORIGINS
         value: "*"
-        # Ensure you set DATABASE_URL and other Go backend env vars in the Render dashboard.
+        # Ensure you set DATABASE_URL, GEMINI_API_KEY, and other Go backend env vars in the Render dashboard.
 
   - type: web
     name: betelite-detection
     env: docker
-    rootDir: detection_service
+    rootDir: BETELITE_v3/BETELITE_v3/detection_service
     plan: free
-    # Make sure to set the ANTHROPIC_API_KEY in the Render dashboard if you use Anthropic models.
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+        # Set GEMINI_API_KEY (or OPENAI_API_KEY / GROQ_API_KEY) in the Render dashboard.
+        # The detection service uses LLM vision APIs for game score extraction.

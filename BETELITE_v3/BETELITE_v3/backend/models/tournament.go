@@ -16,6 +16,7 @@ type Tournament struct {
 	Status       string    `json:"status" db:"status"` // open, active, finished
 	CurrentRound int       `json:"currentRound" db:"current_round"`
 	WinnerID     string    `json:"winnerId,omitempty" db:"winner_id"`
+	CreatedBy    string    `json:"createdBy,omitempty" db:"created_by"`
 	CreatedAt    time.Time `json:"createdAt" db:"created_at"`
 }
 
