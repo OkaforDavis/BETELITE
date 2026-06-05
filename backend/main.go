@@ -44,6 +44,22 @@ func main() {
 	// Middleware
 	app.Use(middleware.Cors())
 
+	// Serve PWA static frontend
+	app.Static("/", "./static", fiber.Static{
+		Compress:  true,
+		ByteRange: true,
+		Index:     "index.html",
+	})
+
+	// SPA fallback — any non-API route serves index.html
+	app.Use(func(c *fiber.Ctx) error {
+		path := string(c.Request().URI().Path())
+		if len(path) < 4 || path[:4] != "/api" {
+			return c.SendFile("./static/index.html")
+		}
+		return c.Next()
+	})
+
 	// 6. Setup WebSocket Hub and Engine
 	hub := ws.NewHub()
 	go hub.Run()

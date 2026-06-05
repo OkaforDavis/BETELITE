@@ -6,7 +6,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
+# Copy source code and static frontend
 COPY . .
 
 # Build the application
@@ -19,7 +19,9 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
+# Copy binary and static frontend files
 COPY --from=builder /app/betelite .
+COPY --from=builder /app/static ./static
 
 EXPOSE 3000
 
