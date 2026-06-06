@@ -1996,7 +1996,7 @@
 ════════════════════════════════════════ -->
   <div id="auth-screen">
     <div class="auth-logo">
-      <img src="/mobile/crestarena-icon.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
+      <img src="/crestarena-icon.png" alt="CrestArena" class="auth-logo-svg" style="border-radius:12px;">
       <div class="auth-logo-wm" style="letter-spacing:1px; font-size:28px;">Crest<em>Arena</em></div>
       <div class="auth-logo-tag">ESPORTS · FOOTBALL · WIN</div>
     </div>
@@ -2087,7 +2087,7 @@
     <div id="hd">
       <div class="hd-top">
         <div class="logo">
-          <img src="/mobile/crestarenalogo_transparent.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
+          <img src="/crestarenalogo_transparent.png" alt="CrestArena" style="height:42px; width:auto; object-fit:contain;">
         </div>
         <div class="hd-r">
           <!-- Notification Bell -->
@@ -4058,9 +4058,13 @@
       const hostId = S.user?.uid;
       
       try {
+        const idToken = await S.user.getIdToken();
         const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + idToken
+          },
           body: JSON.stringify({ hostName, hostId, gameType, roomId })
         });
         
@@ -5023,7 +5027,7 @@
       modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); z-index:100000; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.3s ease;';
       modal.innerHTML = `
         <div style="background:#050505; border:1px solid; border-image:linear-gradient(135deg, #8A8D91, #333) 1; border-radius:16px; width:90%; max-width:340px; padding:24px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); position:relative; transform:scale(0.9); transition:transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
-          <img src="/mobile/crestarena-logo.png" style="width:60px; height:60px; margin-bottom:16px;">
+          <img src="/crestarena-logo.png" style="width:60px; height:60px; margin-bottom:16px;">
           <h2 style="font-family:var(--fd); font-size:24px; font-weight:900; color:#fff; text-transform:uppercase; letter-spacing:1px; margin:0 0 8px 0;">Premium Experience</h2>
           <p style="color:var(--text2); font-size:14px; line-height:1.5; margin:0 0 24px 0;">Install CrestArena to unlock background streaming, native push notifications, and maximum performance.</p>
           <button id="pwa-install-btn" style="width:100%; background:var(--gold); color:#000; font-family:var(--fd); font-size:18px; font-weight:800; text-transform:uppercase; border:none; padding:16px; border-radius:8px; cursor:pointer; box-shadow:0 0 20px rgba(0, 229, 117, 0.4);">INSTALL NOW</button>

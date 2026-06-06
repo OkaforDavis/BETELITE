@@ -13,6 +13,7 @@ import (
 
 	"betelite-go/config"
 	"betelite-go/middleware"
+	"betelite-go/models"
 	"betelite-go/services"
 	"betelite-go/utils"
 )
@@ -39,16 +40,37 @@ func SetupMatchRoutes(api fiber.Router) {
 	// Locked room (private match)
 	matchGroup.Post("/locked-room", func(c *fiber.Ctx) error {
 		var req struct {
-			OpponentId string `json:"opponentId"`
-			Wager      int64  `json:"wager"`
+			HostName string `json:"hostName"`
+			HostId   string `json:"hostId"`
+			GameType string `json:"gameType"`
+			RoomId   string `json:"roomId"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid payload")
 		}
 		
-		// Normally this would create a locked room challenge
-		// For now just return a success
-		return utils.SendSuccess(c, fiber.Map{"ok": true, "matchId": "locked_" + req.OpponentId})
+		if req.RoomId == "" || req.HostId == "" {
+			return utils.SendError(c, 400, "Missing required fields")
+		}
+
+		match := &models.Match{
+			ID:        req.RoomId,
+			Label:     req.GameType + " Stream",
+			Home:      req.HostName,
+			HomeID:    req.HostId,
+			Away:      "Waiting...",
+			AwayID:    "",
+			ScoreHome: 0,
+			ScoreAway: 0,
+			Minute:    0,
+			Status:    "live",
+			IsP2P:     true,
+		}
+
+		// Register in the engine so it appears in live matches
+		services.Engine.AddMatch(match)
+
+		return utils.SendSuccess(c, fiber.Map{"ok": true, "match": match})
 	})
 	// Submit score via AI Detection Service
 	matchGroup.Post("/submit-score", func(c *fiber.Ctx) error {
