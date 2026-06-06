@@ -11,8 +11,8 @@
   <meta name="description" content="CrestArena — Premium Mobile Esports Arena. Stream, Compete, Win.">
   <title>CrestArena</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="/mobile/crestarena-icon.png">
-  <link rel="apple-touch-icon" href="/mobile/crestarena-icon.png">
+  <link rel="icon" type="image/png" href="/crestarena-icon.png">
+  <link rel="apple-touch-icon" href="/crestarena-icon.png">
   <link
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap"
     rel="stylesheet">
@@ -3837,7 +3837,7 @@
       `;
 
       toastEl.innerHTML = `
-        <img src="/mobile/crestarena-icon.png" style="width:32px; height:32px; border-radius:50%; border:1px solid #333; flex-shrink:0;">
+        <img src="/crestarena-icon.png" style="width:32px; height:32px; border-radius:50%; border:1px solid #333; flex-shrink:0;">
         <div style="flex:1; min-width:0; text-align:left;">
           <div style="font-family:var(--fd); font-weight:900; font-size:14px; color:#EEF0F8; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">${title}</div>
           <div style="font-size:12px; color:${subColor}; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">${message}</div>
@@ -3869,7 +3869,7 @@
       if (navigator.serviceWorker) {
         navigator.serviceWorker.ready.then(reg => {
           if (reg && reg.showNotification) {
-            reg.showNotification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+            reg.showNotification(title, { body: message, icon: '/crestarena-icon.png' });
           } else {
             fallbackNativeNotification(title, message);
           }
@@ -3883,7 +3883,7 @@
 
     function fallbackNativeNotification(title, message) {
       try {
-        new Notification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+        new Notification(title, { body: message, icon: '/crestarena-icon.png' });
       } catch (e) {
         console.warn('Native notification error:', e);
       }
@@ -5108,7 +5108,7 @@
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/mobile/sw.js').then(reg => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
             installingWorker.onstatechange = () => {
