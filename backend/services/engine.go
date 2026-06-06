@@ -51,17 +51,19 @@ func (e *GameEngine) tickAll() {
 		
 		// Simulate random goals if it's an AI/simulated match
 		// For P2P matches, goals come from OCR/Manual input, but for this basic version:
-		if rand.Float32() < 0.05 {
-			match.ScoreHome++
-			ws.BroadcastEvent(e.Hub, "match_goal", map[string]interface{}{"matchId": id, "team": "home", "score": match.ScoreHome})
-		} else if rand.Float32() < 0.05 {
-			match.ScoreAway++
-			ws.BroadcastEvent(e.Hub, "match_goal", map[string]interface{}{"matchId": id, "team": "away", "score": match.ScoreAway})
+		if !match.IsP2P {
+			if rand.Float32() < 0.05 {
+				match.ScoreHome++
+				ws.BroadcastEvent(e.Hub, "match_goal", map[string]interface{}{"matchId": id, "team": "home", "score": match.ScoreHome})
+			} else if rand.Float32() < 0.05 {
+				match.ScoreAway++
+				ws.BroadcastEvent(e.Hub, "match_goal", map[string]interface{}{"matchId": id, "team": "away", "score": match.ScoreAway})
+			}
 		}
 
 		if match.Minute >= 90 {
 			match.Status = "finished"
-			e.handleMatchEnd(match)
+			e.HandleMatchEnd(match)
 		} else {
 			ws.BroadcastEvent(e.Hub, "match_tick", map[string]interface{}{"matchId": id, "minute": match.Minute, "scoreHome": match.ScoreHome, "scoreAway": match.ScoreAway})
 		}
@@ -81,7 +83,7 @@ func (e *GameEngine) GetMatch(id string) *models.Match {
 	return e.Matches[id]
 }
 
-func (e *GameEngine) handleMatchEnd(match *models.Match) {
+func (e *GameEngine) HandleMatchEnd(match *models.Match) {
 	winner := "draw"
 	if match.ScoreHome > match.ScoreAway {
 		winner = "home"

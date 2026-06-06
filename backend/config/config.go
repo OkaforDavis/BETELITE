@@ -27,6 +27,7 @@ type Config struct {
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	DetectionServiceURL        string
+	DetectionAPISecret         string
 }
 
 var Cfg Config
@@ -60,6 +61,7 @@ func Load() {
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 		DetectionServiceURL:        getEnv("DETECTION_SERVICE_URL", "http://localhost:5000"),
+		DetectionAPISecret:         getEnv("DETECTION_API_SECRET", "betelite_internal_secret_key_123"),
 	}
 }
 

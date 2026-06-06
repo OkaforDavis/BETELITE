@@ -2415,6 +2415,14 @@
 
         <div class="menu-card">
           <div class="menu-card-title">SETTINGS</div>
+          <div class="mi" id="admin-menu-item" onclick="navTo('admin')" style="display:none; background:rgba(255, 215, 0, 0.1);">
+            <div class="mi-ic" style="background:var(--gold); color:#000;">⭐</div>
+            <div class="mi-body">
+              <div class="mi-tx" style="color:var(--gold)">Admin Dashboard</div>
+              <div class="mi-sub">Manage platform, users, tournaments</div>
+            </div>
+            <span class="mi-ar">›</span>
+          </div>
           <div class="mi" onclick="openModal('settings')">
             <div class="mi-ic">⚙️</div>
             <div class="mi-body">
@@ -2435,6 +2443,59 @@
 
         <div style="height:20px"></div>
       </div>
+
+      <!-- ADMIN DASHBOARD PAGE -->
+      <div class="pg" id="pg-admin">
+        <div style="padding: 20px 16px;">
+          <h2 style="color: var(--gold); margin-bottom: 16px;">⭐ Admin Dashboard</h2>
+          
+          <div class="s3g" style="margin-bottom: 20px;">
+            <div class="s3">
+              <div class="s3-v" id="admin-stat-users">0</div>
+              <div class="s3-l">Total Users</div>
+            </div>
+            <div class="s3">
+              <div class="s3-v" style="color:var(--gold)" id="admin-stat-escrow">₦0</div>
+              <div class="s3-l">In Escrow</div>
+            </div>
+            <div class="s3">
+              <div class="s3-v" style="color:var(--blue)" id="admin-stat-matches">0</div>
+              <div class="s3-l">Live Matches</div>
+            </div>
+          </div>
+
+          <button class="cta" onclick="loadAdminStats()" style="margin-bottom: 20px;">🔄 Refresh Stats</button>
+
+          <div class="menu-card" style="margin-bottom:20px;">
+            <div class="menu-card-title">ADJUST USER BALANCE</div>
+            <div style="padding: 12px;">
+              <input class="fi" type="text" id="admin-bal-uid" placeholder="User ID">
+              <input class="fi" type="number" id="admin-bal-amt" placeholder="Amount (negative to deduct)">
+              <input class="fi" type="text" id="admin-bal-reason" placeholder="Reason for adjustment">
+              <button class="cta" onclick="adminAdjustBalance()">APPLY ADJUSTMENT</button>
+            </div>
+          </div>
+
+          <div class="menu-card" style="margin-bottom:20px;">
+            <div class="menu-card-title">CREATE TOURNAMENT</div>
+            <div style="padding: 12px;">
+              <input class="fi" type="text" id="admin-tourn-name" placeholder="Tournament Name">
+              <select class="fi" id="admin-tourn-game">
+                <option value="efootball">eFootball</option>
+                <option value="cod">COD Mobile</option>
+                <option value="freefire">Free Fire</option>
+                <option value="fifa">FIFA Mobile</option>
+                <option value="dream">Dream League</option>
+              </select>
+              <input class="fi" type="number" id="admin-tourn-entry" placeholder="Entry Fee (0 for Free)">
+              <input class="fi" type="number" id="admin-tourn-prize" placeholder="Prize Pool (for Free tournaments)">
+              <button class="cta" onclick="adminCreateTournament()" style="background:var(--green); color:#000;">CREATE TOURNAMENT</button>
+            </div>
+          </div>
+          <div style="height:40px"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- BOTTOM NAV -->
@@ -2747,6 +2808,11 @@
       if (user.email === ADMIN_EMAIL) {
         document.getElementById('conn-bar').textContent = '⭐ Admin Mode — okafordavis8@gmail.com';
         document.getElementById('conn-bar').className = 'connected';
+        const adminBtn = document.getElementById('admin-menu-item');
+        if (adminBtn) adminBtn.style.display = 'flex';
+      } else {
+        const adminBtn = document.getElementById('admin-menu-item');
+        if (adminBtn) adminBtn.style.display = 'none';
       }
 
       // Connect to native Go WebSockets
@@ -3034,13 +3100,19 @@
     // ══════════════════════════════════════════════════════
     function navTo(n) {
       document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
-      document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
-      document.getElementById(`pg-${n}`).classList.add('on');
-      document.getElementById(`nb-${n}`).classList.add('on');
+      document.querySelectorAll('.nb').forEach(b => { if(b) b.classList.remove('on'); });
+      
+      const pg = document.getElementById(`pg-${n}`);
+      if (pg) pg.classList.add('on');
+      
+      const nb = document.getElementById(`nb-${n}`);
+      if (nb) nb.classList.add('on');
+      
       // Load data for specific tabs
       if (n === 'watch') loadWatchStreams();
       if (n === 'live')  loadLiveMatches();
       if (n === 'tournaments') loadTournaments();
+      if (n === 'admin') loadAdminStats();
     }
     function fGame(el, g) {
       document.querySelectorAll('.gtab').forEach(t => t.classList.remove('on'));
@@ -3101,6 +3173,13 @@
             `<button class="cta" style="flex:1; background:var(--green); color:#000;" onclick="joinWebRTCStream('${data.id}')">👁️ WATCH STREAM</button>`
           }
         </div>
+        
+        ${isParticipant ? `
+        <div style="margin-top: 20px; text-align:center;">
+          <p style="font-size:12px; color:var(--text2); margin-bottom:8px;">Match finished? Submit screenshot to claim your winnings.</p>
+          <input type="file" id="match-score-upload" style="display:none" accept="image/*" onchange="submitMatchScore('${data.id}')">
+          <button class="cta" onclick="document.getElementById('match-score-upload').click()" style="background:#0d6efd; color:#fff; width:100%;">📸 SUBMIT MATCH RESULTS</button>
+        </div>` : ''}
         `;
         // Auto-check if a stream is already live for this match
         setTimeout(() => {
@@ -4995,6 +5074,142 @@
           console.warn('Service Worker registration failed:', err);
         });
       });
+    }
+    // ==========================================
+    // ADMIN DASHBOARD LOGIC
+    // ==========================================
+    async function loadAdminStats() {
+      if (!S.user || S.user.email !== ADMIN_EMAIL) return;
+      try {
+        const idToken = await S.user.getIdToken();
+        const res = await fetch(BACKEND_URL + '/api/admin/stats', {
+          headers: { 'Authorization': 'Bearer ' + idToken }
+        });
+        const data = await res.json();
+        if (data.ok && data.stats) {
+          document.getElementById('admin-stat-users').textContent = data.stats.users || 0;
+          document.getElementById('admin-stat-escrow').textContent = fmt(data.stats.totalEscrow || 0);
+          document.getElementById('admin-stat-matches').textContent = data.stats.activeMatches || 0;
+          toast('Admin stats refreshed');
+        } else {
+          toast('Failed to load stats: ' + (data.error || 'Unknown'));
+        }
+      } catch (e) {
+        toast('Error loading admin stats');
+        console.error(e);
+      }
+    }
+
+    async function adminAdjustBalance() {
+      if (!S.user || S.user.email !== ADMIN_EMAIL) return;
+      const uid = document.getElementById('admin-bal-uid').value.trim();
+      const amtStr = document.getElementById('admin-bal-amt').value.trim();
+      const reason = document.getElementById('admin-bal-reason').value.trim() || 'Admin Adjustment';
+      
+      if (!uid || !amtStr) { toast('Please enter UID and amount'); return; }
+      
+      const amount = parseInt(amtStr, 10);
+      if (isNaN(amount)) { toast('Invalid amount'); return; }
+
+      try {
+        const idToken = await S.user.getIdToken();
+        const res = await fetch(BACKEND_URL + '/api/admin/balance', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + idToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ userId: uid, amount: amount, reason: reason })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          toast(`Successfully adjusted balance by ${amount}`);
+          document.getElementById('admin-bal-uid').value = '';
+          document.getElementById('admin-bal-amt').value = '';
+        } else {
+          toast('Failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        toast('Error adjusting balance');
+        console.error(e);
+      }
+    }
+
+    async function adminCreateTournament() {
+      if (!S.user || S.user.email !== ADMIN_EMAIL) return;
+      
+      const name = document.getElementById('admin-tourn-name').value.trim();
+      const game = document.getElementById('admin-tourn-game').value;
+      const entryFee = parseInt(document.getElementById('admin-tourn-entry').value || '0', 10);
+      const prizePool = parseInt(document.getElementById('admin-tourn-prize').value || '0', 10);
+      
+      if (!name) { toast('Please enter a tournament name'); return; }
+      
+      try {
+        const idToken = await S.user.getIdToken();
+        const res = await fetch(BACKEND_URL + '/api/admin/tournaments', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + idToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: name,
+            game: game,
+            mode: '1v1',
+            icon: '🏆',
+            entryFee: entryFee,
+            maxPlayers: 8,
+            prizePool: prizePool
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          toast(`Tournament created successfully (${data.type})!`);
+          document.getElementById('admin-tourn-name').value = '';
+          document.getElementById('admin-tourn-entry').value = '';
+          document.getElementById('admin-tourn-prize').value = '';
+        } else {
+          toast('Failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        toast('Error creating tournament');
+        console.error(e);
+      }
+    }
+
+    async function submitMatchScore(matchId) {
+      const fileInput = document.getElementById('match-score-upload');
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+      const file = fileInput.files[0];
+      if (file.size > 5 * 1024 * 1024) {
+        toast('File too large. Maximum 5MB.');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('matchId', matchId);
+
+      toast('Uploading screenshot for AI Verification...');
+      try {
+        const idToken = await S.user.getIdToken();
+        const res = await fetch(BACKEND_URL + '/api/matches/submit-score', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + idToken },
+          body: formData
+        });
+        const data = await res.json();
+        if (data.ok) {
+          toast(`Verification complete! Score: ${data.scoreHome} - ${data.scoreAway}`);
+        } else {
+          toast('Failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        console.error(err);
+        toast('Error uploading score');
+      }
+      fileInput.value = ''; // Reset
     }
   </script>
 </body>

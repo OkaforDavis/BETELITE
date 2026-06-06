@@ -27,10 +27,16 @@ services:
       - key: API_FOOTBALL_KEY
         sync: false
       - key: PAYSTACK_PUBLIC_KEY
-        value: pk_live_e2ebd7a376bd6f1e106400bba86935f9e6df381d
+        sync: false
       - key: PAYSTACK_SECRET_KEY
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: DETECTION_API_SECRET
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
         sync: false
 
   # AI Detection Service (LLM Vision OCR)
@@ -45,4 +51,6 @@ services:
       - key: PORT
         value: 8000
       - key: GEMINI_API_KEY
+        sync: false
+      - key: DEPENDENCY_SECRET
         sync: false

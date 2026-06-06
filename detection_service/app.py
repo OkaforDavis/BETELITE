@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Optional, List
 
-from fastapi import FastAPI, UploadFile, Form, HTTPException
+from fastapi import FastAPI, UploadFile, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -25,11 +25,17 @@ app = FastAPI(title="BETELITE AI Detection")
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://betelite-alvn.onrender.com", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+API_SECRET = os.getenv("DEPENDENCY_SECRET", "betelite_internal_secret_key_123")
+
+async def verify_api_key(x_api_key: str = Header(None)):
+    if x_api_key != API_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
 
 # ─── Pydantic models for structured LLM output ───────────────────────
 
@@ -212,7 +218,7 @@ def health_check():
     }
 
 
-@app.post("/api/detect/frame")
+@app.post("/predict", dependencies=[Depends(verify_api_key)])
 async def detect_frame(
     game: str = Form(""),
     target_gamertag: str = Form(""),
@@ -229,6 +235,8 @@ async def detect_frame(
     try:
         if file and file.filename:
             image_bytes = await file.read()
+            if len(image_bytes) > 5 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
         elif image_b64:
             # Strip base64 header if present
             if 'base64,' in image_b64:
@@ -256,5 +264,5 @@ async def detect_frame(
 if __name__ == "__main__":
     import uvicorn
     print("\nBETELITE AI Detection (LLM Vision) Starting...")
-    print("API: http://localhost:5000\n")
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    print("API: http://localhost:8000\n")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
