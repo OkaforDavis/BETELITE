@@ -23,7 +23,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: DETECTION_SERVICE_URL
-        sync: false
+        value: https://betelite-detection.onrender.com
       - key: API_FOOTBALL_KEY
         sync: false
       - key: PAYSTACK_PUBLIC_KEY

@@ -4719,7 +4719,7 @@
 
     async function connectToLiveKit(matchId, isHost, mode='screen') {
       try {
-        const res = await fetch(STREAMING_URL + '/api/stream/token', {
+        const res = await fetch(STREAMING_URL + '/api/lobby/stream/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomName: matchId, identity: S.user?.displayName || 'Viewer_' + Math.floor(Math.random()*100), isHost })
