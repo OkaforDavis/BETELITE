@@ -4031,6 +4031,50 @@
       }
     }
 
+    async function startLockedRoom() {
+      if (!auth.currentUser) return showAuth();
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;';
+      modal.innerHTML = `
+        <div style="background:var(--bg2); padding:24px; border-radius:12px; width:90%; max-width:320px; border:1px solid var(--border2);">
+          <h3 style="margin-top:0; color:var(--gold);">Start Locked Room</h3>
+          <p style="font-size:14px; color:#ccc; margin-bottom:20px;">Enter Game Name (e.g. FIFA, COD Mobile):</p>
+          <input type="text" id="locked-game-name" class="fi" value="FIFA 1v1" style="margin-bottom:16px;">
+          <button onclick="executeLockedRoom()" class="cta" style="width:100%; margin-bottom:10px;">CREATE ROOM</button>
+          <button onclick="this.parentElement.parentElement.remove()" class="btn" style="width:100%; background:transparent; border:1px solid var(--border2); color:#fff;">CANCEL</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    
+    window.executeLockedRoom = async function() {
+      const gameType = document.getElementById('locked-game-name').value.trim();
+      if (!gameType) return;
+      document.body.lastChild.remove(); // remove modal
+      
+      const roomId = 'room_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+      const hostName = S.user?.displayName || 'Player';
+      const hostId = S.user?.uid;
+      
+      try {
+        const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostName, hostId, gameType, roomId })
+        });
+        
+        if (!res.ok) throw new Error('Failed to create room');
+        const data = await res.json();
+        
+        // Instantly open the Match Hub as the Host
+        openModal('match-details', data.match);
+      } catch (err) {
+        toast('❌ Failed to start locked room');
+        console.error(err);
+      }
+    }
+
     async function loadLiveMatches() {
       try {
         const res = await fetch(BACKEND_URL + '/api/matches');
