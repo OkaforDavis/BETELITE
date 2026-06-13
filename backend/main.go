@@ -103,8 +103,26 @@ func main() {
 	})
 
 	api.Get("/streams", func(c *fiber.Ctx) error {
-		// Mock logic for streams
-		return c.JSON(fiber.Map{"streams": []fiber.Map{}})
+		// Return live P2P matches as active streams
+		activeMatches := services.Engine.GetActiveMatches()
+		var streams []fiber.Map
+		for _, m := range activeMatches {
+			if m.IsP2P && m.Status == "live" {
+				streams = append(streams, fiber.Map{
+					"id":       m.ID,
+					"host":     m.Home,
+					"hostId":   m.HomeID,
+					"game":     m.Label,
+					"viewers":  0,
+					"status":   "live",
+					"matchId":  m.ID,
+				})
+			}
+		}
+		if streams == nil {
+			streams = []fiber.Map{}
+		}
+		return c.JSON(fiber.Map{"streams": streams})
 	})
 
 	// Setup Routes

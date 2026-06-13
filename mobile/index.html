@@ -11,8 +11,8 @@
   <meta name="description" content="CrestArena — Premium Mobile Esports Arena. Stream, Compete, Win.">
   <title>CrestArena</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="/mobile/crestarena-icon.png">
-  <link rel="apple-touch-icon" href="/mobile/crestarena-icon.png">
+  <link rel="icon" type="image/png" href="/crestarena-icon.png">
+  <link rel="apple-touch-icon" href="/crestarena-icon.png">
   <link
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&family=Oswald:wght@500;700&display=swap"
     rel="stylesheet">
@@ -2631,6 +2631,27 @@
     let db = null, auth = null;
 
     // ══════════════════════════════════════════════════════
+    //  AUTH FETCH — auto-attaches Firebase token to all API calls
+    // ══════════════════════════════════════════════════════
+    async function authFetch(url, options = {}) {
+      const user = auth && auth.currentUser;
+      if (user) {
+        try {
+          const idToken = await user.getIdToken();
+          if (!options.headers) options.headers = {};
+          // Don't override Content-Type for FormData (browser sets it with boundary)
+          if (!(options.body instanceof FormData) && !options.headers['Content-Type']) {
+            options.headers['Content-Type'] = 'application/json';
+          }
+          options.headers['Authorization'] = 'Bearer ' + idToken;
+        } catch (e) {
+          console.warn('[authFetch] Could not get token:', e);
+        }
+      }
+      return fetch(url, options);
+    }
+
+    // ══════════════════════════════════════════════════════
     //  FIREBASE INIT
     // ══════════════════════════════════════════════════════
     function initFirebase() {
@@ -3651,7 +3672,7 @@
       if (!listEl) return;
       listEl.innerHTML = '<div class="empty-state"><div class="es-icon">⏳</div><div class="es-title">Loading...</div></div>';
       try {
-        var res = await fetch(BACKEND_URL + '/api/tournaments');
+        var res = await authFetch(BACKEND_URL + '/api/tournaments');
         var data = await res.json();
         _allTournaments = data.tournaments;
         renderTournamentList(_allTournaments);
@@ -3710,8 +3731,8 @@
       if (!S.user) { toast('Please login first'); return; }
       btn.disabled = true; btn.textContent = 'Joining...';
       try {
-        var res = await fetch(BACKEND_URL + '/api/tournaments/' + id + '/join', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        var res = await authFetch(BACKEND_URL + '/api/tournaments/' + id + '/join', {
+          method: 'POST',
           body: JSON.stringify({ userId: S.user.uid, username: S.profile.displayName })
         });
         var data = await res.json();
@@ -3732,7 +3753,7 @@
     async function loadMyFixtures(id) {
       if (!S.user) return;
       try {
-        var res = await fetch(BACKEND_URL + '/api/tournaments/' + id + '/fixtures?userId=' + encodeURIComponent(S.user.uid));
+        var res = await authFetch(BACKEND_URL + '/api/tournaments/' + id + '/fixtures?userId=' + encodeURIComponent(S.user.uid));
         var data = await res.json();
         renderMyFixtures(id, data.fixtures);
       } catch (e) { console.error('[Fixtures]', e); }
@@ -3837,7 +3858,7 @@
       `;
 
       toastEl.innerHTML = `
-        <img src="/mobile/crestarena-icon.png" style="width:32px; height:32px; border-radius:50%; border:1px solid #333; flex-shrink:0;">
+        <img src="/crestarena-icon.png" style="width:32px; height:32px; border-radius:50%; border:1px solid #333; flex-shrink:0;">
         <div style="flex:1; min-width:0; text-align:left;">
           <div style="font-family:var(--fd); font-weight:900; font-size:14px; color:#EEF0F8; text-transform:uppercase; letter-spacing:1px; line-height:1.2;">${title}</div>
           <div style="font-size:12px; color:${subColor}; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;">${message}</div>
@@ -3869,7 +3890,7 @@
       if (navigator.serviceWorker) {
         navigator.serviceWorker.ready.then(reg => {
           if (reg && reg.showNotification) {
-            reg.showNotification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+            reg.showNotification(title, { body: message, icon: '/crestarena-icon.png' });
           } else {
             fallbackNativeNotification(title, message);
           }
@@ -3883,7 +3904,7 @@
 
     function fallbackNativeNotification(title, message) {
       try {
-        new Notification(title, { body: message, icon: '/mobile/crestarena-icon.png' });
+        new Notification(title, { body: message, icon: '/crestarena-icon.png' });
       } catch (e) {
         console.warn('Native notification error:', e);
       }
@@ -3945,7 +3966,7 @@
         const matchId = S.activeMatch?.id || '';
         if (matchId) formData.append('match_id', matchId);
 
-        const res = await fetch(BACKEND_URL + '/api/detect/frame', {
+        const res = await authFetch(BACKEND_URL + '/api/detect/frame', {
           method: 'POST',
           body: formData
         });
@@ -4058,13 +4079,8 @@
       const hostId = S.user?.uid;
       
       try {
-        const idToken = await S.user.getIdToken();
-        const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
+        const res = await authFetch(BACKEND_URL + '/api/matches/locked-room', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + idToken
-          },
           body: JSON.stringify({ hostName, hostId, gameType, roomId })
         });
         
@@ -4081,7 +4097,7 @@
 
     async function loadLiveMatches() {
       try {
-        const res = await fetch(BACKEND_URL + '/api/matches');
+        const res = await authFetch(BACKEND_URL + '/api/matches');
         if (!res.ok) throw new Error('fetch failed');
         const body = await res.json();
         const matches = body.matches || body || [];
@@ -4195,29 +4211,8 @@
     //  LOCKED ROOM (STREAMING)
     // ══════════════════════════════════════════════════════
     async function createLockedRoom() {
-      if (!auth.currentUser) return showAuth();
-      const roomId = 'room_' + Date.now() + '_' + Math.floor(Math.random()*1000);
-      
-      const hostName = S.user?.displayName || 'Player';
-      const hostId = S.user?.uid;
-      const gameType = prompt("Enter Game Name (e.g. FIFA, COD Mobile):", "FIFA 1v1");
-      if (!gameType) return;
-      
-      try {
-        const res = await fetch(BACKEND_URL + '/api/matches/locked-room', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hostName, hostId, gameType, roomId })
-        });
-        
-        if (!res.ok) throw new Error('Failed to create room');
-        const data = await res.json();
-        
-        // Instantly open the Match Hub as the Host
-        openModal('match-details', data.match);
-      } catch (err) {
-        toast('❌ Error starting Locked Room: ' + err.message);
-      }
+      // Delegate to the modal-based version (no native prompt())
+      startLockedRoom();
     }
 
     // ══════════════════════════════════════════════════════
@@ -4351,7 +4346,7 @@
         status: 'live'
       };
       // Try to get real match data first
-      fetch(BACKEND_URL + '/api/matches/' + matchId)
+      authFetch(BACKEND_URL + '/api/matches/' + matchId)
         .then(r => r.ok ? r.json() : matchData)
         .then(data => {
           openModal('match-details', data);
@@ -4455,7 +4450,7 @@
 
     async function fetchLobby() {
       try {
-        const res = await fetch(BACKEND_URL + '/api/lobby');
+        const res = await authFetch(BACKEND_URL + '/api/lobby');
         const data = await res.json();
         if (data.ok) {
           activeWagers = data.challenges || [];
@@ -4532,9 +4527,8 @@
     async function deleteWager(challengeId) {
       if (!confirm('Delete this wager?')) return;
       try {
-        const res = await fetch(BACKEND_URL + '/api/lobby/delete', {
+        const res = await authFetch(BACKEND_URL + '/api/lobby/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ challengeId, uid: S.user.uid })
         });
         const data = await res.json();
@@ -4571,9 +4565,8 @@
       btn.textContent = 'CREATING...';
 
       try {
-        const res = await fetch(BACKEND_URL + '/api/lobby/create', {
+        const res = await authFetch(BACKEND_URL + '/api/lobby/create', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             uid: S.user.uid,
             username: S.user.displayName || 'Player',
@@ -4605,9 +4598,8 @@
       if (!confirm('Are you sure you want to accept this wager? The amount will be deducted from your wallet into escrow.')) return;
 
       try {
-        const res = await fetch(BACKEND_URL + '/api/lobby/accept', {
+        const res = await authFetch(BACKEND_URL + '/api/lobby/accept', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             uid: S.user.uid,
             username: S.user.displayName || 'Player',
@@ -4723,9 +4715,8 @@
 
     async function connectToLiveKit(matchId, isHost, mode='screen') {
       try {
-        const res = await fetch(STREAMING_URL + '/api/lobby/stream/token', {
+        const res = await authFetch(STREAMING_URL + '/api/lobby/stream/token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomName: matchId, identity: S.user?.displayName || 'Viewer_' + Math.floor(Math.random()*100), isHost })
         });
         const data = await res.json();
@@ -5108,7 +5099,7 @@
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/mobile/sw.js').then(reg => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
             installingWorker.onstatechange = () => {
@@ -5129,10 +5120,7 @@
     async function loadAdminStats() {
       if (!S.user || S.user.email !== ADMIN_EMAIL) return;
       try {
-        const idToken = await S.user.getIdToken();
-        const res = await fetch(BACKEND_URL + '/api/admin/stats', {
-          headers: { 'Authorization': 'Bearer ' + idToken }
-        });
+        const res = await authFetch(BACKEND_URL + '/api/admin/stats');
         const data = await res.json();
         if (data.ok && data.stats) {
           document.getElementById('admin-stat-users').textContent = data.stats.users || 0;
@@ -5160,13 +5148,8 @@
       if (isNaN(amount)) { toast('Invalid amount'); return; }
 
       try {
-        const idToken = await S.user.getIdToken();
-        const res = await fetch(BACKEND_URL + '/api/admin/balance', {
+        const res = await authFetch(BACKEND_URL + '/api/admin/balance', {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + idToken,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({ userId: uid, amount: amount, reason: reason })
         });
         const data = await res.json();
@@ -5194,13 +5177,8 @@
       if (!name) { toast('Please enter a tournament name'); return; }
       
       try {
-        const idToken = await S.user.getIdToken();
-        const res = await fetch(BACKEND_URL + '/api/admin/tournaments', {
+        const res = await authFetch(BACKEND_URL + '/api/admin/tournaments', {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + idToken,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({
             name: name,
             game: game,
@@ -5241,10 +5219,8 @@
 
       toast('Uploading screenshot for AI Verification...');
       try {
-        const idToken = await S.user.getIdToken();
-        const res = await fetch(BACKEND_URL + '/api/matches/submit-score', {
+        const res = await authFetch(BACKEND_URL + '/api/matches/submit-score', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + idToken },
           body: formData
         });
         const data = await res.json();
