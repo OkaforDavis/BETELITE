@@ -4678,7 +4678,17 @@
     }
 
     async function startWebRTCStream(matchId) {
-      // Create options modal
+      // Detect mobile: screen sharing (getDisplayMedia) is NOT supported on iOS/Android
+      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                       || (navigator.maxTouchPoints > 1 && !window.matchMedia('(hover: hover)').matches);
+      
+      if (isMobile) {
+        // On mobile, go straight to camera mode — no screen share available
+        window.executeStream(matchId, 'camera');
+        return;
+      }
+
+      // Desktop: show options modal with all stream sources
       const modal = document.createElement('div');
       modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;';
       modal.innerHTML = `
@@ -4695,15 +4705,32 @@
     }
     
     window.executeStream = async function(matchId, mode) {
-      document.body.lastChild.remove(); // remove modal
+      // Safely remove stream-source modal if it exists (desktop path creates it, mobile skips it)
+      const existingModal = document.querySelector('[style*="z-index:9999"][style*="position:fixed"]');
+      if (existingModal) existingModal.remove();
+      
       currentStreamMatchId = matchId;
-      document.getElementById('stream-overlay').innerHTML = 'Starting Stream...';
+      const overlay = document.getElementById('stream-overlay');
+      if (overlay) overlay.innerHTML = 'Starting Stream...';
+      
+      let localTracks = [];
+      try {
+         if (mode === 'camera' || mode === 'both') {
+            // Request permissions and create tracks immediately on user gesture
+            localTracks = await LivekitClient.createLocalTracks({
+                audio: true,
+                video: { facingMode: 'user' }
+            });
+         }
+      } catch(err) {
+         console.warn("Could not create local tracks:", err);
+      }
       
       try {
-        await connectToLiveKit(matchId, true, mode);
+        await connectToLiveKit(matchId, true, mode, localTracks);
       } catch (err) {
         console.error("Start stream failed", err);
-        alert('Could not start any stream.');
+        toast('❌ Could not start stream. ' + (err.message || ''));
       }
     };
 
@@ -4713,7 +4740,9 @@
       await connectToLiveKit(matchId, false);
     }
 
-    async function connectToLiveKit(matchId, isHost, mode='screen') {
+    async function connectToLiveKit(matchId, isHost, mode='screen', precreatedTracks=[]) {
+      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                       || (navigator.maxTouchPoints > 1 && !window.matchMedia('(hover: hover)').matches);
       try {
         const res = await authFetch(STREAMING_URL + '/api/lobby/stream/token', {
           method: 'POST',
@@ -4726,14 +4755,33 @@
           return;
         }
 
-        const room = new LivekitClient.Room();
+        const room = new LivekitClient.Room({
+          adaptiveStream: true,
+          dynacast: true,
+          // Mobile-optimized settings
+          videoCaptureDefaults: {
+            resolution: isMobile 
+              ? { width: 640, height: 480, frameRate: 24 }
+              : { width: 1280, height: 720, frameRate: 30 },
+            facingMode: 'user'
+          }
+        });
         currentRoom = room;
 
+        // Determine if this is camera-only mode (mobile always is)
+        const isCameraOnly = (mode === 'camera');
+
+        // Handle remote tracks (viewer side)
         room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
           const videoEl = document.getElementById('webrtc-video');
           const camEl = document.getElementById('webrtc-camera-video');
           if (track.kind === 'video') {
-            if (publication.source === LivekitClient.Track.Source.Camera && camEl) {
+            // In camera-only mode or if only one video track, use main element
+            if (isCameraOnly || publication.source === LivekitClient.Track.Source.ScreenShare) {
+              track.attach(videoEl);
+              videoEl.style.display = 'block';
+            } else if (publication.source === LivekitClient.Track.Source.Camera && camEl) {
+              // In 'both' mode, camera goes to PiP, screen share to main
               track.attach(camEl);
               camEl.style.display = 'block';
             } else {
@@ -4742,48 +4790,92 @@
             }
             document.getElementById('stream-overlay').style.display = 'none';
           } else if (track.kind === 'audio') {
-            track.attach(videoEl); // attaches to the same element or audio element
+            const audioEl = document.createElement('audio');
+            audioEl.autoplay = true;
+            audioEl.id = 'lk-audio-' + participant.identity;
+            document.body.appendChild(audioEl);
+            track.attach(audioEl);
           }
+        });
+
+        // Handle track unsubscribed
+        room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+          track.detach().forEach(el => el.remove());
         });
 
         await room.connect('wss://betelite-38umojt1.livekit.cloud', data.token);
 
         if (isHost) {
-          try {
-             if (mode === 'camera') {
-                 await room.localParticipant.setCameraEnabled(true);
-                 await room.localParticipant.setMicrophoneEnabled(true);
-             } else if (mode === 'both') {
-                 await room.localParticipant.setScreenShareEnabled(true, { audio: true });
-                 await room.localParticipant.setCameraEnabled(true);
-                 await room.localParticipant.setMicrophoneEnabled(true);
-             } else {
-                 await room.localParticipant.setScreenShareEnabled(true, { audio: true });
-                 await room.localParticipant.setMicrophoneEnabled(true);
-             }
-          } catch(err) {
-             console.log("Stream mode failed, trying camera fallback...", err);
-             await room.localParticipant.setCameraEnabled(true);
-             await room.localParticipant.setMicrophoneEnabled(true);
-          }
-          
-          // attach local video so host can see themselves
-          const videoEl = document.getElementById('webrtc-video');
-          const camEl = document.getElementById('webrtc-camera-video');
-          Array.from(room.localParticipant.videoTrackPublications.values()).forEach(pub => {
-             if (pub.videoTrack) {
-                if (pub.source === LivekitClient.Track.Source.Camera && camEl) {
+          // Helper to attach local tracks once published
+          const attachLocalTracks = () => {
+            const videoEl = document.getElementById('webrtc-video');
+            const camEl = document.getElementById('webrtc-camera-video');
+            const pubs = Array.from(room.localParticipant.videoTrackPublications.values());
+            
+            pubs.forEach(pub => {
+              if (pub.videoTrack) {
+                if (isCameraOnly) {
+                  // Camera-only: attach camera to main video element (not PiP)
+                  pub.videoTrack.attach(videoEl);
+                  videoEl.style.display = 'block';
+                  if (isMobile) videoEl.setAttribute('playsinline', '');
+                } else if (pub.source === LivekitClient.Track.Source.Camera && camEl) {
                   pub.videoTrack.attach(camEl);
                   camEl.style.display = 'block';
                 } else {
                   pub.videoTrack.attach(videoEl);
                   videoEl.style.display = 'block';
                 }
-             }
+              }
+            });
+            
+            if (pubs.length > 0) {
+              document.getElementById('stream-overlay').style.display = 'none';
+            }
+          };
+
+          // Listen for local track published event (more reliable than immediate check)
+          room.localParticipant.on('localTrackPublished', () => {
+            setTimeout(attachLocalTracks, 200);
           });
+
+          try {
+             if (precreatedTracks && precreatedTracks.length > 0) {
+                 for (const track of precreatedTracks) {
+                     await room.localParticipant.publishTrack(track);
+                 }
+                 if (mode === 'both') {
+                     await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+                 }
+             } else {
+                 if (mode === 'camera') {
+                     await room.localParticipant.setCameraEnabled(true);
+                     await room.localParticipant.setMicrophoneEnabled(true);
+                 } else if (mode === 'both') {
+                     await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+                     await room.localParticipant.setCameraEnabled(true);
+                     await room.localParticipant.setMicrophoneEnabled(true);
+                 } else {
+                     await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+                     await room.localParticipant.setMicrophoneEnabled(true);
+                 }
+             }
+          } catch(err) {
+             console.warn("Stream mode '" + mode + "' failed, trying camera fallback...", err);
+             try {
+               await room.localParticipant.setCameraEnabled(true);
+               await room.localParticipant.setMicrophoneEnabled(true);
+             } catch(e2) {
+               console.error("Camera fallback also failed:", e2);
+               toast('❌ Camera access denied. Please allow camera permissions and try again.');
+               return;
+             }
+          }
           
-          document.getElementById('stream-overlay').style.display = 'none';
-          toast('Stream is LIVE globally!');
+          // Fallback: attach tracks after a small delay in case event didn't fire
+          setTimeout(attachLocalTracks, 500);
+          
+          toast('🔴 Stream is LIVE!');
           
           // Notify Go backend so it appears in the Active Streams list
           if (window._socket) {
@@ -4805,8 +4897,12 @@
         addChatOverlay(isHost);
 
       } catch (e) {
-        console.error(e);
-        alert('Streaming error: ' + e.message);
+        console.error('LiveKit connection error:', e);
+        if (isMobile && e.message && e.message.includes('Permission')) {
+          alert('Camera/mic permission is required for streaming. Please enable it in your browser settings.');
+        } else {
+          alert('Streaming error: ' + e.message);
+        }
       }
     }
 
@@ -4817,18 +4913,18 @@
       const parent = document.getElementById('webrtc-video').parentElement;
       const overlay = document.createElement('div');
       overlay.id = 'stream-chat-overlay';
-      overlay.style.cssText = 'position:absolute; bottom:40px; left:10px; right:10px; height:150px; display:flex; flex-direction:column; justify-content:flex-end; pointer-events:none; z-index:10;';
+      overlay.style.cssText = 'position:absolute; bottom:60px; left:10px; right:10px; height:150px; display:flex; flex-direction:column; justify-content:flex-end; pointer-events:none; z-index:9999;';
       
       const msgBox = document.createElement('div');
       msgBox.id = 'chat-messages';
-      msgBox.style.cssText = 'overflow-y:auto; margin-bottom:10px; pointer-events:auto; display:flex; flex-direction:column; max-height:100px;';
+      msgBox.style.cssText = 'overflow-y:auto; margin-bottom:10px; pointer-events:auto; display:flex; flex-direction:column; max-height:100px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
       
       const inputRow = document.createElement('div');
       inputRow.style.cssText = 'display:flex; gap:8px; pointer-events:auto;';
       inputRow.innerHTML = `
-        <input type="text" id="chat-input" placeholder="Say something..." style="flex:1; border-radius:20px; border:none; padding:8px 12px; background:rgba(0,0,0,0.7); color:#fff; font-size:14px;">
-        <button onclick="sendChatMessage()" style="background:var(--gold); border:none; border-radius:50%; width:36px; height:36px; color:#000; font-weight:bold; cursor:pointer;">➔</button>
-        ${isHost ? `<button onclick="endWebRTCStream()" style="background:#ff3333; border:none; border-radius:20px; padding:0 12px; color:#fff; font-weight:bold; cursor:pointer;">END</button>` : ''}
+        <input type="text" id="chat-input" placeholder="Say something..." style="flex:1; border-radius:20px; border:1px solid rgba(255,255,255,0.2); padding:8px 12px; background:rgba(0,0,0,0.7); color:#fff; font-size:16px;">
+        <button onclick="sendChatMessage()" style="background:var(--gold); border:none; border-radius:50%; width:36px; height:36px; color:#000; font-weight:bold; cursor:pointer; flex-shrink:0;">➔</button>
+        ${isHost ? `<button onclick="endWebRTCStream()" style="background:#ff3333; border:none; border-radius:20px; padding:0 12px; color:#fff; font-weight:bold; cursor:pointer; flex-shrink:0;">END</button>` : ''}
       `;
       
       overlay.appendChild(msgBox);

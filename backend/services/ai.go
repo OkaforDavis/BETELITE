@@ -4,11 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"os"
-	"time"
+	"os/exec"
 
 	"betelite-go/config"
 )
@@ -33,63 +29,37 @@ type AIResult struct {
 // VerifyMatchResult calls the external AI verification service
 // (LLM vision-based detection service)
 func VerifyMatchResult(imagePath string, gameType string, targetGamertag string, opponentGamertag string) (*AIResult, error) {
-	file, err := os.Open(imagePath)
+	apiKey := config.Cfg.GeminiAPIKey
+	if apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is not configured")
+	}
+
+	schemaPath := "services/ai_schema.json"
+	wrapperPath := "services/ocr_wrapper.py"
+
+	cmd := exec.Command("python", wrapperPath,
+		"--schema_path", schemaPath,
+		"--model", "gemini-2.0-flash", // Use standard model or adjust if needed
+		"--base_url", "https://generativelanguage.googleapis.com/v1beta/openai/",
+		"--api_key", apiKey,
+		imagePath,
+	)
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Add the image file
-	part, err := writer.CreateFormFile("file", "match_result.jpg")
-	if err != nil {
-		return nil, err
-	}
-	_, err = io.Copy(part, file)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("receipt-ocr failed: %v, stderr: %s", err, stderr.String())
 	}
 
-	// Add form fields for game context
-	if gameType != "" {
-		writer.WriteField("game", gameType)
-	}
-	if targetGamertag != "" {
-		writer.WriteField("target_gamertag", targetGamertag)
-	}
-	if opponentGamertag != "" {
-		writer.WriteField("opponent_gamertag", opponentGamertag)
-	}
-
-	writer.Close()
-
-	detectionURL := config.Cfg.DetectionServiceURL
-	if detectionURL == "" {
-		detectionURL = "http://localhost:5000"
-	}
-	req, err := http.NewRequest("POST", detectionURL+"/api/detect/frame", body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{Timeout: 60 * time.Second} // LLM calls can take longer
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("AI service returned status %d: %s", resp.StatusCode, string(respBody))
-	}
+	output := out.Bytes()
 
 	var result AIResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse receipt-ocr output: %v, output: %s", err, string(output))
 	}
 
 	// Compute legacy fields from structured result

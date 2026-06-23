@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "description": "You are a gaming score detection AI. Analyze this screenshot from a competitive mobile/console game match and extract the scores.",
+  "properties": {
+    "detected": {
+      "type": "boolean",
+      "description": "True if game scores were detected in the screenshot"
+    },
+    "game_type": {
+      "type": "string",
+      "description": "The detected game type"
+    },
+    "target_player": {
+      "type": "object",
+      "properties": {
+        "gamertag": { "type": "string", "description": "The player name or gamertag" },
+        "score": { "type": "integer", "description": "The player's score or kills" },
+        "side": { "type": "string", "description": "LEFT or RIGHT for football games only" }
+      },
+      "required": ["gamertag", "score"]
+    },
+    "opponent": {
+      "type": "object",
+      "properties": {
+        "gamertag": { "type": "string", "description": "The opponent's name or gamertag" },
+        "score": { "type": "integer", "description": "The opponent's score or kills" },
+        "side": { "type": "string", "description": "LEFT or RIGHT for football games only" }
+      },
+      "required": ["gamertag", "score"]
+    },
+    "notes": {
+      "type": "string",
+      "description": "Brief description of the match results detected or why it failed"
+    }
+  },
+  "required": ["detected", "notes"]
+}
