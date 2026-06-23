@@ -18,6 +18,11 @@ func SetupTournamentRoutes(api fiber.Router) {
 
 	// Get active tournaments
 	tournaments.Get("/", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			// Return empty list if no database is connected
+			return utils.SendSuccess(c, fiber.Map{"tournaments": []models.Tournament{}})
+		}
+
 		ctx := context.Background()
 		rows, err := db.Pool.Query(ctx, "SELECT id, name, game, entry_fee, max_players, prize_pool, status FROM tournaments WHERE status != 'finished'")
 		if err != nil {
@@ -126,6 +131,9 @@ func SetupTournamentRoutes(api fiber.Router) {
 
 	// Get fixtures for a tournament
 	tournaments.Get("/:id/fixtures", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"fixtures": []fiber.Map{}})
+		}
 		tID := c.Params("id")
 		ctx := context.Background()
 

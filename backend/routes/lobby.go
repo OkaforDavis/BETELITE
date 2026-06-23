@@ -22,6 +22,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 
 	// Get active challenges
 	lobby.Get("/", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return c.JSON(fiber.Map{"ok": true, "challenges": []models.Challenge{}})
+		}
 		ctx := context.Background()
 		rows, err := db.Pool.Query(ctx, `
 			SELECT e.challenge_id, e.creator_id, e.amount, u.username, e.created_at
