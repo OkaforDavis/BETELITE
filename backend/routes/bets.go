@@ -17,6 +17,9 @@ func SetupBetRoutes(api fiber.Router) {
 	bets := api.Group("/bets", middleware.AuthRequired())
 
 	bets.Post("/place", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 		var req struct {
 			MatchID string  `json:"matchId"`
 			Pick    string  `json:"pick"` // home, away, draw

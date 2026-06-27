@@ -1569,7 +1569,7 @@
     .cta {
       width: 100%;
       padding: 13px;
-      border-radius: 10px;
+      border-radius: 50px;
       background: linear-gradient(135deg, var(--gold), var(--gold2));
       color: #000;
       font-family: var(--fd);
@@ -1589,6 +1589,273 @@
     .cta:hover {
       filter: brightness(1.08);
       box-shadow: 0 4px 18px rgba(0, 229, 117, .3);
+    }
+
+    /* ═══════════════════════════════════
+       STREAM PLAYER CONTROLS
+    ═══════════════════════════════════ */
+    .stream-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 0;
+      flex-wrap: wrap;
+    }
+    .stream-ctrl-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 50px;
+      font-family: var(--fd);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: .5px;
+      border: 1px solid var(--border2);
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s;
+      backdrop-filter: blur(6px);
+    }
+    .stream-ctrl-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .stream-ctrl-btn:active { transform: scale(0.95); }
+    .stream-ctrl-btn.danger { border-color: var(--red); color: var(--red); }
+    .stream-ctrl-btn.danger:hover { background: rgba(255,42,84,0.15); }
+    .stream-ctrl-btn.primary { background: var(--green); color: #000; border-color: var(--green); }
+    .stream-ctrl-btn.primary:hover { filter: brightness(1.1); }
+
+    .stream-viewer-count {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--red);
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(255,42,84,0.12);
+      border: 1px solid rgba(255,42,84,0.25);
+    }
+    .stream-viewer-count::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+      animation: livePulse 1.5s ease infinite;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ═══════════════════════════════════
+       ADMIN DASHBOARD STYLES
+    ═══════════════════════════════════ */
+    .admin-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .admin-header-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0,229,117,0.2), rgba(0,175,255,0.15));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      border: 1px solid var(--border);
+    }
+    .admin-header h2 {
+      font-family: var(--fd);
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--gold);
+      margin: 0;
+      letter-spacing: 1px;
+    }
+    .admin-header p {
+      font-size: 12px;
+      color: var(--text2);
+      margin: 2px 0 0 0;
+    }
+
+    .admin-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .admin-stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      padding: 16px 12px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .admin-stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--gold), var(--green));
+      border-radius: 3px 3px 0 0;
+    }
+    .admin-stat-card .stat-icon { font-size: 20px; margin-bottom: 6px; }
+    .admin-stat-card .stat-value {
+      font-family: var(--fd);
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--text);
+      line-height: 1.1;
+    }
+    .admin-stat-card .stat-label {
+      font-size: 10px;
+      color: var(--text2);
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    .admin-section {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 16px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .admin-section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      background: rgba(0,229,117,0.04);
+      border-bottom: 1px solid var(--border2);
+      font-family: var(--fd);
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      color: var(--gold);
+    }
+    .admin-section-header span { font-size: 18px; }
+    .admin-section-body { padding: 16px; }
+    .admin-section-body .fi {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--text);
+      width: 100%;
+      margin-bottom: 10px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .admin-section-body .fi:focus { border-color: var(--gold2); }
+    .admin-section-body .fi::placeholder { color: var(--text3); }
+
+    /* ═══════════════════════════════════
+       ONBOARDING TOUR
+    ═══════════════════════════════════ */
+    .tour-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 99998;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.3s;
+    }
+    .tour-highlight {
+      position: fixed;
+      z-index: 99999;
+      border-radius: 16px;
+      box-shadow: 0 0 0 4px var(--gold), 0 0 30px rgba(0,229,117,0.3);
+      pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .tour-tooltip {
+      position: fixed;
+      z-index: 100000;
+      background: linear-gradient(145deg, #0E1420, #141C2E);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 300px;
+      width: 90%;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      animation: tourPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes tourPop {
+      from { transform: scale(0.85); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .tour-tooltip h3 {
+      font-family: var(--fd);
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--gold);
+      margin: 0 0 8px;
+    }
+    .tour-tooltip p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.5;
+      margin: 0 0 16px;
+    }
+    .tour-tooltip-btns {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .tour-tooltip-btns button {
+      padding: 9px 20px;
+      border-radius: 50px;
+      font-family: var(--fd);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: 0.15s;
+      border: none;
+    }
+    .tour-btn-next {
+      background: var(--gold);
+      color: #000;
+      flex: 1;
+    }
+    .tour-btn-next:hover { filter: brightness(1.1); }
+    .tour-btn-skip {
+      background: transparent;
+      color: var(--text3);
+      border: 1px solid var(--border2) !important;
+    }
+    .tour-step-dots {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    .tour-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--bg4);
+      transition: 0.2s;
+    }
+    .tour-dot.active {
+      background: var(--gold);
+      width: 20px;
+      border-radius: 4px;
     }
 
     .payment-unavail {
@@ -2447,28 +2714,39 @@
       <!-- ADMIN DASHBOARD PAGE -->
       <div class="pg" id="pg-admin">
         <div style="padding: 20px 16px;">
-          <h2 style="color: var(--gold); margin-bottom: 16px;">⭐ Admin Dashboard</h2>
+          <div class="admin-header">
+            <div class="admin-header-icon">⭐</div>
+            <div>
+              <h2>Admin Dashboard</h2>
+              <p>System Overview & Control Panel</p>
+            </div>
+          </div>
           
-          <div class="s3g" style="margin-bottom: 20px;">
-            <div class="s3">
-              <div class="s3-v" id="admin-stat-users">0</div>
-              <div class="s3-l">Total Users</div>
+          <div class="admin-stats-grid">
+            <div class="admin-stat-card">
+              <div class="stat-icon">👥</div>
+              <div class="stat-value" id="admin-stat-users">0</div>
+              <div class="stat-label">Total Users</div>
             </div>
-            <div class="s3">
-              <div class="s3-v" style="color:var(--gold)" id="admin-stat-escrow">₦0</div>
-              <div class="s3-l">In Escrow</div>
+            <div class="admin-stat-card">
+              <div class="stat-icon">💰</div>
+              <div class="stat-value" style="color:var(--gold)" id="admin-stat-escrow">₦0</div>
+              <div class="stat-label">In Escrow</div>
             </div>
-            <div class="s3">
-              <div class="s3-v" style="color:var(--blue)" id="admin-stat-matches">0</div>
-              <div class="s3-l">Live Matches</div>
+            <div class="admin-stat-card">
+              <div class="stat-icon">⚔️</div>
+              <div class="stat-value" style="color:var(--blue)" id="admin-stat-matches">0</div>
+              <div class="stat-label">Live Matches</div>
             </div>
           </div>
 
-          <button class="cta" onclick="loadAdminStats()" style="margin-bottom: 20px;">🔄 Refresh Stats</button>
+          <button class="cta" onclick="loadAdminStats()" style="margin-bottom: 24px; border-radius: 50px;">🔄 Refresh Stats</button>
 
-          <div class="menu-card" style="margin-bottom:20px;">
-            <div class="menu-card-title">ADJUST USER BALANCE</div>
-            <div style="padding: 12px;">
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <span>💳</span> ADJUST USER BALANCE
+            </div>
+            <div class="admin-section-body">
               <input class="fi" type="text" id="admin-bal-uid" placeholder="User ID">
               <input class="fi" type="number" id="admin-bal-amt" placeholder="Amount (negative to deduct)">
               <input class="fi" type="text" id="admin-bal-reason" placeholder="Reason for adjustment">
@@ -2476,9 +2754,11 @@
             </div>
           </div>
 
-          <div class="menu-card" style="margin-bottom:20px;">
-            <div class="menu-card-title">CREATE TOURNAMENT</div>
-            <div style="padding: 12px;">
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <span>🏆</span> CREATE TOURNAMENT
+            </div>
+            <div class="admin-section-body">
               <input class="fi" type="text" id="admin-tourn-name" placeholder="Tournament Name">
               <select class="fi" id="admin-tourn-game">
                 <option value="efootball">eFootball</option>
@@ -2492,6 +2772,7 @@
               <button class="cta" onclick="adminCreateTournament()" style="background:var(--green); color:#000;">CREATE TOURNAMENT</button>
             </div>
           </div>
+          
           <div style="height:40px"></div>
         </div>
       </div>
@@ -2824,7 +3105,19 @@
       loadLiveMatches();       // populate live board cards from backend
       fetchBackendSettings();  // auto-load Paystack key + any server config
       listenToNotifications(user); // start listening for deposits, wins, etc.
-
+      
+      // PWA Prompt: Show every time unless already installed
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (!isStandalone) {
+        setTimeout(() => {
+          if (typeof showCustomPWAModal === 'function') showCustomPWAModal();
+        }, 1500);
+      }
+      
+      // Initialize interactive tour
+      setTimeout(() => {
+        if (typeof initTour === 'function') initTour();
+      }, 2000);
       // Admin check
       if (user.email === ADMIN_EMAIL) {
         document.getElementById('conn-bar').textContent = '⭐ Admin Mode — okafordavis8@gmail.com';
@@ -3178,19 +3471,37 @@
           <div style="font-size:12px; color:var(--text2); margin-top:4px;">${data.label}</div>
         </div>
         
-        <div style="background:#000; border-radius:8px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;" id="stream-container">
-          <video id="webrtc-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; display:none;"></video>
+        <div style="background:#000; border-radius:12px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;" id="stream-container">
+          <video id="webrtc-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; display:none; transition: transform 0.3s;"></video>
           <video id="webrtc-camera-video" autoplay playsinline style="position:absolute; bottom:12px; right:12px; width:90px; height:90px; object-fit:cover; border-radius:8px; border:2px solid var(--gold); display:none; z-index:4; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></video>
+          
           <div id="stream-overlay" style="position:absolute; text-align:center;">
             <div style="font-size:32px; margin-bottom:8px;">📡</div>
             <div style="color:var(--text2); font-size:13px;" id="stream-status">No active stream</div>
           </div>
+          
+          <div style="position:absolute; top:8px; left:8px; z-index:5; display:none;" id="stream-viewers-container">
+            <div class="stream-viewer-count" id="stream-viewers">0 Viewers</div>
+          </div>
+          
           <button onclick="toggleStreamFullscreen()" style="position:absolute; top:8px; right:8px; width:32px; height:32px; border-radius:6px; background:rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.2); color:#fff; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5;" title="Fullscreen">⛶</button>
         </div>
+
+        <div class="stream-controls" id="stream-controls-container" style="display:none;">
+          <button class="stream-ctrl-btn" onclick="zoomStream(0.1)" title="Zoom In">🔍+</button>
+          <button class="stream-ctrl-btn" onclick="zoomStream(-0.1)" title="Zoom Out">🔍-</button>
+          ${isParticipant ? `
+            <button class="stream-ctrl-btn" onclick="toggleStreamMic()" id="btn-toggle-mic" title="Mute/Unmute Mic">🎤</button>
+            <button class="stream-ctrl-btn" onclick="toggleStreamCam()" id="btn-toggle-cam" title="Toggle Camera">📷</button>
+            <button class="stream-ctrl-btn danger" onclick="endStream()" title="End Stream">🛑 END STREAM</button>
+          ` : `
+            <button class="stream-ctrl-btn danger" onclick="leaveStream()" title="Leave Stream">🚪 LEAVE</button>
+          `}
+        </div>
         
-        <div style="display:flex; gap:8px; margin-top:16px;">
+        <div style="display:flex; gap:8px; margin-top:16px;" id="stream-init-btns">
           ${isParticipant ? 
-            `<button style="flex:1; background:linear-gradient(90deg, #00FF87 0%, #60EFFF 100%); color:#000; font-weight:800; font-size:14px; padding:14px 20px; border-radius:30px; border:none; box-shadow: 0 4px 15px rgba(0, 255, 135, 0.4); text-transform:uppercase; letter-spacing:1px; cursor:pointer;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
+            `<button style="flex:1; background:linear-gradient(90deg, #00FF87 0%, #60EFFF 100%); color:#000; font-weight:800; font-size:14px; padding:14px 20px; border-radius:50px; border:none; box-shadow: 0 4px 15px rgba(0, 255, 135, 0.4); text-transform:uppercase; letter-spacing:1px; cursor:pointer;" onclick="startWebRTCStream('${data.id}')">🎥 START STREAM</button>` :
             `<button class="cta" style="flex:1; background:var(--green); color:#000;" onclick="joinWebRTCStream('${data.id}')">👁️ WATCH STREAM</button>`
           }
         </div>
@@ -4789,6 +5100,9 @@
               videoEl.style.display = 'block';
             }
             document.getElementById('stream-overlay').style.display = 'none';
+            document.getElementById('stream-init-btns').style.display = 'none';
+            document.getElementById('stream-controls-container').style.display = 'flex';
+            document.getElementById('stream-viewers-container').style.display = 'flex';
           } else if (track.kind === 'audio') {
             const audioEl = document.createElement('audio');
             audioEl.autoplay = true;
@@ -4831,6 +5145,9 @@
             
             if (pubs.length > 0) {
               document.getElementById('stream-overlay').style.display = 'none';
+              document.getElementById('stream-init-btns').style.display = 'none';
+              document.getElementById('stream-controls-container').style.display = 'flex';
+              document.getElementById('stream-viewers-container').style.display = 'flex';
             }
           };
 
@@ -4933,6 +5250,10 @@
     }
     
     window.endWebRTCStream = function() {
+      endStream();
+    };
+
+    window.endStream = function() {
       if (currentRoom) {
          currentRoom.disconnect();
          currentRoom = null;
@@ -4940,12 +5261,57 @@
       document.getElementById('webrtc-video').srcObject = null;
       document.getElementById('stream-overlay').style.display = 'flex';
       document.getElementById('stream-overlay').innerHTML = 'Stream Ended';
+      document.getElementById('stream-controls-container').style.display = 'none';
+      document.getElementById('stream-viewers-container').style.display = 'none';
       const chatOverlay = document.getElementById('stream-chat-overlay');
       if (chatOverlay) chatOverlay.remove();
       
       if (window._socket) {
          window._socket.emit('stream_end', { roomId: `stream:${currentStreamMatchId}` });
       }
+    };
+
+    window.leaveStream = function() {
+      if (currentRoom) {
+         currentRoom.disconnect();
+         currentRoom = null;
+      }
+      document.getElementById('webrtc-video').srcObject = null;
+      document.getElementById('stream-overlay').style.display = 'flex';
+      document.getElementById('stream-overlay').innerHTML = 'You left the stream';
+      document.getElementById('stream-controls-container').style.display = 'none';
+      document.getElementById('stream-viewers-container').style.display = 'none';
+      const chatOverlay = document.getElementById('stream-chat-overlay');
+      if (chatOverlay) chatOverlay.remove();
+    };
+
+    let streamZoomLevel = 1;
+    window.zoomStream = function(delta) {
+      streamZoomLevel += delta;
+      if (streamZoomLevel < 0.5) streamZoomLevel = 0.5;
+      if (streamZoomLevel > 3) streamZoomLevel = 3;
+      const videoEl = document.getElementById('webrtc-video');
+      videoEl.style.transform = `scale(${streamZoomLevel})`;
+    };
+
+    let streamMicEnabled = true;
+    window.toggleStreamMic = function() {
+      if (!currentRoom || !currentRoom.localParticipant) return;
+      streamMicEnabled = !streamMicEnabled;
+      currentRoom.localParticipant.setMicrophoneEnabled(streamMicEnabled);
+      const btn = document.getElementById('btn-toggle-mic');
+      btn.innerHTML = streamMicEnabled ? '🎤' : '🔇';
+      btn.classList.toggle('danger', !streamMicEnabled);
+    };
+
+    let streamCamEnabled = true;
+    window.toggleStreamCam = function() {
+      if (!currentRoom || !currentRoom.localParticipant) return;
+      streamCamEnabled = !streamCamEnabled;
+      currentRoom.localParticipant.setCameraEnabled(streamCamEnabled);
+      const btn = document.getElementById('btn-toggle-cam');
+      btn.innerHTML = streamCamEnabled ? '📷' : '🚫';
+      btn.classList.toggle('danger', !streamCamEnabled);
     };
     
     function toggleStreamFullscreen() {
@@ -5210,8 +5576,87 @@
         });
       });
     }
+
+    // ==========================================
+    // ONBOARDING TOUR LOGIC
+    // ==========================================
+    window.initTour = function() {
+      // Check if user has already seen the tour
+      if (localStorage.getItem('crestTourDone') === 'true') return;
+      
+      const steps = [
+        { el: '.gtab:first-child', title: '🎮 Pick a Game', text: 'Filter live matches and lobbies by your favorite game.' },
+        { el: '.btn-wager', title: '⚔️ Create Wager', text: 'Post a challenge. We hold the funds in escrow, winner takes all.' },
+        { el: '.wh', title: '💰 Your Wallet', text: 'Manage your deposits and withdrawals securely here.' },
+        { el: '#nav', title: '🗺️ Navigation', text: 'Switch between Live games, Open Lobbies, and your Profile.' }
+      ];
+      
+      let currentStep = 0;
+      let overlay = document.createElement('div');
+      overlay.className = 'tour-overlay';
+      
+      let tooltip = document.createElement('div');
+      tooltip.className = 'tour-tooltip';
+      
+      document.body.appendChild(overlay);
+      document.body.appendChild(tooltip);
+      
+      function showStep(index) {
+        document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+        
+        if (index >= steps.length) {
+          overlay.remove();
+          tooltip.remove();
+          localStorage.setItem('crestTourDone', 'true');
+          return;
+        }
+        
+        const step = steps[index];
+        const target = document.querySelector(step.el);
+        if (!target) { showStep(index + 1); return; }
+        
+        target.classList.add('tour-highlight');
+        
+        const rect = target.getBoundingClientRect();
+        
+        tooltip.innerHTML = `
+          <div style="font-weight:bold; font-size:16px; margin-bottom:8px; color:var(--gold)">${step.title}</div>
+          <div style="font-size:13px; color:#fff; margin-bottom:16px;">${step.text}</div>
+          <div style="display:flex; justify-content:space-between;">
+            <button onclick="skipTour()" style="background:transparent; border:none; color:var(--text3); font-size:12px; cursor:pointer;">Skip</button>
+            <button onclick="nextTourStep()" style="background:var(--gold); color:#000; border:none; border-radius:4px; padding:6px 12px; font-weight:bold; cursor:pointer;">${index === steps.length - 1 ? 'Finish' : 'Next ➔'}</button>
+          </div>
+        `;
+        
+        // Position tooltip intelligently
+        let top = rect.bottom + 10;
+        if (top + 150 > window.innerHeight) {
+          top = rect.top - 160;
+        }
+        
+        tooltip.style.top = top + 'px';
+        tooltip.style.left = '50%';
+        tooltip.style.transform = 'translateX(-50%)';
+      }
+      
+      window.nextTourStep = () => {
+        currentStep++;
+        showStep(currentStep);
+      };
+      
+      window.skipTour = () => {
+        document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+        overlay.remove();
+        tooltip.remove();
+        localStorage.setItem('crestTourDone', 'true');
+      };
+      
+      showStep(0);
+    };
+
     // ==========================================
     // ADMIN DASHBOARD LOGIC
+    // ==========================================
     // ==========================================
     async function loadAdminStats() {
       if (!S.user || S.user.email !== ADMIN_EMAIL) return;

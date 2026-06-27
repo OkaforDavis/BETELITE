@@ -72,6 +72,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 
 		// DB Transaction: Deduct wallet and create escrow
 		ctx := context.Background()
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
 			return utils.SendError(c, 500, "Database error")
@@ -132,6 +135,10 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
+
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
@@ -216,6 +223,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
 			return utils.SendError(c, 500, "Database error")

@@ -30,6 +30,9 @@ func SetupReferralRoutes(api fiber.Router) {
 
 	// Get my referral code and stats
 	referrals.Get("/", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"code": "", "referrals": 0})
+		}
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
 
@@ -69,6 +72,10 @@ func SetupReferralRoutes(api fiber.Router) {
 
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
+
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 
 		// DB Transaction
 		tx, err := db.Pool.Begin(ctx)

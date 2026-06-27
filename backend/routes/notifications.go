@@ -37,6 +37,10 @@ func SetupNotificationRoutes(api fiber.Router) {
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
 
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{})
+		}
+
 		_, err := db.Pool.Exec(ctx, `
 			INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) 
 			VALUES ($1, $2, $3, $4)

@@ -14,6 +14,9 @@ func SetupSettingsRoutes(api fiber.Router) {
 	settings := api.Group("/user/settings", middleware.AuthRequired())
 
 	settings.Get("/", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"pushEnabled": false, "emailEnabled": false})
+		}
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
 
@@ -42,10 +45,10 @@ func SetupSettingsRoutes(api fiber.Router) {
 		uid := middleware.GetUID(c)
 		ctx := context.Background()
 
-		if req.PushEnabled != nil {
+		if req.PushEnabled != nil && db.Pool != nil {
 			db.Pool.Exec(ctx, "UPDATE users SET push_notifications = $1 WHERE id = $2", *req.PushEnabled, uid)
 		}
-		if req.EmailEnabled != nil {
+		if req.EmailEnabled != nil && db.Pool != nil {
 			db.Pool.Exec(ctx, "UPDATE users SET email_notifications = $1 WHERE id = $2", *req.EmailEnabled, uid)
 		}
 

@@ -19,6 +19,9 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// Get overall stats
 	admin.Get("/stats", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"stats": fiber.Map{"users": 0, "totalEscrow": 0, "activeMatches": 0}})
+		}
 		ctx := context.Background()
 
 		var userCount int
@@ -40,6 +43,9 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// Get recent transactions
 	admin.Get("/transactions", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"transactions": []fiber.Map{}})
+		}
 		ctx := context.Background()
 		rows, err := db.Pool.Query(ctx, "SELECT id, user_id, type, amount, created_at FROM transactions ORDER BY created_at DESC LIMIT 50")
 		if err != nil {
@@ -79,6 +85,9 @@ func SetupAdminRoutes(api fiber.Router) {
 		}
 
 		ctx := context.Background()
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
 			return utils.SendError(c, 500, "Database error")
@@ -130,6 +139,10 @@ func SetupAdminRoutes(api fiber.Router) {
 		if req.EntryFee <= 0 {
 			req.EntryFee = 0 // Normalize
 
+			if db.Pool == nil {
+				return utils.SendError(c, 503, "Database not available")
+			}
+
 			// Check if a free tournament was already created this week
 			startOfWeek := getStartOfCurrentWeek()
 			var existingCount int
@@ -171,6 +184,9 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// List all tournaments (admin view — includes all statuses)
 	admin.Get("/tournaments", func(c *fiber.Ctx) error {
+		if db.Pool == nil {
+			return utils.SendSuccess(c, fiber.Map{"tournaments": []fiber.Map{}})
+		}
 		ctx := context.Background()
 		rows, err := db.Pool.Query(ctx,
 			`SELECT id, name, game, COALESCE(mode,''), COALESCE(icon,''), entry_fee, max_players, prize_pool, status, COALESCE(created_by,''), created_at
@@ -223,6 +239,9 @@ func SetupAdminRoutes(api fiber.Router) {
 	// Delete a tournament (admin only, only if still open)
 	admin.Delete("/tournaments/:id", func(c *fiber.Ctx) error {
 		tID := c.Params("id")
+		if db.Pool == nil {
+			return utils.SendError(c, 503, "Database not available")
+		}
 		ctx := context.Background()
 
 		// Only allow deleting open tournaments (not active/finished)

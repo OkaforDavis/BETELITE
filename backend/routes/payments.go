@@ -163,7 +163,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 				}
 			}
 
-			if uid != "" {
+			if uid != "" && db.Pool != nil {
 				// Process DB Update
 				ctx := context.Background()
 				tx, err := db.Pool.Begin(ctx)

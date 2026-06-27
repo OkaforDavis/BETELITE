@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BETELITE User Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+            padding: 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #58a6ff;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #8b949e;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        
+        .diagram-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 30px 0;
+            overflow-x: auto;
+        }
+        
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+        
+        h2 {
+            color: #58a6ff;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+            border-bottom: 2px solid #30363d;
+            padding-bottom: 10px;
+        }
+        
+        .phase {
+            background: #0d1117;
+            border-left: 4px solid #58a6ff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .phase h3 {
+            color: #79c0ff;
+            margin-bottom: 10px;
+        }
+        
+        ul, ol {
+            margin-left: 30px;
+            color: #c9d1d9;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            padding: 20px;
+            border-radius: 6px;
+            color: #c9d1d9;
+        }
+        
+        .feature-card strong {
+            color: #58a6ff;
+            display: block;
+            margin-bottom: 10px;
+        }
+        
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #161b22;
+        }
+        
+        .summary-table th {
+            background: #0d1117;
+            color: #58a6ff;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #30363d;
+        }
+        
+        .summary-table td {
+            padding: 12px;
+            border-bottom: 1px solid #30363d;
+            color: #c9d1d9;
+        }
+        
+        .summary-table tr:nth-child(even) {
+            background: #0d1117;
+        }
+        
+        @media print {
+            body {
+                padding: 20px;
+            }
+            .diagram-container {
+                page-break-inside: avoid;
+            }
+            h2 {
+                page-break-before: avoid;
+            }
+        }
+        
+        .footer {
+            margin-top: 60px;
+            text-align: center;
+            color: #8b949e;
+            border-top: 1px solid #30363d;
+            padding-top: 20px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 BETELITE User Flow</h1>
+    <p class="subtitle">Complete User Journey Through the Esports Betting Platform</p>
+    
+    <div class="diagram-container">
+        <div class="mermaid">
+            flowchart TD
+                Start([User Visits BETELITE]) --> Login{Existing User?}
+                
+                Login -->|No| SignUp["📝 Sign Up<br>Email/Password via Firebase"]
+                SignUp --> KYC["🪪 KYC Verification<br>Basic Identity Check"]
+                KYC --> WalletSetup["💳 Setup Payment Method<br>Link Paystack Account"]
+                WalletSetup --> Dashboard
+                
+                Login -->|Yes| SignIn["🔑 Sign In<br>Firebase Authentication"]
+                SignIn --> Dashboard["📊 Dashboard<br>View Balance & Upcoming Matches"]
+                
+                Dashboard --> Browse{What Next?}
+                
+                Browse -->|View Matches| MatchBrowse["🎮 Browse Matches<br>Filter by Sport/League/Status"]
+                MatchBrowse --> MatchDetail["📋 Match Details<br>Teams, Odds, Bet Types"]
+                MatchDetail --> Decision1{Interested?}
+                
+                Decision1 -->|Not Now| Browse
+                Decision1 -->|Place Bet| CheckBalance{Sufficient<br>Balance?}
+                
+                CheckBalance -->|No| Deposit["💰 Deposit Funds<br>Paystack Payment Gateway"]
+                Deposit --> DepositConfirm["✅ Funds Added to Wallet"]
+                DepositConfirm --> PlaceBet
+                
+                CheckBalance -->|Yes| PlaceBet["🎯 Place Bet<br>Select Odds & Amount<br>Confirm Stake"]
+                PlaceBet --> BetConfirm["✅ Bet Confirmed<br>Get Bet Slip & Odds"]
+                BetConfirm --> WatchOption{Watch Match?}
+                
+                WatchOption -->|Yes| WatchMatch["🎥 Live Stream Match<br>LiveKit Video Feed<br>Real-Time Commentary"]
+                WatchOption -->|No| WaitResult["⏳ Wait for Result"]
+                
+                WatchMatch --> MatchEnds["🏁 Match Ends<br>Score Detection Triggered"]
+                MatchEnds --> Detection["🤖 AI Detection<br>Gemini Vision API<br>Extracts Final Score"]
+                Detection --> Verification{Manual Review<br>Needed?}
+                
+                Verification -->|Yes| AdminReview["👨‍⚖️ Admin Reviews<br>Resolves Disputes"]
+                AdminReview --> Result
+                Verification -->|No| Result["📊 Result Confirmed<br>System Calculates Outcome"]
+                
+                WaitResult --> Result
+                
+                Result --> BetResult{Bet Won?}
+                
+                BetResult -->|Won| Win["🎉 You Won!<br>Winnings Added to Wallet<br>Show Payout Amount"]
+                BetResult -->|Lost| Loss["❌ Bet Lost<br>Stake Forfeited"]
+                BetResult -->|Push/Void| Push["🔄 Bet Voided<br>Stake Returned"]
+                
+                Win --> PostMatch{What Next?}
+                Loss --> PostMatch
+                Push --> PostMatch
+                
+                PostMatch -->|Place Another Bet| Browse
+                PostMatch -->|Refer Friend| Referral["👥 Referral Program<br>Share Unique Link<br>Earn Commissions"]
+                Referral --> Browse
+                PostMatch -->|Withdraw| Withdraw["💸 Withdraw Winnings<br>Paystack Payout"]
+                Withdraw --> WithdrawConfirm["✅ Withdrawal Processed<br>Funds Sent to Account"]
+                WithdrawConfirm --> Browse
+                PostMatch -->|View History| History["📈 Bet History<br>Past Bets & Results"]
+                History --> Browse
+                PostMatch -->|Settings| Settings["⚙️ Account Settings<br>Profile, Preferences<br>Responsible Gaming"]
+                Settings --> Browse
+                PostMatch -->|Logout| End([Session End])
+                
+                style Start fill:#28a745,stroke:#1e7e34,color:#fff,stroke-width:3px
+                style End fill:#dc3545,stroke:#ab2c2c,color:#fff,stroke-width:3px
+                style PlaceBet fill:#ffc107,stroke:#e0a800,color:#000,stroke-width:2px
+                style WatchMatch fill:#0dcaf0,stroke:#0ba0d8,color:#000,stroke-width:2px
+                style Detection fill:#9966ff,stroke:#7744dd,color:#fff,stroke-width:2px
+                style Result fill:#17a2b8,stroke:#0f6674,color:#fff,stroke-width:2px
+                style Win fill:#28a745,stroke:#1e7e34,color:#fff,stroke-width:2px
+                style Loss fill:#dc3545,stroke:#ab2c2c,color:#fff,stroke-width:2px
+        </div>
+    </div>
+    
+    <h2>📋 User Flow Summary</h2>
+    
+    <div class="phase">
+        <h3>Phase 1: Onboarding</h3>
+        <ul>
+            <li>User registration via Firebase authentication</li>
+            <li>KYC (Know Your Customer) verification</li>
+            <li>Payment method setup using Paystack</li>
+            <li>Initial wallet setup and balance check</li>
+        </ul>
+    </div>
+    
+    <div class="phase">
+        <h3>Phase 2: Match Discovery</h3>
+        <ul>
+            <li>Browse available tournaments and matches</li>
+            <li>View detailed match information (teams, leagues, odds)</li>
+            <li>Compare different bet types and odds</li>
+            <li>Filter by sport, league, date, or betting type</li>
+        </ul>
+    </div>
+    
+    <div class="phase">
+        <h3>Phase 3: Betting</h3>
+        <ul>
+            <li>Check current wallet balance</li>
+            <li>Deposit funds if balance is insufficient</li>
+            <li>Select bet type and odds</li>
+            <li>Confirm stake and place bet</li>
+            <li>Receive bet confirmation with bet slip details</li>
+        </ul>
+    </div>
+    
+    <div class="phase">
+        <h3>Phase 4: Live Experience</h3>
+        <ul>
+            <li>Optional: Stream live match via LiveKit</li>
+            <li>View real-time updates and commentary</li>
+            <li>Monitor bet status during the match</li>
+        </ul>
+    </div>
+    
+    <div class="phase">
+        <h3>Phase 5: Results & Settlement</h3>
+        <ul>
+            <li>AI Detection (Gemini Vision API) automatically extracts final score</li>
+            <li>System verifies result accuracy</li>
+            <li>Admin manual review if dispute detected</li>
+            <li>System calculates bet outcome (Win/Loss/Push/Void)</li>
+            <li>Winnings or losses reflected in wallet</li>
+        </ul>
+    </div>
+    
+    <div class="phase">
+        <h3>Phase 6: Post-Match Actions</h3>
+        <ul>
+            <li><strong>View Winnings/Losses:</strong> Check payout details</li>
+            <li><strong>Withdraw Funds:</strong> Paystack payout to account</li>
+            <li><strong>Bet History:</strong> Review past bets and results</li>
+            <li><strong>Referrals:</strong> Invite friends and earn commissions</li>
+            <li><strong>Account Settings:</strong> Manage profile and preferences</li>
+            <li><strong>Place Another Bet:</strong> Return to match discovery</li>
+        </ul>
+    </div>
+    
+    <h2>🎯 Key Features & Technologies</h2>
+    
+    <table class="summary-table">
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>Technology</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>🔑 Authentication</strong></td>
+                <td>Firebase Auth</td>
+                <td>Secure user login and registration with email/password</td>
+            </tr>
+            <tr>
+                <td><strong>💳 Payments</strong></td>
+                <td>Paystack</td>
+                <td>Deposits and withdrawals for wallet funding</td>
+            </tr>
+            <tr>
+                <td><strong>🤖 AI Detection</strong></td>
+                <td>Gemini Vision API</td>
+                <td>Automated score detection and result verification</td>
+            </tr>
+            <tr>
+                <td><strong>🎥 Live Streaming</strong></td>
+                <td>LiveKit</td>
+                <td>Real-time match video streaming and communication</td>
+            </tr>
+            <tr>
+                <td><strong>👥 Social Features</strong></td>
+                <td>Referral System</td>
+                <td>Earn commissions by inviting friends</td>
+            </tr>
+            <tr>
+                <td><strong>📊 Analytics</strong></td>
+                <td>PostgreSQL + Go API</td>
+                <td>Complete bet history and tracking</td>
+            </tr>
+            <tr>
+                <td><strong>🔔 Notifications</strong></td>
+                <td>WebSocket + Push</td>
+                <td>Real-time alerts for bets, results, and updates</td>
+            </tr>
+            <tr>
+                <td><strong>⚙️ Account Management</strong></td>
+                <td>Go Backend</td>
+                <td>Settings, preferences, and responsible gaming tools</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h2>🏗️ Technology Stack Integration</h2>
+    
+    <div class="features">
+        <div class="feature-card">
+            <strong>Backend API</strong>
+            Go + Fiber framework handles all user requests, bet processing, and business logic
+        </div>
+        <div class="feature-card">
+            <strong>Detection Service</strong>
+            Python FastAPI processes match images and extracts scores using Gemini Vision AI
+        </div>
+        <div class="feature-card">
+            <strong>Frontend</strong>
+            Responsive PWA with real-time WebSocket updates for live data
+        </div>
+        <div class="feature-card">
+            <strong>Database</strong>
+            PostgreSQL stores user data, bets, matches, and transaction history
+        </div>
+        <div class="feature-card">
+            <strong>Real-time Communication</strong>
+            WebSockets enable instant notifications and live match updates
+        </div>
+        <div class="feature-card">
+            <strong>External Services</strong>
+            Firebase (auth), Paystack (payments), LiveKit (streaming), Gemini (AI)
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>BETELITE User Flow Documentation | Generated for System Analysis</p>
+        <p>© 2026 BETELITE - Competitive Esports Betting Platform</p>
+    </div>
+    
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+        mermaid.contentLoaded();
+    </script>
+</body>
+</html>
