@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"time"
 )
 
 type WSMessage struct {
@@ -19,6 +20,7 @@ func HandleMessage(hub *Hub, client *Client, msg WSMessage) {
 		if err := json.Unmarshal(msg.Data, &data); err == nil && data.UID != "" {
 			client.UID = data.UID
 			hub.JoinRoom(client, "user:"+data.UID)
+			hub.JoinRoom(client, "global")
 			log.Printf("Client identified as %s", data.UID)
 		}
 
@@ -39,19 +41,33 @@ func HandleMessage(hub *Hub, client *Client, msg WSMessage) {
 			hub.LeaveRoom(client, "match:"+data.MatchID)
 		}
 
-	case "chat_message":
+	case "chat_message", "reaction":
+		// Rate Limit: 1 message per 0.5 seconds
+		now := time.Now()
+		if now.Sub(client.LastChat) < 500*time.Millisecond {
+			// Drop message if sending too fast
+			return
+		}
+		client.LastChat = now
+		
 		var data struct {
 			MatchID string `json:"matchId"`
 			Message string `json:"message"`
 			Sender  string `json:"sender"`
+			Emoji   string `json:"emoji"`
 		}
 		if err := json.Unmarshal(msg.Data, &data); err == nil && data.MatchID != "" {
-			// Re-serialize the message and broadcast to the match room
+			// Broadcast to the specified room. If matchId is 'global', broadcast to 'global' room.
+			targetRoom := "match:" + data.MatchID
+			if data.MatchID == "global" {
+				targetRoom = "global"
+			}
+			
 			out, _ := json.Marshal(WSMessage{
-				Event: "chat_message",
+				Event: msg.Event,
 				Data:  msg.Data,
 			})
-			hub.BroadcastToRoom("match:"+data.MatchID, out)
+			hub.BroadcastToRoom(targetRoom, out)
 		}
 
 	case "stream_start", "stream_end", "stream_join":

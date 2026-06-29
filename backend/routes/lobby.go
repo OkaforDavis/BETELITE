@@ -2,7 +2,6 @@ package routes
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -57,7 +56,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	})
 
 	// Create a new challenge (Escrow hold)
-	lobby.Post("/create", func(c *fiber.Ctx) error {
+	lobby.Post("/create", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
 		var req struct {
 			Game     string `json:"game"`
 			Amount   int64  `json:"amount"` // Note: Frontend might send string/float, ensure it's converted to int64 kobo
@@ -68,7 +67,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 
 		uid := middleware.GetUID(c)
-		challengeID := fmt.Sprintf("challenge_%d", time.Now().UnixNano())
+		challengeID := utils.GenerateChallengeID()
 
 		// DB Transaction: Deduct wallet and create escrow
 		ctx := context.Background()
@@ -124,7 +123,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	})
 
 	// Accept challenge
-	lobby.Post("/accept", func(c *fiber.Ctx) error {
+	lobby.Post("/accept", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
 		var req struct {
 			ChallengeID string `json:"challengeId"`
 			Username    string `json:"username"`
@@ -174,7 +173,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 
 		// Update Escrow
-		matchID := fmt.Sprintf("match_%d", time.Now().UnixNano())
+		matchID := utils.GenerateMatchID()
 		pool := amount * 2
 		_, err = tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = $2, status = 'held', match_id = $3 WHERE id = $4",
 			uid, pool, matchID, escrow.ID)

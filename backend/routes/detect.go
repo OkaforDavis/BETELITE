@@ -16,7 +16,7 @@ import (
 )
 
 func SetupDetectRoutes(api fiber.Router) {
-	detect := api.Group("/detect", middleware.AuthRequired())
+	detect := api.Group("/detect", middleware.AuthRequired(), middleware.RateLimitOCR())
 
 	// ── /frame: Lightweight detection endpoint for the Detect tab ──
 	// Frontend sends: FormData with 'game', 'image_b64', optionally 'match_id'

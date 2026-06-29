@@ -1695,13 +1695,14 @@
       margin-bottom: 20px;
     }
     .admin-stat-card {
-      background: var(--bg2);
-      border: 1px solid var(--border2);
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--gold2);
       border-radius: 16px;
       padding: 16px 12px;
       text-align: center;
       position: relative;
       overflow: hidden;
+      box-shadow: 0 0 15px rgba(0, 255, 135, 0.05);
     }
     .admin-stat-card::before {
       content: '';
@@ -1718,6 +1719,7 @@
       font-weight: 900;
       color: var(--text);
       line-height: 1.1;
+      text-shadow: 0 0 10px rgba(0, 255, 135, 0.2);
     }
     .admin-stat-card .stat-label {
       font-size: 10px;
@@ -1729,19 +1731,20 @@
     }
 
     .admin-section {
-      background: var(--bg2);
-      border: 1px solid var(--border2);
-      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(0, 255, 135, 0.3);
+      border-radius: 24px;
       margin-bottom: 16px;
       overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     }
     .admin-section-header {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 14px 16px;
-      background: rgba(0,229,117,0.04);
-      border-bottom: 1px solid var(--border2);
+      background: rgba(0,229,117,0.08);
+      border-bottom: 1px solid rgba(0, 255, 135, 0.2);
       font-family: var(--fd);
       font-weight: 800;
       font-size: 14px;
@@ -1749,21 +1752,30 @@
       color: var(--gold);
     }
     .admin-section-header span { font-size: 18px; }
-    .admin-section-body { padding: 16px; }
+    .admin-section-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
     .admin-section-body .fi {
-      background: var(--bg3);
-      border: 1px solid var(--border2);
-      border-radius: 12px;
-      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 14px 16px;
       font-size: 14px;
       color: var(--text);
       width: 100%;
-      margin-bottom: 10px;
       outline: none;
-      transition: border-color 0.2s;
+      transition: all 0.3s ease;
     }
-    .admin-section-body .fi:focus { border-color: var(--gold2); }
+    .admin-section-body .fi:focus { 
+      border-color: var(--gold); 
+      box-shadow: 0 0 10px rgba(0, 255, 135, 0.2); 
+    }
     .admin-section-body .fi::placeholder { color: var(--text3); }
+    .admin-section-body button.cta {
+      border-radius: 24px !important;
+      background: linear-gradient(90deg, var(--gold) 0%, #FFE175 100%) !important;
+      color: #000 !important;
+      box-shadow: 0 4px 15px rgba(0, 255, 135, 0.4) !important;
+      margin-top: 4px;
+    }
 
     /* ═══════════════════════════════════
        ONBOARDING TOUR
@@ -2251,6 +2263,15 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+    
+    .tut-highlight {
+      z-index: 9999 !important;
+      position: relative !important;
+      background: var(--bg2) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 0 0 4px var(--gold) !important;
+      transition: all 0.3s ease;
+    }
   </style>
   <!-- LiveKit Client SDK for WebRTC Streaming -->
   <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
@@ -2541,7 +2562,7 @@
         </div>
 
         <!-- LOCKED ROOM BUTTON -->
-        <button style="width:100%; margin-bottom:16px; background:transparent; border:1px solid var(--green); color:var(--green); font-weight:700; padding:12px; border-radius:2px; font-size:16px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="createLockedRoom()">
+        <button style="width:100%; margin-bottom:16px; background:transparent; border:1px solid var(--green); color:var(--green); font-weight:700; padding:12px; border-radius:24px; font-size:16px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="createLockedRoom()">
           <span style="font-size:18px;">🔒</span> Start Locked Room (Stream)
         </button>
 
@@ -2587,7 +2608,7 @@
             <div style="font-size:11px; color:var(--text2); line-height:1.5; margin-bottom: 16px;" id="ai-res-desc">
               Confidence: 95%
             </div>
-            <button class="cta" id="btn-apply-score" style="background: var(--green); color: #000; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="applyAiScore()">
+            <button class="cta" id="btn-apply-score" style="background: var(--green); color: #000; display:flex; align-items:center; justify-content:center; gap:6px; border-radius:24px;" onclick="applyAiScore()">
               📌 Apply to Live Board
             </button>
           </div>
@@ -2779,6 +2800,22 @@
 
     </div>
 
+    <!-- ════════════════════════════════════════════════
+         GLOBAL CHAT PAGE
+    ════════════════════════════════════════════════ -->
+    <div class="pg" id="pg-chat" style="display:none; flex-direction:column; height:calc(100vh - var(--nav-h) - 40px);">
+      <div style="padding:16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0; font-size:20px; color:var(--gold);">🌍 Global Chat</h2>
+      </div>
+      <div id="global-chat-messages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;">
+        <div style="text-align:center; color:var(--text3); font-size:12px;">Welcome to Global Chat! Keep it friendly.</div>
+      </div>
+      <div style="padding:16px; border-top:1px solid var(--border); display:flex; gap:8px;">
+        <input type="text" id="global-chat-input" placeholder="Message everyone..." style="flex:1; border-radius:24px; border:1px solid rgba(255,255,255,0.1); padding:12px 16px; background:rgba(0,0,0,0.4); color:#fff; font-size:15px;">
+        <button onclick="sendGlobalChat()" style="background:linear-gradient(45deg, var(--gold), #FFE175); border:none; border-radius:50%; width:44px; height:44px; color:#000; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(255,215,0,0.3);">➔</button>
+      </div>
+    </div>
+
     <!-- BOTTOM NAV -->
     <nav id="nav">
       <button class="nb on" id="nb-live" onclick="navTo('live')">
@@ -2802,6 +2839,12 @@
           <polyline points="14 2 14 8 20 8" />
         </svg>
         LOBBY
+      </button>
+      <button class="nb" id="nb-chat" onclick="navTo('chat')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"></path>
+        </svg>
+        CHAT
       </button>
       <button class="nb" id="nb-watch" onclick="navTo('watch')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2849,11 +2892,40 @@
         </div>
       </div>
     </div>
+    <!-- PWA INSTALL / OPEN PROMPT -->
+    <div id="pwa-prompt" style="display:none; position:fixed; bottom:0; left:0; width:100%; background:var(--bg2); border-top:1px solid var(--gold); padding:20px; z-index:10000; flex-direction:column; gap:12px; box-shadow:0 -5px 20px rgba(0,0,0,0.8); border-top-left-radius:20px; border-top-right-radius:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <img src="img/logo.png" style="width:48px; height:48px; border-radius:12px;" onerror="this.src='https://via.placeholder.com/48/00D46A/000000?text=B'">
+          <div>
+            <div style="font-weight:bold; font-size:16px; color:var(--gold);">BetElite</div>
+            <div style="font-size:12px; color:var(--text2);" id="pwa-desc">Install for the best experience.</div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('pwa-prompt').style.display='none'" style="background:transparent; border:none; color:var(--text2); font-size:24px; padding:0 8px;">&times;</button>
+      </div>
+      <button id="pwa-btn" style="width:100%; background:linear-gradient(45deg, var(--gold), #FFE175); color:#000; font-weight:bold; padding:14px; border-radius:24px; border:none; font-size:16px;" onclick="handlePwaAction()">Install App</button>
+    </div>
+
+    <!-- STEP-BY-STEP TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9998; pointer-events:none;"></div>
+    <div id="tutorial-tooltip" style="display:none; position:fixed; background:var(--bg2); border:2px solid var(--gold); padding:16px; border-radius:16px; z-index:9999; width:280px; box-shadow:0 10px 30px rgba(0,0,0,0.9); transition:all 0.3s ease;">
+      <h3 id="tut-title" style="margin:0 0 8px 0; color:var(--gold); font-size:18px;">Welcome!</h3>
+      <p id="tut-desc" style="margin:0 0 16px 0; font-size:14px; color:#fff; line-height:1.4;">Let's take a quick tour.</p>
+      <div style="display:flex; justify-content:space-between;">
+        <button onclick="skipTutorial()" style="background:transparent; border:1px solid var(--border2); color:var(--text2); padding:6px 12px; border-radius:24px; font-size:12px;">Skip</button>
+        <button onclick="nextTutorialStep()" style="background:var(--gold); color:#000; border:none; padding:6px 16px; border-radius:24px; font-size:14px; font-weight:bold;">Next ➔</button>
+      </div>
+    </div>
   </div><!-- #app -->
 
   <script>
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.protocol === 'file:';
-    const BACKEND_URL = isLocal ? 'http://localhost:3000' : 'https://betelite-alvn.onrender.com';
+    let BACKEND_URL = 'https://betelite-alvn.onrender.com';
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      BACKEND_URL = 'http://localhost:3000';
+    } else if (window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.')) {
+      BACKEND_URL = `http://${window.location.hostname}:3000`;
+    }
     const STREAMING_URL = BACKEND_URL; // Streaming is handled by the same Go backend
 
     // ══════════════════════════════════════════════════════
@@ -3106,17 +3178,19 @@
       fetchBackendSettings();  // auto-load Paystack key + any server config
       listenToNotifications(user); // start listening for deposits, wins, etc.
       
-      // PWA Prompt: Show every time unless already installed
+      // PWA Prompt: Always show unless installed
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-      if (!isStandalone) {
+      if (!isStandalone && localStorage.getItem('pwa_installed') !== 'true') {
         setTimeout(() => {
-          if (typeof showCustomPWAModal === 'function') showCustomPWAModal();
+          document.getElementById('pwa-prompt').style.display = 'flex';
+          document.getElementById('pwa-desc').innerText = 'Install for the best experience.';
+          document.getElementById('pwa-btn').innerText = 'Install App';
         }, 1500);
       }
       
       // Initialize interactive tour
       setTimeout(() => {
-        if (typeof initTour === 'function') initTour();
+        if (typeof startTutorial === 'function') startTutorial();
       }, 2000);
       // Admin check
       if (user.email === ADMIN_EMAIL) {
@@ -3427,6 +3501,12 @@
       if (n === 'live')  loadLiveMatches();
       if (n === 'tournaments') loadTournaments();
       if (n === 'admin') loadAdminStats();
+      if (n === 'chat') {
+        setTimeout(() => {
+          const chatBox = document.getElementById('global-chat-messages');
+          if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+        }, 100);
+      }
     }
     function fGame(el, g) {
       document.querySelectorAll('.gtab').forEach(t => t.classList.remove('on'));
@@ -4945,10 +5025,14 @@
       chatWs.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'chat_message' && msg.matchId === currentStreamMatchId) {
-            appendChatMessage(msg);
-          } else if (msg.type === 'reaction' && msg.matchId === currentStreamMatchId) {
-            showFloatingReaction(msg.emoji);
+          if (msg.event === 'chat_message') {
+            if (msg.data.matchId === 'global') {
+              appendGlobalChatMessage(msg.data);
+            } else if (msg.data.matchId === currentStreamMatchId) {
+              appendChatMessage(msg.data);
+            }
+          } else if (msg.event === 'reaction' && msg.data.matchId === currentStreamMatchId) {
+            showFloatingReaction(msg.data.emoji);
           }
         } catch(e) {}
       };
@@ -4967,11 +5051,29 @@
       if (!input || !input.value.trim() || !chatWs) return;
       
       chatWs.send(JSON.stringify({
-        type: 'chat_message',
-        matchId: currentStreamMatchId,
-        username: S.user?.displayName || 'Player',
-        avatar: S.user?.photoURL || '',
-        text: input.value.trim()
+        event: 'chat_message',
+        data: {
+          matchId: currentStreamMatchId,
+          username: S.user?.displayName || 'Player',
+          avatar: S.user?.photoURL || '',
+          text: input.value.trim()
+        }
+      }));
+      input.value = '';
+    }
+
+    function sendGlobalChat() {
+      const input = document.getElementById('global-chat-input');
+      if (!input || !input.value.trim() || !chatWs) return;
+      
+      chatWs.send(JSON.stringify({
+        event: 'chat_message',
+        data: {
+          matchId: 'global',
+          username: S.user?.displayName || 'Player',
+          avatar: S.user?.photoURL || '',
+          text: input.value.trim()
+        }
       }));
       input.value = '';
     }
@@ -4979,9 +5081,11 @@
     function sendReaction(emoji) {
       if (!chatWs) return;
       chatWs.send(JSON.stringify({
-        type: 'reaction',
-        matchId: currentStreamMatchId,
-        emoji: emoji
+        event: 'reaction',
+        data: {
+          matchId: currentStreamMatchId,
+          emoji: emoji
+        }
       }));
       showFloatingReaction(emoji);
     }
@@ -5052,6 +5156,28 @@
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
+    function appendGlobalChatMessage(msg) {
+      const chatBox = document.getElementById('global-chat-messages');
+      if (!chatBox) return;
+      
+      const isMe = msg.username === (S.user?.displayName || 'Player');
+      const div = document.createElement('div');
+      div.style.cssText = `display:flex; gap:10px; align-items:flex-end; ${isMe ? 'flex-direction:row-reverse;' : ''}`;
+      
+      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(msg.username)}&background=random`;
+      
+      div.innerHTML = `
+        <img src="${msg.avatar || fallbackAvatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+        <div style="background:${isMe ? 'linear-gradient(135deg, var(--gold), #FFE175)' : 'rgba(255,255,255,0.08)'}; color:${isMe ? '#000' : '#fff'}; padding:10px 14px; border-radius:16px; border-bottom-${isMe ? 'right' : 'left'}-radius:4px; max-width:75%; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+          ${!isMe ? `<div style="font-size:11px; font-weight:bold; color:var(--gold); margin-bottom:4px;">${msg.username}</div>` : ''}
+          <div>${msg.text}</div>
+        </div>
+      `;
+      
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
     async function startWebRTCStream(matchId) {
       // Detect mobile: screen sharing (getDisplayMedia) is NOT supported on iOS/Android
       const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
@@ -5113,6 +5239,57 @@
       currentStreamMatchId = matchId;
       document.getElementById('stream-overlay').innerHTML = 'Connecting...';
       await connectToLiveKit(matchId, false);
+    }
+
+    let currentStreamScale = 1.0;
+    
+    function zoomStream(factor) {
+      currentStreamScale += factor;
+      // Clamp between 0.5x and 3.0x
+      if (currentStreamScale < 0.5) currentStreamScale = 0.5;
+      if (currentStreamScale > 3.0) currentStreamScale = 3.0;
+      
+      const videoEl = document.getElementById('webrtc-video');
+      const camEl = document.getElementById('webrtc-camera-video');
+      if (videoEl && videoEl.style.display !== 'none') {
+        videoEl.style.transform = `scale(${currentStreamScale})`;
+        videoEl.style.transformOrigin = 'center';
+      }
+      if (camEl && camEl.parentElement.style.display !== 'none') {
+        camEl.style.transform = `scale(${currentStreamScale})`;
+        camEl.style.transformOrigin = 'center';
+      }
+    }
+
+    async function endStream() {
+      if (!confirm("Are you sure you want to end the stream?")) return;
+      if (currentRoom) {
+        currentRoom.disconnect();
+        currentRoom = null;
+      }
+      document.getElementById('stream-controls-container').style.display = 'none';
+      document.getElementById('stream-viewers-container').style.display = 'none';
+      document.getElementById('webrtc-video').style.display = 'none';
+      document.getElementById('webrtc-video').srcObject = null;
+      document.getElementById('stream-init-btns').style.display = 'flex';
+      document.getElementById('stream-overlay').style.display = 'flex';
+      document.getElementById('stream-overlay').innerHTML = 'Stream Ended';
+      currentStreamScale = 1.0;
+    }
+
+    async function leaveStream() {
+      if (currentRoom) {
+        currentRoom.disconnect();
+        currentRoom = null;
+      }
+      document.getElementById('stream-controls-container').style.display = 'none';
+      document.getElementById('stream-viewers-container').style.display = 'none';
+      document.getElementById('webrtc-video').style.display = 'none';
+      document.getElementById('webrtc-video').srcObject = null;
+      document.getElementById('stream-init-btns').style.display = 'flex';
+      document.getElementById('stream-overlay').style.display = 'flex';
+      document.getElementById('stream-overlay').innerHTML = 'Stream Offline';
+      currentStreamScale = 1.0;
     }
 
     async function connectToLiveKit(matchId, isHost, mode='screen', precreatedTracks=[]) {
@@ -5625,58 +5802,7 @@
     // ══════════════════════════════════════════════════════
     // PWA & WEB PUSH SUBSCRIPTION LOGIC
     // ══════════════════════════════════════════════════════
-    let deferredPrompt;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      showCustomPWAModal();
-    });
-
-    function showCustomPWAModal() {
-      if (document.getElementById('pwa-modal')) return;
-      const modal = document.createElement('div');
-      modal.id = 'pwa-modal';
-      modal.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); z-index:100000; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.3s ease;';
-      modal.innerHTML = `
-        <div style="background:#050505; border:1px solid; border-image:linear-gradient(135deg, #8A8D91, #333) 1; border-radius:16px; width:90%; max-width:340px; padding:24px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); position:relative; transform:scale(0.9); transition:transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
-          <img src="/crestarena-logo.png" style="width:60px; height:60px; margin-bottom:16px;">
-          <h2 style="font-family:var(--fd); font-size:24px; font-weight:900; color:#fff; text-transform:uppercase; letter-spacing:1px; margin:0 0 8px 0;">Premium Experience</h2>
-          <p style="color:var(--text2); font-size:14px; line-height:1.5; margin:0 0 24px 0;">Install CrestArena to unlock background streaming, native push notifications, and maximum performance.</p>
-          <button id="pwa-install-btn" style="width:100%; background:var(--gold); color:#000; font-family:var(--fd); font-size:18px; font-weight:800; text-transform:uppercase; border:none; padding:16px; border-radius:8px; cursor:pointer; box-shadow:0 0 20px rgba(0, 229, 117, 0.4);">INSTALL NOW</button>
-          <button id="pwa-close-btn" style="margin-top:16px; background:transparent; color:var(--text3); border:none; font-size:12px; font-weight:600; text-transform:uppercase; cursor:pointer;">Maybe Later</button>
-        </div>
-      `;
-      document.body.appendChild(modal);
-
-      requestAnimationFrame(() => {
-        modal.style.opacity = '1';
-        modal.children[0].style.transform = 'scale(1)';
-      });
-
-      document.getElementById('pwa-close-btn').onclick = () => {
-        modal.style.opacity = '0';
-        setTimeout(() => modal.remove(), 300);
-      };
-
-      document.getElementById('pwa-install-btn').onclick = async () => {
-        modal.style.opacity = '0';
-        setTimeout(() => modal.remove(), 300);
-        if (deferredPrompt) {
-          try {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') subscribeToPush();
-            deferredPrompt = null;
-          } catch(e) {
-            console.error('PWA Prompt error:', e);
-          }
-        } else {
-          // Provide fallback instructions if prompt is unavailable
-          showCrestToast('MANUAL INSTALL', 'Tap your browser menu (⋮ or ⇪) and select "Add to Home Screen" or "Install App".', 'info');
-        }
-      };
-    }
-
+    // (Old PWA prompt logic removed, kept push notification logic below)
     const VAPID_PUBLIC_KEY = 'BIhPv97VSOwJU9yWAiYmkdT5Qt5KcbzJiP7reUVlUbqAQUt_1Ij7X512Oj2q22foQUZ03svluzNbplOWbmxLPzU';
 
     async function subscribeToPush() {
@@ -5934,6 +6060,112 @@
         toast('Error uploading score');
       }
       fileInput.value = ''; // Reset
+    }
+    // ══════════════════════════════════════════════════════
+    //  PWA INSTALL & OPEN APP LOGIC
+    // ══════════════════════════════════════════════════════
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        document.getElementById('pwa-prompt').style.display = 'flex';
+        document.getElementById('pwa-desc').innerText = 'Install for the best experience.';
+        document.getElementById('pwa-btn').innerText = 'Install App';
+      }
+    });
+
+    // Check if installed but opened in browser
+    window.addEventListener('load', () => {
+      if (window.matchMedia('(display-mode: standalone)').matches) {
+        // Already in PWA, do nothing
+      } else if (navigator.standalone || window.matchMedia('(display-mode: browser)').matches) {
+        // If they already installed it previously (we can loosely track via localStorage)
+        if (localStorage.getItem('pwa_installed') === 'true') {
+          document.getElementById('pwa-prompt').style.display = 'flex';
+          document.getElementById('pwa-desc').innerText = 'Open in the BetElite App.';
+          document.getElementById('pwa-btn').innerText = 'Open App';
+        }
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      document.getElementById('pwa-prompt').style.display = 'none';
+      localStorage.setItem('pwa_installed', 'true');
+    });
+
+    function handlePwaAction() {
+      const btnText = document.getElementById('pwa-btn').innerText;
+      if (btnText === 'Install App' && deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            document.getElementById('pwa-prompt').style.display = 'none';
+          }
+          deferredPrompt = null;
+        });
+      } else if (btnText === 'Install App') {
+        // Fallback if beforeinstallprompt hasn't fired
+        if (typeof toast === 'function') {
+           toast('Tap browser menu (⋮) and "Add to Home screen" to install.');
+        } else {
+           alert('Tap browser menu (⋮) and "Add to Home screen" to install.');
+        }
+      } else if (btnText === 'Open App') {
+        // Deep linking back to the app
+        window.location.href = window.location.href;
+        document.getElementById('pwa-prompt').style.display = 'none';
+      }
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  INTERACTIVE STEP-BY-STEP TUTORIAL
+    // ══════════════════════════════════════════════════════
+    const tutorialSteps = [
+      { id: 'nb-live', title: 'Live Matches', desc: 'Bet on active games or watch streams here.' },
+      { id: 'nb-lobby', title: 'Game Lobby', desc: 'Join or create tournaments to earn money.' },
+      { id: 'nb-watch', title: 'Watch / Stream', desc: 'Broadcast your gameplay or watch others.' },
+      { id: 'nb-chat', title: 'Global Chat', desc: 'Talk to other players and arrange matches.' },
+      { id: 'nb-account', title: 'Your Account', desc: 'Manage your wallet, profile, and withdrawals.' }
+    ];
+    let currentTutStep = 0;
+
+    function startTutorial() {
+      if (localStorage.getItem('tutorial_done')) return;
+      document.getElementById('tutorial-overlay').style.display = 'block';
+      document.getElementById('tutorial-tooltip').style.display = 'block';
+      showTutorialStep(0);
+    }
+
+    function showTutorialStep(index) {
+      if (index >= tutorialSteps.length) { skipTutorial(); return; }
+      currentTutStep = index;
+      const step = tutorialSteps[index];
+      const target = document.getElementById(step.id);
+      
+      document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+      if (target) {
+        target.classList.add('tut-highlight');
+        const rect = target.getBoundingClientRect();
+        const tooltip = document.getElementById('tutorial-tooltip');
+        
+        // Position tooltip
+        tooltip.style.bottom = (window.innerHeight - rect.top + 10) + 'px';
+        tooltip.style.left = '50%';
+        tooltip.style.transform = 'translateX(-50%)';
+        
+        document.getElementById('tut-title').innerText = step.title;
+        document.getElementById('tut-desc').innerText = step.desc;
+      }
+    }
+
+    function nextTutorialStep() { showTutorialStep(currentTutStep + 1); }
+    function skipTutorial() {
+      document.getElementById('tutorial-overlay').style.display = 'none';
+      document.getElementById('tutorial-tooltip').style.display = 'none';
+      document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+      localStorage.setItem('tutorial_done', 'true');
     }
   </script>
 </body>

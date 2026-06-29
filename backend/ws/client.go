@@ -16,10 +16,11 @@ const (
 )
 
 type Client struct {
-	Hub  *Hub
-	Conn *websocket.Conn
-	UID  string
-	Send chan []byte
+	Hub      *Hub
+	Conn     *websocket.Conn
+	UID      string
+	Send     chan []byte
+	LastChat time.Time
 }
 
 func (c *Client) ReadPump() {

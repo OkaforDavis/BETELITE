@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 
 	"betelite-go/db"
 	"betelite-go/middleware"
@@ -158,11 +157,11 @@ func SetupAdminRoutes(api fiber.Router) {
 			}
 		}
 
-		tournamentID := uuid.New().String()
+		// ── CREATE TOURNAMENT ──
+		tournamentID := utils.GenerateTournamentID()
 
 		_, err := db.Pool.Exec(ctx,
-			`INSERT INTO tournaments (id, name, game, mode, icon, entry_fee, max_players, prize_pool, status, created_by, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open', $9, NOW())`,
+			"INSERT INTO tournaments (id, name, game, mode, icon, entry_fee, max_players, prize_pool, created_by, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', NOW())",
 			tournamentID, req.Name, req.Game, req.Mode, req.Icon, req.EntryFee, req.MaxPlayers, req.PrizePool, uid,
 		)
 		if err != nil {
