@@ -3473,7 +3473,10 @@
         
         <div style="background:#000; border-radius:12px; width:100%; height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid var(--border2); position:relative; overflow:hidden;" id="stream-container">
           <video id="webrtc-video" autoplay playsinline style="width:100%; height:100%; object-fit:contain; display:none; transition: transform 0.3s;"></video>
-          <video id="webrtc-camera-video" autoplay playsinline style="position:absolute; bottom:12px; right:12px; width:90px; height:90px; object-fit:cover; border-radius:8px; border:2px solid var(--gold); display:none; z-index:4; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></video>
+          <div id="webrtc-camera-container" class="draggable-cam">
+            <video id="webrtc-camera-video" autoplay playsinline></video>
+            <div id="camera-drag-handle" style="position:absolute; bottom:0; right:0; width:15px; height:15px; cursor:se-resize; background:linear-gradient(135deg, transparent 50%, var(--gold) 50%);"></div>
+          </div>
           
           <div id="stream-overlay" style="position:absolute; text-align:center;">
             <div style="font-size:32px; margin-bottom:8px;">📡</div>
@@ -3495,6 +3498,7 @@
             <button class="stream-ctrl-btn" onclick="toggleStreamCam()" id="btn-toggle-cam" title="Toggle Camera">📷</button>
             <button class="stream-ctrl-btn danger" onclick="endStream()" title="End Stream">🛑 END STREAM</button>
           ` : `
+            <button class="stream-ctrl-btn primary" onclick="openTipModal('${data.id}')" title="Tip Streamer">💸 TIP</button>
             <button class="stream-ctrl-btn danger" onclick="leaveStream()" title="Leave Stream">🚪 LEAVE</button>
           `}
         </div>
@@ -4943,6 +4947,8 @@
           const msg = JSON.parse(event.data);
           if (msg.type === 'chat_message' && msg.matchId === currentStreamMatchId) {
             appendChatMessage(msg);
+          } else if (msg.type === 'reaction' && msg.matchId === currentStreamMatchId) {
+            showFloatingReaction(msg.emoji);
           }
         } catch(e) {}
       };
@@ -4968,6 +4974,64 @@
         text: input.value.trim()
       }));
       input.value = '';
+    }
+
+    function sendReaction(emoji) {
+      if (!chatWs) return;
+      chatWs.send(JSON.stringify({
+        type: 'reaction',
+        matchId: currentStreamMatchId,
+        emoji: emoji
+      }));
+      showFloatingReaction(emoji);
+    }
+
+    function showFloatingReaction(emoji) {
+      const container = document.getElementById('stream-container');
+      if (!container) return;
+      
+      const el = document.createElement('div');
+      el.className = 'stream-reaction';
+      el.innerText = emoji;
+      
+      // Randomize horizontal position slightly
+      const randomX = Math.floor(Math.random() * 40) - 20;
+      el.style.left = `calc(50% + ${randomX}px)`;
+      
+      container.appendChild(el);
+      
+      // Remove after animation (2s)
+      setTimeout(() => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }, 2000);
+    }
+
+    function openTipModal(matchId) {
+      if (!S.user) {
+        toast('Please login to tip.');
+        return;
+      }
+      const amtStr = prompt('How much would you like to tip the streamer? (Minimum 10 coins)', '50');
+      if (!amtStr) return;
+      const amt = parseInt(amtStr);
+      if (isNaN(amt) || amt < 10) {
+        alert('Invalid amount. Minimum tip is 10 coins.');
+        return;
+      }
+      
+      // Simulate tip deduction (visual only for now, would integrate with backend)
+      toast(`You tipped ${amt} coins!`);
+      
+      // Send chat message broadcast
+      if (chatWs) {
+        chatWs.send(JSON.stringify({
+          type: 'chat_message',
+          matchId: currentStreamMatchId,
+          username: 'System',
+          avatar: 'https://ui-avatars.com/api/?name=TIP&background=gold&color=black',
+          text: `💸 ${S.user.displayName || 'A Viewer'} just tipped ${amt} coins to the streamer!`
+        }));
+      }
     }
 
     function appendChatMessage(msg) {
@@ -5094,7 +5158,7 @@
             } else if (publication.source === LivekitClient.Track.Source.Camera && camEl) {
               // In 'both' mode, camera goes to PiP, screen share to main
               track.attach(camEl);
-              camEl.style.display = 'block';
+              camEl.parentElement.style.display = 'block';
             } else {
               track.attach(videoEl);
               videoEl.style.display = 'block';
@@ -5135,7 +5199,7 @@
                   if (isMobile) videoEl.setAttribute('playsinline', '');
                 } else if (pub.source === LivekitClient.Track.Source.Camera && camEl) {
                   pub.videoTrack.attach(camEl);
-                  camEl.style.display = 'block';
+                  camEl.parentElement.style.display = 'block';
                 } else {
                   pub.videoTrack.attach(videoEl);
                   videoEl.style.display = 'block';
@@ -5143,13 +5207,100 @@
               }
             });
             
-            if (pubs.length > 0) {
+        if (pubs.length > 0) {
               document.getElementById('stream-overlay').style.display = 'none';
               document.getElementById('stream-init-btns').style.display = 'none';
               document.getElementById('stream-controls-container').style.display = 'flex';
               document.getElementById('stream-viewers-container').style.display = 'flex';
+              
+              const camEl = document.getElementById('webrtc-camera-video');
+              if (camEl && camEl.parentElement) {
+                camEl.parentElement.style.display = 'block';
+                initDraggableCamera();
+              }
             }
           };
+
+    // ══════════════════════════════════════════════════════
+    // DRAGGABLE CAMERA LOGIC
+    // ══════════════════════════════════════════════════════
+    function initDraggableCamera() {
+      const camContainer = document.getElementById('webrtc-camera-container');
+      if (!camContainer) return;
+      
+      let isDragging = false;
+      let startX, startY, initialLeft, initialTop;
+      
+      const startDrag = (e) => {
+        if (e.target.id === 'camera-drag-handle') return;
+        
+        isDragging = true;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        startX = clientX;
+        startY = clientY;
+        
+        const rect = camContainer.getBoundingClientRect();
+        const parentRect = camContainer.parentElement.getBoundingClientRect();
+        
+        initialLeft = rect.left - parentRect.left;
+        initialTop = rect.top - parentRect.top;
+        
+        camContainer.style.bottom = 'auto';
+        camContainer.style.right = 'auto';
+        camContainer.style.left = initialLeft + 'px';
+        camContainer.style.top = initialTop + 'px';
+      };
+      
+      const onDrag = (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+        
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+        
+        const parentRect = camContainer.parentElement.getBoundingClientRect();
+        const rect = camContainer.getBoundingClientRect();
+        
+        if (newLeft < 0) newLeft = 0;
+        if (newTop < 0) newTop = 0;
+        if (newLeft + rect.width > parentRect.width) newLeft = parentRect.width - rect.width;
+        if (newTop + rect.height > parentRect.height) newTop = parentRect.height - rect.height;
+        
+        camContainer.style.left = newLeft + 'px';
+        camContainer.style.top = newTop + 'px';
+      };
+      
+      const endDrag = () => {
+        isDragging = false;
+        localStorage.setItem('camPos', JSON.stringify({ left: camContainer.style.left, top: camContainer.style.top }));
+      };
+      
+      camContainer.addEventListener('mousedown', startDrag);
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('mouseup', endDrag);
+      
+      camContainer.addEventListener('touchstart', startDrag, { passive: false });
+      document.addEventListener('touchmove', onDrag, { passive: false });
+      document.addEventListener('touchend', endDrag);
+      
+      try {
+        const saved = JSON.parse(localStorage.getItem('camPos'));
+        if (saved && saved.left && saved.top) {
+          camContainer.style.bottom = 'auto';
+          camContainer.style.right = 'auto';
+          camContainer.style.left = saved.left;
+          camContainer.style.top = saved.top;
+        }
+      } catch(e) {}
+    }
 
           // Listen for local track published event (more reliable than immediate check)
           room.localParticipant.on('localTrackPublished', () => {
@@ -5237,11 +5388,19 @@
       msgBox.style.cssText = 'overflow-y:auto; margin-bottom:10px; pointer-events:auto; display:flex; flex-direction:column; max-height:100px; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);';
       
       const inputRow = document.createElement('div');
-      inputRow.style.cssText = 'display:flex; gap:8px; pointer-events:auto;';
+      inputRow.style.cssText = 'display:flex; gap:8px; pointer-events:auto; flex-wrap:wrap; align-items:center;';
       inputRow.innerHTML = `
-        <input type="text" id="chat-input" placeholder="Say something..." style="flex:1; border-radius:20px; border:1px solid rgba(255,255,255,0.2); padding:8px 12px; background:rgba(0,0,0,0.7); color:#fff; font-size:16px;">
-        <button onclick="sendChatMessage()" style="background:var(--gold); border:none; border-radius:50%; width:36px; height:36px; color:#000; font-weight:bold; cursor:pointer; flex-shrink:0;">➔</button>
-        ${isHost ? `<button onclick="endWebRTCStream()" style="background:#ff3333; border:none; border-radius:20px; padding:0 12px; color:#fff; font-weight:bold; cursor:pointer; flex-shrink:0;">END</button>` : ''}
+        <div style="display:flex; gap:8px; width:100%;">
+          <input type="text" id="chat-input" placeholder="Say something..." style="flex:1; border-radius:20px; border:1px solid rgba(255,255,255,0.2); padding:8px 12px; background:rgba(0,0,0,0.7); color:#fff; font-size:16px;">
+          <button onclick="sendChatMessage()" style="background:var(--gold); border:none; border-radius:50%; width:36px; height:36px; color:#000; font-weight:bold; cursor:pointer; flex-shrink:0;">➔</button>
+        </div>
+        <div style="display:flex; gap:12px; width:100%; justify-content:center; margin-top:4px;">
+          <button onclick="sendReaction('❤️')" style="background:transparent; border:none; font-size:24px; cursor:pointer; padding:0; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'">❤️</button>
+          <button onclick="sendReaction('🔥')" style="background:transparent; border:none; font-size:24px; cursor:pointer; padding:0; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'">🔥</button>
+          <button onclick="sendReaction('💀')" style="background:transparent; border:none; font-size:24px; cursor:pointer; padding:0; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'">💀</button>
+          <button onclick="sendReaction('👏')" style="background:transparent; border:none; font-size:24px; cursor:pointer; padding:0; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'">👏</button>
+          ${isHost ? `<button onclick="endWebRTCStream()" style="background:#ff3333; border:none; border-radius:20px; padding:4px 12px; color:#fff; font-weight:bold; cursor:pointer; font-size:12px;">END</button>` : ''}
+        </div>
       `;
       
       overlay.appendChild(msgBox);
