@@ -1,6 +1,6 @@
 import { get, post } from '../api.js';
 import { store } from '../store.js';
-import { html, ic, money, skeleton, empty, busy, toast, confirmSheet } from '../ui.js';
+import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet } from '../ui.js';
 import { matchRow, hasGameProfile } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
@@ -129,7 +129,7 @@ function table(t, rows, uid) {
   return html`<div class="card" style="padding:6px 4px;overflow-x:auto"><table class="table">
     <thead><tr><th>#</th><th>Player</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead>
     <tbody>${rows.map((r, i) => html`<tr class="${r.userId === uid ? 'me' : ''} ${i < paid ? 'prize' : ''}">
-      <td class="pos">${i + 1}</td><td><div class="ellipsis" style="max-width:140px">${r.userId === uid ? 'You' : r.username}</div><div class="tiny faint">${r.gamertag}</div></td>
+      <td class="pos">${i + 1}</td><td><div class="row" style="gap:8px">${avatar(r.username, r.avatarUrl, "sm")}<div style="min-width:0"><div class="ellipsis" style="max-width:120px">${r.userId === uid ? "You" : r.username}</div><div class="tiny faint">${r.gamertag}</div></div></div></td>
       <td>${r.played}</td><td>${r.wins}</td><td>${r.draws}</td><td>${r.losses}</td><td>${r.goalsFor - r.goalsAgainst}</td><td class="pts">${r.points}</td></tr>`)}</tbody>
   </table></div><p class="tiny faint" style="margin-top:8px">Green positions win prizes.</p>`;
 }
