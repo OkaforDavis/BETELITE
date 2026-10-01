@@ -26,6 +26,8 @@ type Config struct {
 	AnthropicAPIKey            string
 	GeminiAPIKey               string
 	GeminiModels               []string // tried in order; busy models fall back to the next
+	ClaudeModel                string
+	OCRProviders               []string // screenshot readers, tried in order
 	AppURL                     string
 	AppVersion                 string
 	ForceUpdate                bool
@@ -64,6 +66,8 @@ func Load() {
 		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
 		GeminiAPIKey:               getEnv("GEMINI_API_KEY", ""),
 		GeminiModels:               ParseGeminiModels(getEnv("GEMINI_MODEL", "")),
+		ClaudeModel:                getEnv("CLAUDE_MODEL", "claude-opus-5"),
+		OCRProviders:               splitList(getEnv("OCR_PROVIDERS", "gemini,claude")),
 		AppURL:                     getEnv("APP_URL", ""),
 		AppVersion:                 appVersion(),
 		ForceUpdate:                getEnv("FORCE_UPDATE", "") == "true",
@@ -113,6 +117,17 @@ func ParseGeminiModels(env string) []string {
 	}
 	for _, m := range defaultGeminiModels {
 		add(m)
+	}
+	return out
+}
+
+// splitList parses a comma-separated, case-insensitive list.
+func splitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			out = append(out, p)
+		}
 	}
 	return out
 }

@@ -35,7 +35,7 @@
     <tr><td>Age</td><td>Date of birth, used only to confirm you are 18 or older.</td><td>You</td></tr>
     <tr><td>Location</td><td>Your country and wallet currency (Nigeria or Ghana). An approximate country from your IP address may be used to suggest a currency.</td><td>You / your device</td></tr>
     <tr><td>Game IDs</td><td>Your in-game names and optional in-game ID numbers for supported games.</td><td>You</td></tr>
-    <tr><td>Match results</td><td>Result screenshots you upload. We send the image to our AI provider to read the score. <strong>We do not store the image.</strong> We keep what was read from it (names, scores, game mode), a fingerprint (hash) of the image to stop it being reused, and any in-game match ID shown.</td><td>You</td></tr>
+    <tr><td>Match results</td><td>Result screenshots you upload. We send the image to our AI providers (Google, or Anthropic as a backup) to read the score. <strong>We do not store the image.</strong> We keep what was read from it (names, scores, game mode), a fingerprint (hash) of the image to stop it being reused, and any in-game match ID shown.</td><td>You</td></tr>
     <tr><td>Wallet and payments</td><td>Balance, transaction history, deposit references and amounts. For withdrawals: bank name, account number and account holder name. Card details are entered directly with Paystack; we never receive them.</td><td>You / Paystack</td></tr>
     <tr><td>Competition data</td><td>Challenges, matches, tournament entries, results, disputes and the reasons you give.</td><td>You / other players</td></tr>
     <tr><td>Notifications</td><td>In-app notifications, and if you enable alerts, a push subscription address for your device.</td><td>Your device</td></tr>
@@ -60,6 +60,7 @@
     <tr><th>Provider</th><th>Purpose</th><th>Data</th></tr>
     <tr><td>Google Firebase</td><td>Sign-in and account security</td><td>Email, name, account ID, sign-in data</td></tr>
     <tr><td>Google Gemini API</td><td>Reading scores from result screenshots</td><td>The screenshot and the two players' in-game names</td></tr>
+    <tr><td>Anthropic (Claude API)</td><td>Backup reader for result screenshots when Google is unavailable</td><td>The screenshot and the two players' in-game names</td></tr>
     <tr><td>Paystack</td><td>Deposits and withdrawals</td><td>Email, amount, bank details for payouts</td></tr>
     <tr><td>Render</td><td>Hosting our servers and database</td><td>All account and platform data (stored on their servers)</td></tr>
     <tr><td>LiveKit</td><td>Live video streams</td><td>Stream video, audio and your display name</td></tr>
@@ -69,7 +70,7 @@
   <p>Other players see your display name, in-game names, match results and tournament standings. We may disclose data if the law requires it, to protect players or the platform from fraud, or as part of a sale or merger (with notice to you).</p>
 
   <h2 id="transfer">5. International transfers</h2>
-  <p>Some providers (including Render, Google and LiveKit) process data outside Nigeria and Ghana, for example in the United States. Where this happens we rely on the safeguards allowed by law, such as contractual data protection commitments from the provider, and we transfer only what is needed.</p>
+  <p>Some providers (including Render, Google, Anthropic and LiveKit) process data outside Nigeria and Ghana, for example in the United States. Where this happens we rely on the safeguards allowed by law, such as contractual data protection commitments from the provider, and we transfer only what is needed.</p>
 
   <h2 id="keep">6. How long we keep it</h2>
   <ul>
