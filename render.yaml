@@ -2,10 +2,12 @@ services:
   # Go backend API server (includes native Gemini OCR)
   - type: web
     name: betelite-backend
-    env: docker
+    runtime: docker
     region: oregon
     plan: free
     rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/health
     envVars:
       - key: GO_ENV

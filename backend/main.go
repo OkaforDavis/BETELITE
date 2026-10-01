@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
@@ -49,15 +50,6 @@ func main() {
 		Compress:  true,
 		ByteRange: true,
 		Index:     "index.html",
-	})
-
-	// SPA fallback — any non-API route serves index.html
-	app.Use(func(c *fiber.Ctx) error {
-		path := string(c.Request().URI().Path())
-		if len(path) < 4 || path[:4] != "/api" {
-			return c.SendFile("./static/index.html")
-		}
-		return c.Next()
 	})
 
 	// 6. Setup WebSocket Hub and Engine
@@ -140,6 +132,16 @@ func main() {
 	routes.SetupReferralRoutes(api)
 	routes.SetupAdminRoutes(api)
 	routes.SetupSettingsRoutes(api)
+
+	// SPA fallback — registered last so it only catches paths no route matched.
+	// Unknown /api and /ws paths still 404 instead of returning the HTML page.
+	app.Use(func(c *fiber.Ctx) error {
+		path := c.Path()
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") {
+			return fiber.ErrNotFound
+		}
+		return c.SendFile("./static/index.html")
+	})
 
 	log.Printf("Server listening on port %s", config.Cfg.Port)
 	if err := app.Listen(":" + config.Cfg.Port); err != nil {

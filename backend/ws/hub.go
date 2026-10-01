@@ -99,14 +99,7 @@ func (h *Hub) BroadcastToRoom(room string, data []byte) {
 	defer h.mu.RUnlock()
 	if clients, ok := h.Rooms[room]; ok {
 		for client := range clients {
-			select {
-			case client.Send <- data:
-			default:
-				// If send buffer is full, remove client
-				close(client.Send)
-				delete(clients, client)
-				delete(h.Clients, client)
-			}
+			h.trySend(client, data)
 		}
 	}
 }
@@ -116,12 +109,18 @@ func (h *Hub) BroadcastAll(data []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for client := range h.Clients {
-		select {
-		case client.Send <- data:
-		default:
-			close(client.Send)
-			delete(h.Clients, client)
-		}
+		h.trySend(client, data)
+	}
+}
+
+// trySend queues data for a client without blocking. A client whose buffer is
+// full is handed to the Run loop for removal; maps are only mutated (and Send
+// only closed) there, under the write lock, so this is safe under RLock.
+func (h *Hub) trySend(client *Client, data []byte) {
+	select {
+	case client.Send <- data:
+	default:
+		go func() { h.Unregister <- client }()
 	}
 }
 
