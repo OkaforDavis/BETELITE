@@ -1,24 +1,23 @@
 {
+  "id": "/",
   "name": "CrestArena",
   "short_name": "CrestArena",
-  "description": "Premium Mobile Esports Arena — Stream, Compete, Win",
-  "start_url": "/mobile/",
+  "description": "Play FC Mobile, eFootball and DLS matches for real prizes. Verified results, instant payouts.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#080C14",
-  "theme_color": "#00E575",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
+  "background_color": "#070b12",
+  "theme_color": "#070b12",
+  "categories": ["games", "sports", "entertainment"],
   "icons": [
-    {
-      "src": "crestarena-icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "crestarena-icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "My match", "url": "/?open=current", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Wallet", "url": "/wallet", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

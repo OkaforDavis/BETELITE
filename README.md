@@ -1,84 +1,69 @@
-# BETELITE
+# CrestArena
 
-Competitive esports platform with real-money wagering, tournaments, and AI-powered match verification.
+Competitive mobile football (EA SPORTS FC Mobile, eFootball, Dream League Soccer) with real-money 1v1 challenges and tournaments, AI-verified results and automatic payouts. 18+, Nigeria and Ghana.
 
-## Project Structure
+## Structure
 
 ```
-BETELITE/
-├── backend/              # Go (Fiber) API server with native Gemini OCR
-│   ├── config/           # Environment and app configuration
-│   ├── db/               # PostgreSQL connection and migrations
-│   ├── middleware/        # Auth, CORS, rate limiting
-│   ├── models/           # Data models (match, user, escrow, etc.)
-│   ├── routes/           # HTTP route handlers
-│   ├── services/         # Business logic (OCR, engine, escrow, automation)
-│   ├── static/           # PWA frontend files
-│   ├── utils/            # Response helpers, ID generation
-│   ├── ws/               # WebSocket hub and client handlers
-│   └── Dockerfile        # Single-stage Go build
-├── mobile/               # PWA frontend (single-page app)
-├── render.yaml           # Render deployment blueprint
-└── docker-compose.yml    # Local development
+backend/            Go (Fiber) server — API, WebSocket, automation, OCR, serves the PWA
+  db/               PostgreSQL connection + versioned migrations
+  middleware/       Firebase auth, CORS, rate limits
+  routes/           HTTP handlers (me, wallet, lobby, matches, tournaments, admin, …)
+  services/         Business logic (matches, OCR, tournaments, wallet, Paystack, notifications)
+  ws/               WebSocket hub
+  static/           PWA: index.html, css/, js/ (ES modules, no build step), sw.js, legal/
+brand/              Source logo files
+render.yaml         Render blueprint
 ```
 
-## Quick Start
+## How a match works
 
-### Backend (Go)
+1. A player posts a challenge (stake held in escrow) or joins a tournament.
+2. When matched, a **match** is created with an ID tied to both players.
+3. After playing, either player uploads the full-time screenshot **for that match ID**.
+   Gemini checks it is a final, player-vs-player result screen, reads names and scores,
+   and the server matches the names to both players' saved Game IDs. Screenshots and
+   in-game match IDs can only be used once.
+4. The opponent has **15 minutes** to confirm or dispute. Then it settles automatically:
+   1v1 winner gets 80% of the pot (draw refunds); tournaments update the table/bracket
+   and pay prizes when finished (knockout 70% to the winner; league 30/10/4.5/4.5 by default).
+5. Disputes and overdue matches go to the admin review queue.
+
+## Run locally
+
+Needs Go 1.26+ and PostgreSQL.
+
 ```bash
 cd backend
-cp .env.example .env  # fill in your keys
+cp .env.example .env   # or create .env with the variables below
 go run .
 ```
 
-### Required Environment Variables
-```bash
-DATABASE_URL=postgres://...          # PostgreSQL connection string
-GEMINI_API_KEY=your_gemini_key       # Google AI key for score detection (OCR)
-FIREBASE_SERVICE_ACCOUNT_JSON=...    # Firebase auth service account
-PAYSTACK_SECRET_KEY=...              # Paystack payment processing
-```
+Without `FIREBASE_PROJECT_ID` and outside production, the server accepts test logins:
+open `http://localhost:3000/?dev=alice` to sign in as a test user called alice
+(set `ADMIN_EMAIL=dev-admin@example.com` and use `?dev=admin` for the admin).
 
-### Docker
-```bash
-docker-compose up --build
-```
+Tests: `go test ./...`
 
-## Deployment
+## Environment variables
 
-Deployed on [Render](https://render.com) via `render.yaml` Blueprint.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `GO_ENV` | `production` on Render (disables test logins) |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Sign-in verification |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Screenshot reading (default model `gemini-3.8-flash`) |
+| `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` (+ `_GH`) | Deposits and withdrawals |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web Push notifications |
+| `ADMIN_EMAIL` | Verified email that gets admin access |
+| `APP_URL` | Public URL (Paystack return link) |
+| `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL` | Live streams |
+| `FORCE_UPDATE` | `true` forces every installed app to update before continuing |
 
-- **Backend**: Docker (single Go binary, serves frontend + API + OCR)
+## Releases and app updates
 
-Set environment variables in the Render dashboard:
-- `DATABASE_URL` — PostgreSQL connection string
-- `GEMINI_API_KEY` — Google AI key for native score detection
-- `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase auth
-- `PAYSTACK_SECRET_KEY` — Payment processing
+Every deploy stamps the git commit into `index.html` and `sw.js`. Installed apps detect
+the new service worker (and poll `/api/version`) and show **"New version available — Update"**.
+Set `FORCE_UPDATE=true` for a release that must be installed before anyone can keep playing.
 
-## Tech Stack
-
-- **Backend**: Go + Fiber + PostgreSQL + WebSocket
-- **Frontend**: Vanilla JS PWA (single HTML file)
-- **AI Detection**: Native Go → Gemini 2.0 Flash vision (structured JSON output)
-- **Auth**: Firebase Authentication
-- **Payments**: Paystack (NG + GH multi-currency)
-- **Streaming**: LiveKit WebRTC
-
-## Architecture
-
-### AI Score Detection (OCR)
-The platform uses Google's Gemini 2.0 Flash model with vision capabilities to
-automatically detect game scores from screenshots. This runs **natively in Go**
-using the `google.golang.org/genai` SDK — no separate Python service required.
-
-The detection pipeline:
-1. Player uploads a game screenshot
-2. Image is sent to Gemini vision with structured JSON output schema
-3. AI returns detected scores, gamertags, and game type
-4. Engine verifies and settles the match (escrow payout)
-
-### Background Automation
-- **Match timeout**: P2P matches auto-expire after 2 hours with escrow refund
-- **Challenge cleanup**: Waiting challenges auto-cancel after 24 hours
-- **Engine ticker**: Simulated matches progress every 30 seconds
+Paystack webhook URL: `https://<your-app>/api/payments/webhook`

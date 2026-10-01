@@ -25,8 +25,13 @@ type Config struct {
 	APIFootballKey             string
 	AnthropicAPIKey            string
 	GeminiAPIKey               string
+	GeminiModel                string
+	AppURL                     string
+	AppVersion                 string
+	ForceUpdate                bool
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
+	LiveKitURL                 string
 }
 
 var Cfg Config
@@ -58,8 +63,13 @@ func Load() {
 		APIFootballKey:             getEnv("API_FOOTBALL_KEY", ""),
 		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
 		GeminiAPIKey:               getEnv("GEMINI_API_KEY", ""),
+		GeminiModel:                getEnv("GEMINI_MODEL", "gemini-3.8-flash"),
+		AppURL:                     getEnv("APP_URL", ""),
+		AppVersion:                 appVersion(),
+		ForceUpdate:                getEnv("FORCE_UPDATE", "") == "true",
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
+		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
 	}
 }
 
@@ -68,4 +78,16 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// appVersion identifies the running build. Render sets RENDER_GIT_COMMIT;
+// APP_VERSION overrides it. Clients compare it to know when to update.
+func appVersion() string {
+	if v := os.Getenv("APP_VERSION"); v != "" {
+		return v
+	}
+	if v := os.Getenv("RENDER_GIT_COMMIT"); len(v) >= 7 {
+		return v[:7]
+	}
+	return "dev"
 }

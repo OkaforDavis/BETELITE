@@ -1,10 +1,10 @@
 services:
-  # Go backend API server (includes native Gemini OCR)
+  # Go backend: API, WebSocket, automation, OCR, and the PWA frontend
   - type: web
     name: betelite-backend
     runtime: docker
     region: oregon
-    plan: free
+    plan: free # upgrade to "starter" before launch so timers and payouts never sleep
     rootDir: backend
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -15,24 +15,36 @@ services:
       - key: PORT
         value: 3000
       - key: ALLOWED_ORIGINS
-        value: "*"
+        value: "https://betelite-alvn.onrender.com,https://okafordavis.github.io"
+      - key: APP_URL
+        value: https://betelite-alvn.onrender.com
+      - key: ADMIN_EMAIL
+        value: okafordavis8@gmail.com
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
       - key: FIREBASE_PROJECT_ID
         value: betelite-crest
-      - key: FIREBASE_DATABASE_URL
-        value: https://betelite-crest-default-rtdb.firebaseio.com
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: DATABASE_URL
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: API_FOOTBALL_KEY
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
         sync: false
       - key: PAYSTACK_PUBLIC_KEY
         sync: false
       - key: PAYSTACK_SECRET_KEY
         sync: false
-      - key: DATABASE_URL
+      - key: PAYSTACK_PUBLIC_KEY_GH
+        sync: false
+      - key: PAYSTACK_SECRET_KEY_GH
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      - key: FORCE_UPDATE
+        value: "false"

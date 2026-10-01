@@ -3,8 +3,8 @@ package routes
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"time"
+	"crypto/rand"
+	"math/big"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -17,10 +17,9 @@ import (
 func generateReferralCode() string {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 8)
-	// seed rand
-	rand.Seed(time.Now().UnixNano())
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		b[i] = charset[n.Int64()]
 	}
 	return string(b)
 }
@@ -37,7 +36,7 @@ func SetupReferralRoutes(api fiber.Router) {
 		ctx := context.Background()
 
 		var code string
-		err := db.Pool.QueryRow(ctx, "SELECT referral_code FROM users WHERE id = $1", uid).Scan(&code)
+		err := db.Pool.QueryRow(ctx, "SELECT COALESCE(referral_code,'') FROM users WHERE id = $1", uid).Scan(&code)
 		if err != nil {
 			return utils.SendError(c, 500, "Failed to fetch user")
 		}
