@@ -1,17 +1,12 @@
 package routes
 
 import (
-
-	"bytes"
-	"encoding/json"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"time"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/gofiber/fiber/v2"
 
-	"betelite-go/config"
 	"betelite-go/middleware"
 	"betelite-go/models"
 	"betelite-go/services"
@@ -48,7 +43,7 @@ func SetupMatchRoutes(api fiber.Router) {
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid payload")
 		}
-		
+
 		if req.RoomId == "" || req.HostId == "" {
 			return utils.SendError(c, 400, "Missing required fields")
 		}
@@ -72,7 +67,8 @@ func SetupMatchRoutes(api fiber.Router) {
 
 		return utils.SendSuccess(c, fiber.Map{"ok": true, "match": match})
 	})
-	// Submit score via AI Detection Service
+
+	// Submit score via native Go Gemini OCR
 	matchGroup.Post("/submit-score", func(c *fiber.Ctx) error {
 		matchId := c.FormValue("matchId")
 		if matchId == "" {
@@ -92,62 +88,37 @@ func SetupMatchRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Missing image file")
 		}
 
-		file, err := fileHeader.Open()
-		if err != nil {
-			return utils.SendError(c, 500, "Error opening file")
+		// Save file temporarily
+		tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("submit_%s_%s", matchId, fileHeader.Filename))
+		if err := c.SaveFile(fileHeader, tempPath); err != nil {
+			return utils.SendError(c, 500, "Error saving file")
 		}
-		defer file.Close()
+		defer os.Remove(tempPath)
 
-		// Read file into buffer
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
-		part, err := writer.CreateFormFile("image", fileHeader.Filename)
+		// Call native Go Gemini OCR
+		aiResult, err := services.VerifyMatchResult(tempPath, match.Game, "", "")
 		if err != nil {
-			return utils.SendError(c, 500, "Error creating form file")
+			return utils.SendError(c, 500, "AI detection failed: "+err.Error())
 		}
-		if _, err := io.Copy(part, file); err != nil {
-			return utils.SendError(c, 500, "Error copying file")
-		}
-		writer.Close()
 
-		// Send to Python Detection Service
-		req, err := http.NewRequest("POST", config.Cfg.DetectionServiceURL+"/predict", body)
-		if err != nil {
-			return utils.SendError(c, 500, "Error creating detection request")
-		}
-		req.Header.Set("Content-Type", writer.FormDataContentType())
-		// Add API Key (We'll define DetectionAPISecret in config)
-		req.Header.Set("X-API-Key", config.Cfg.DetectionAPISecret)
-
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return utils.SendError(c, 500, "Error contacting detection service")
-		}
-		defer resp.Body.Close()
-
-		var detRes struct {
-			ScoreHome int `json:"score_home"`
-			ScoreAway int `json:"score_away"`
-			Time      int `json:"time"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&detRes); err != nil {
-			return utils.SendError(c, 500, "Error decoding detection result")
+		if !aiResult.Detected {
+			return utils.SendError(c, 422, "Could not detect scores from screenshot: "+aiResult.Notes)
 		}
 
 		// Update match with AI scores
-		match.ScoreHome = detRes.ScoreHome
-		match.ScoreAway = detRes.ScoreAway
-		match.Minute = detRes.Time
+		match.ScoreHome = aiResult.Score1
+		match.ScoreAway = aiResult.Score2
 		match.Status = "finished"
 
 		// Finalize match in engine
 		services.Engine.HandleMatchEnd(match)
 
 		return utils.SendSuccess(c, fiber.Map{
-			"scoreHome": detRes.ScoreHome,
-			"scoreAway": detRes.ScoreAway,
-			"time":      detRes.Time,
+			"scoreHome": aiResult.Score1,
+			"scoreAway": aiResult.Score2,
+			"winner":    aiResult.Winner,
+			"gameType":  aiResult.GameType,
+			"notes":     aiResult.Notes,
 		})
 	})
 }

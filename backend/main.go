@@ -66,6 +66,9 @@ func main() {
 
 	services.InitEngine(hub)
 
+	// 6b. Start background automation (match timeout, stale challenge cleanup)
+	services.StartAutomation(hub, services.DefaultAutomationConfig())
+
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			return c.Next()

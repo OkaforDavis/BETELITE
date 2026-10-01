@@ -1,5 +1,5 @@
 services:
-  # Go backend API server
+  # Go backend API server (includes native Gemini OCR)
   - type: web
     name: betelite-backend
     env: docker
@@ -22,8 +22,6 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: DETECTION_SERVICE_URL
-        value: https://betelite-detection.onrender.com
       - key: API_FOOTBALL_KEY
         sync: false
       - key: PAYSTACK_PUBLIC_KEY
@@ -32,25 +30,7 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-      - key: DETECTION_API_SECRET
-        sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
-        sync: false
-
-  # AI Detection Service (LLM Vision OCR)
-  - type: web
-    name: betelite-detection
-    env: docker
-    region: oregon
-    plan: free
-    rootDir: detection_service
-    healthCheckPath: /health
-    envVars:
-      - key: PORT
-        value: 8000
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: DEPENDENCY_SECRET
         sync: false
