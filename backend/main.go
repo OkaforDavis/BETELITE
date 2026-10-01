@@ -81,7 +81,7 @@ func main() {
 	// The PWA polls this to show "New version available".
 	api.Get("/version", func(c *fiber.Ctx) error {
 		c.Set("Cache-Control", "no-store")
-		return c.JSON(fiber.Map{"version": config.Cfg.AppVersion, "minVersion": config.Cfg.MinAppVersion})
+		return c.JSON(fiber.Map{"version": config.Cfg.AppVersion, "force": config.Cfg.ForceUpdate})
 	})
 	api.Get("/settings", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "settings": fiber.Map{
@@ -136,7 +136,7 @@ func securityHeaders(c *fiber.Ctx) error {
 
 // setupStatic serves the PWA. index.html and sw.js get the build version
 // stamped in (so each deploy installs a fresh service worker) and are never
-// cached; other assets are cached briefly and busted with ?v=<version>.
+// cached; code and styles are revalidated on every load.
 func setupStatic(app *fiber.App) {
 	versioned := map[string]string{}
 	for _, f := range []string{"index.html", "sw.js"} {
@@ -161,7 +161,15 @@ func setupStatic(app *fiber.App) {
 	app.Get("/", serve("index.html", "html"))
 	app.Get("/index.html", serve("index.html", "html"))
 
-	app.Static("/", "./static", fiber.Static{Compress: true, MaxAge: 3600})
+	// JS/CSS module URLs don't change between deploys, so browsers must
+	// revalidate them (cheap 304s); the service worker provides the offline cache.
+	app.Use(func(c *fiber.Ctx) error {
+		if p := c.Path(); strings.HasPrefix(p, "/js/") || strings.HasPrefix(p, "/css/") || strings.HasPrefix(p, "/legal/") || p == "/manifest.json" {
+			c.Set("Cache-Control", "no-cache")
+		}
+		return c.Next()
+	})
+	app.Static("/", "./static")
 
 	// SPA fallback: any other non-API path renders the app (deep links like /match/123).
 	app.Use(func(c *fiber.Ctx) error {

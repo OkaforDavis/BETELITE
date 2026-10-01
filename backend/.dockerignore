@@ -1,0 +1,4 @@
+.env
+*.exe
+betelite
+**/*_test.go

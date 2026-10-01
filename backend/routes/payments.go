@@ -85,7 +85,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 		if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency) VALUES ($1,$2,$3,$4)", ref, uid, req.Amount, currency); err != nil {
 			return fail(c, err)
 		}
-		authURL, err := services.PaystackInit(ctx, email, req.Amount, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+		authURL, accessCode, err := services.PaystackInit(ctx, email, req.Amount, currency, ref, uid, appURL(c)+"/?deposit="+ref)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -94,7 +94,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 			publicKey = config.Cfg.PaystackPublicKeyGH
 		}
 		return utils.SendSuccess(c, fiber.Map{
-			"reference": ref, "authorizationUrl": authURL, "publicKey": publicKey,
+			"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
 			"email": email, "amount": req.Amount, "currency": currency,
 		})
 	})

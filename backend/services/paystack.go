@@ -64,10 +64,12 @@ func paystack(ctx context.Context, currency, method, path string, body any, out 
 	return nil
 }
 
-// PaystackInit starts a checkout and returns the authorization URL.
-func PaystackInit(ctx context.Context, email string, amount int64, currency, reference, uid, callbackURL string) (string, error) {
+// PaystackInit starts a checkout and returns the hosted-page URL and the
+// access code used by the in-app Paystack popup.
+func PaystackInit(ctx context.Context, email string, amount int64, currency, reference, uid, callbackURL string) (string, string, error) {
 	var data struct {
 		AuthorizationURL string `json:"authorization_url"`
+		AccessCode       string `json:"access_code"`
 	}
 	err := paystack(ctx, currency, "POST", "/transaction/initialize", map[string]any{
 		"email":        email,
@@ -77,7 +79,7 @@ func PaystackInit(ctx context.Context, email string, amount int64, currency, ref
 		"callback_url": callbackURL,
 		"metadata":     map[string]any{"user_id": uid},
 	}, &data)
-	return data.AuthorizationURL, err
+	return data.AuthorizationURL, data.AccessCode, err
 }
 
 // PaystackTxn is the part of a verified transaction we rely on.

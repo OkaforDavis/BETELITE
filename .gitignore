@@ -32,3 +32,9 @@ docker-compose.override.yml
 # Node (legacy, shouldn't exist)
 node_modules/
 package-lock.json
+
+# Fiber static compression cache
+*.fiber.gz
+
+# Local test artefacts
+index.legacy.html

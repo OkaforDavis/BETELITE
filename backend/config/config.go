@@ -28,7 +28,7 @@ type Config struct {
 	GeminiModel                string
 	AppURL                     string
 	AppVersion                 string
-	MinAppVersion              string
+	ForceUpdate                bool
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	LiveKitURL                 string
@@ -66,7 +66,7 @@ func Load() {
 		GeminiModel:                getEnv("GEMINI_MODEL", "gemini-3.8-flash"),
 		AppURL:                     getEnv("APP_URL", ""),
 		AppVersion:                 appVersion(),
-		MinAppVersion:              getEnv("MIN_APP_VERSION", ""),
+		ForceUpdate:                getEnv("FORCE_UPDATE", "") == "true",
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
