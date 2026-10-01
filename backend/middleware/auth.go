@@ -53,10 +53,12 @@ func InitFirebaseAuth(ctx context.Context) error {
 func AuthRequired() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if firebaseAuth == nil {
-			// In dev mode without Firebase, we might want to bypass or inject a dummy user
-			// For safety, let's deny unless explicitly bypassed.
-			// But for smooth testing locally without keys, we can bypass:
-			log.Println("[WARN] AuthRequired bypassed (Firebase not initialized)")
+			// Never let a misconfigured production server run without auth.
+			if config.Cfg.Env == "production" {
+				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Authentication service unavailable"})
+			}
+			// Local development without Firebase keys: inject a dev user.
+			log.Println("[WARN] AuthRequired bypassed (Firebase not initialized, non-production)")
 			c.Locals("uid", "dev-uid")
 			c.Locals("email", "dev@example.com")
 			return c.Next()

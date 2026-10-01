@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Env                        string
 	Port                       string
 	DatabaseURL                string
 	FirebaseProjectID          string
@@ -41,7 +42,8 @@ func Load() {
 	origins := strings.Split(originsStr, ",")
 
 	Cfg = Config{
-		Port:                       getEnv("PORT", "3000"),
+		Env:                        getEnv("GO_ENV", "development"),
+		Port:                      getEnv("PORT", "3000"),
 		DatabaseURL:                getEnv("DATABASE_URL", ""),
 		FirebaseProjectID:          getEnv("FIREBASE_PROJECT_ID", ""),
 		FirebaseServiceAccountJSON: getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
