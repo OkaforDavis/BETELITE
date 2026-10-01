@@ -35,6 +35,8 @@ type Profile struct {
 	TermsCurrent     bool          `json:"termsCurrent"`
 	AgeVerified      bool          `json:"ageVerified"`
 	IsAdmin          bool          `json:"isAdmin"`
+	EmailVerified    bool          `json:"emailVerified"`
+	AdminPending     bool          `json:"adminPending"` // admin email, not yet verified
 	GameProfiles     []GameProfile `json:"gameProfiles"`
 	CreatedAt        time.Time     `json:"createdAt"`
 }
