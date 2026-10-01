@@ -71,7 +71,7 @@ func VerifyToken(ctx context.Context, idToken string) (*Identity, error) {
 		if strings.HasPrefix(idToken, "dev:") && len(idToken) > 4 {
 			uid = "dev-" + idToken[4:]
 		}
-		return &Identity{UID: uid, Email: uid + "@example.com", Name: uid, EmailVerified: true}, nil
+		return &Identity{UID: uid, Email: uid + "@example.com", Name: uid, EmailVerified: !strings.HasPrefix(uid, "dev-unverified")}, nil
 	}
 	token, err := firebaseAuth.VerifyIDToken(ctx, idToken)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
@@ -27,8 +28,16 @@ func SetupMeRoutes(api fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
+		verified, _ := c.Locals("emailVerified").(bool)
+		p.EmailVerified = verified
 		if middleware.IsAdminCtx(c) {
+			if !p.IsAdmin {
+				// Persist the flag so admin alerts (disputes, withdrawals) reach this account.
+				db.Pool.Exec(c.Context(), "UPDATE users SET is_admin = TRUE WHERE id = $1", p.ID)
+			}
 			p.IsAdmin = true
+		} else if strings.EqualFold(middleware.GetEmail(c), config.Cfg.AdminEmail) {
+			p.AdminPending = true
 		}
 		return utils.SendSuccess(c, fiber.Map{"profile": p, "termsVersion": services.TermsVersion})
 	})

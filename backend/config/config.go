@@ -58,7 +58,7 @@ func Load() {
 		PaystackPublicKeyGH:        getEnv("PAYSTACK_PUBLIC_KEY_GH", ""),
 		PaystackSecretKey:          getEnv("PAYSTACK_SECRET_KEY", ""),
 		PaystackSecretKeyGH:        getEnv("PAYSTACK_SECRET_KEY_GH", ""),
-		AdminEmail:                 getEnv("ADMIN_EMAIL", "okafordavis8@gmail.com"),
+		AdminEmail:                 strings.TrimSpace(getEnv("ADMIN_EMAIL", "okafordavis8@gmail.com")),
 		AllowedOrigins:             origins,
 		APIFootballKey:             getEnv("API_FOOTBALL_KEY", ""),
 		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),

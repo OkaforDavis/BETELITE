@@ -121,3 +121,18 @@ export function renderAuth(root, mode = 'signin') {
     });
   };
 }
+
+// Email verification (needed for admin access; recommended for withdrawals).
+export async function sendVerification() {
+  if (!auth?.currentUser) throw new Error('Please sign in again.');
+  await auth.currentUser.sendEmailVerification();
+}
+
+// Re-reads the account after the user clicked the link and refreshes the
+// ID token so the server sees email_verified = true.
+export async function reloadVerification() {
+  if (!auth?.currentUser) return false;
+  await auth.currentUser.reload();
+  await auth.currentUser.getIdToken(true);
+  return auth.currentUser.emailVerified;
+}

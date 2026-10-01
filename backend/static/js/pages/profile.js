@@ -3,7 +3,7 @@ import { store } from '../store.js';
 import { html, ic, avatar, sheet, sheetHead, busy, toast, toastError } from '../ui.js';
 import { gameIdSheet } from '../gameid.js';
 import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS } from '../pwa.js';
-import { signOut } from '../auth.js';
+import { signOut, sendVerification, reloadVerification } from '../auth.js';
 import { refreshProfile } from '../app.js';
 
 export default async function profilePage(view, { query }) {
@@ -27,6 +27,13 @@ export default async function profilePage(view, { query }) {
           <div class="tiny faint" style="margin-top:2px">Member since ${new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</div></div>
         <button class="btn secondary sm" id="edit">Edit</button>
       </div>
+
+      ${!p.emailVerified && p.email ? html`<div class="card highlight" style="margin-top:20px">
+        <div class="row" style="align-items:flex-start"><div class="icon-tile warn">${ic("alert")}</div>
+          <div class="grow"><div class="h3">Verify your email</div>
+          <div class="small muted" style="margin-top:2px">We'll send a link to <b>${p.email}</b>. Verifying protects your account and is needed for withdrawals${p.adminPending ? " and to unlock the admin dashboard" : ""}.</div></div></div>
+        <div class="grid-2" style="margin-top:14px"><button class="btn secondary sm" id="verify-send">Send link</button><button class="btn primary sm" id="verify-check">I've verified</button></div>
+      </div>` : ""}
 
       <div class="grid-3" style="margin-top:20px">
         <div class="stat"><div class="v num">${done.length}</div><div class="k">Played</div></div>
@@ -103,6 +110,16 @@ export default async function profilePage(view, { query }) {
       gameIdSheet(b.dataset.game, draw);
     }));
 
+    view.querySelector('#verify-send')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      await sendVerification();
+      toast('Check your inbox (and spam folder) for the link, then come back and tap "I’ve verified".', 'ok', 'Link sent');
+    }));
+    view.querySelector('#verify-check')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      if (!(await reloadVerification())) return toast('Not verified yet. Open the link in the email first.', 'info');
+      await refreshProfile();
+      toast(store.get().profile.isAdmin ? 'Email verified. Admin dashboard unlocked.' : 'Email verified.');
+      draw();
+    }));
     view.querySelector('#edit').onclick = () => editProfile(draw);
     view.querySelector('#push').onchange = async (e) => {
       const on = e.target.checked;
