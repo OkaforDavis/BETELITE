@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,6 +38,7 @@ type OCRResult struct {
 	Confidence     int         `json:"confidence"`
 	RejectReason   string      `json:"reject_reason,omitempty"`
 	Notes          string      `json:"notes"`
+	Model          string      `json:"model,omitempty"` // which Gemini model answered
 }
 
 // ExpectedPlayer is a registered player we expect to find on the screenshot.
@@ -64,7 +66,7 @@ func getGeminiClient(ctx context.Context) (*genai.Client, error) {
 			Backend: genai.BackendGeminiAPI,
 		})
 		if geminiClientErr == nil {
-			log.Printf("[INFO] Gemini client ready (model %s)", config.Cfg.GeminiModel)
+			log.Printf("[INFO] Gemini client ready (models %v)", config.Cfg.GeminiModels)
 		}
 	})
 	return geminiClient, geminiClientErr
@@ -126,7 +128,7 @@ Read the screenshot and report exactly what is displayed. Do not guess or invent
 
 // AnalyzeScreenshot sends a result screenshot to Gemini and returns what it read.
 func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []ExpectedPlayer) (*OCRResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 80*time.Second)
 	defer cancel()
 
 	client, err := getGeminiClient(ctx)
@@ -152,19 +154,66 @@ func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []E
 		ResponseSchema:   resultSchema,
 	}
 
-	resp, err := client.Models.GenerateContent(ctx, config.Cfg.GeminiModel, contents, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("gemini: %w", err)
+	// Google sometimes answers 503 "high demand" or 429. Retry briefly, then fall
+	// back to the next model, which runs on separate capacity.
+	var lastErr error
+	for _, model := range config.Cfg.GeminiModels {
+		for attempt := 0; attempt < 2; attempt++ {
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("gemini: timed out (last error: %v)", lastErr)
+			}
+			callCtx, cancelCall := context.WithTimeout(ctx, 30*time.Second)
+			resp, err := client.Models.GenerateContent(callCtx, model, contents, cfg)
+			cancelCall()
+			if err == nil {
+				out, perr := parseOCR(resp)
+				if perr == nil {
+					out.Model = model
+					return out, nil
+				}
+				err = perr
+			}
+			lastErr = err
+			if !retryable(err) {
+				return nil, fmt.Errorf("gemini (%s): %w", model, err)
+			}
+			log.Printf("[OCR] %s busy (attempt %d): %v", model, attempt+1, err)
+			select {
+			case <-time.After(time.Duration(attempt+1) * 1500 * time.Millisecond):
+			case <-ctx.Done():
+			}
+		}
 	}
+	return nil, fmt.Errorf("gemini: all models busy: %w", lastErr)
+}
+
+func parseOCR(resp *genai.GenerateContentResponse) (*OCRResult, error) {
 	text := resp.Text()
 	if text == "" {
-		return nil, fmt.Errorf("gemini returned an empty response")
+		return nil, errEmptyResponse
 	}
 	var out OCRResult
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
 		return nil, fmt.Errorf("parse gemini response: %w", err)
 	}
 	return &out, nil
+}
+
+var errEmptyResponse = errors.New("gemini returned an empty response")
+
+// retryable reports whether an error is temporary on Google's side
+// (overloaded, rate limited, internal error, timeout or empty answer).
+func retryable(err error) bool {
+	if errors.Is(err, errEmptyResponse) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	s := err.Error()
+	for _, k := range []string{"503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500", "INTERNAL", "overloaded", "high demand"} {
+		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Name matching ────────────────────────────────────────────────────

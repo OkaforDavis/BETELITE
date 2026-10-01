@@ -18,8 +18,8 @@ type Hub struct {
 	Unregister chan *Client
 
 	// Room join/leave channels
-	Join   chan *RoomAction
-	Leave  chan *RoomAction
+	Join  chan *RoomAction
+	Leave chan *RoomAction
 
 	mu sync.RWMutex
 }

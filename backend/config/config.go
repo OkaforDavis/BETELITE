@@ -25,7 +25,7 @@ type Config struct {
 	APIFootballKey             string
 	AnthropicAPIKey            string
 	GeminiAPIKey               string
-	GeminiModel                string
+	GeminiModels               []string // tried in order; busy models fall back to the next
 	AppURL                     string
 	AppVersion                 string
 	ForceUpdate                bool
@@ -48,7 +48,7 @@ func Load() {
 
 	Cfg = Config{
 		Env:                        getEnv("GO_ENV", "development"),
-		Port:                      getEnv("PORT", "3000"),
+		Port:                       getEnv("PORT", "3000"),
 		DatabaseURL:                getEnv("DATABASE_URL", ""),
 		FirebaseProjectID:          getEnv("FIREBASE_PROJECT_ID", ""),
 		FirebaseServiceAccountJSON: getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
@@ -63,7 +63,7 @@ func Load() {
 		APIFootballKey:             getEnv("API_FOOTBALL_KEY", ""),
 		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
 		GeminiAPIKey:               getEnv("GEMINI_API_KEY", ""),
-		GeminiModel:                getEnv("GEMINI_MODEL", "gemini-3.8-flash"),
+		GeminiModels:               ParseGeminiModels(getEnv("GEMINI_MODEL", "")),
 		AppURL:                     getEnv("APP_URL", ""),
 		AppVersion:                 appVersion(),
 		ForceUpdate:                getEnv("FORCE_UPDATE", "") == "true",
@@ -90,4 +90,29 @@ func appVersion() string {
 		return v[:7]
 	}
 	return "dev"
+}
+
+// defaultGeminiModels are always available as fallbacks. Each model runs on
+// separate capacity, so when one is overloaded the next usually answers.
+var defaultGeminiModels = []string{"gemini-3.8-flash", "gemini-3.5-flash"}
+
+// ParseGeminiModels parses GEMINI_MODEL (comma-separated, preferred first) and
+// appends the defaults that aren't already listed.
+func ParseGeminiModels(env string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(m string) {
+		m = strings.TrimSpace(m)
+		if m != "" && !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	for _, m := range strings.Split(env, ",") {
+		add(m)
+	}
+	for _, m := range defaultGeminiModels {
+		add(m)
+	}
+	return out
 }
