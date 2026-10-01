@@ -192,6 +192,7 @@ func DeleteAccount(ctx context.Context, uid string) error {
 		`UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', username = 'Deleted user', avatar_url = NULL,
 			push_sub = NULL, birth_date = NULL, referral_code = NULL, marketing_consent = FALSE, deleted_at = NOW() WHERE id = $1`,
 		"DELETE FROM game_profiles WHERE user_id = $1",
+		"DELETE FROM avatars WHERE user_id = $1",
 		"DELETE FROM push_subscriptions WHERE user_id = $1",
 		"DELETE FROM notifications WHERE user_id = $1",
 		"UPDATE withdrawals SET account_number = '****' || RIGHT(account_number, 4), account_name = NULL WHERE user_id = $1",

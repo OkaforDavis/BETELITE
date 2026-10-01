@@ -35,10 +35,10 @@ export function matchHero(m) {
       ${statusBadge(m.status)}
     </div>
     <div class="versus" style="margin:18px 0 14px">
-      <div class="side ${m.winnerId && m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, '', m.homeId === uid ? 'me' : '')}
+      <div class="side ${m.winnerId && m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, m.homeAvatar, m.homeId === uid ? 'me' : '')}
         <div class="name ellipsis">${m.homeId === uid ? 'You' : m.homeName}</div><div class="tag ellipsis">${m.homeTag}</div></div>
       <div class="mid">${scoreLine(m)}</div>
-      <div class="side ${m.winnerId && m.winnerId === m.awayId ? 'winner' : ''}">${avatar(m.awayName, '', m.awayId === uid ? 'me' : '')}
+      <div class="side ${m.winnerId && m.winnerId === m.awayId ? 'winner' : ''}">${avatar(m.awayName, m.awayAvatar, m.awayId === uid ? 'me' : '')}
         <div class="name ellipsis">${m.awayId === uid ? 'You' : m.awayName}</div><div class="tag ellipsis">${m.awayTag}</div></div>
     </div>
     ${step ? html`<div class="notice ${step.tone}">${ic(step.tone === 'brand' ? 'gamepad' : 'clock')}

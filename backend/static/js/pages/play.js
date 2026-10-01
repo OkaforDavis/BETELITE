@@ -44,7 +44,7 @@ export default async function play(view, { query }) {
     body.innerHTML = String(html`${gameChips(filter, { all: true })}
       <div style="margin-top:14px">${list.length ? html`<div class="list">${list.map((c) => html`
         <div class="list-row">
-          ${avatar(c.creatorName, '', c.creatorId === uid ? 'me' : '')}
+          ${avatar(c.creatorName, c.creatorAvatar, c.creatorId === uid ? 'me' : '')}
           <div class="grow">
             <div class="h3 ellipsis">${c.creatorId === uid ? 'Your challenge' : c.creatorName}</div>
             <div class="small muted ellipsis">${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>

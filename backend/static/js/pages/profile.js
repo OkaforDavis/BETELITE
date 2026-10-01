@@ -22,7 +22,7 @@ export default async function profilePage(view, { query }) {
 
     view.innerHTML = String(html`<div class="page">
       <div class="row" style="gap:16px">
-        ${avatar(p.username, p.avatarUrl, 'lg me')}
+        <button class="avatar-edit" id="photo" aria-label="Change profile photo">${avatar(p.username, p.avatarUrl, 'lg me')}<span class="cam">${ic('camera')}</span></button>
         <div class="grow"><div class="h2 ellipsis">${p.username}</div><div class="small muted ellipsis">${p.email}</div>
           <div class="tiny faint" style="margin-top:2px">Member since ${new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</div></div>
         <button class="btn secondary sm" id="edit">Edit</button>
@@ -121,6 +121,7 @@ export default async function profilePage(view, { query }) {
       draw();
     }));
     view.querySelector('#edit').onclick = () => editProfile(draw);
+    view.querySelector('#photo').onclick = () => photoSheet(draw);
     view.querySelector('#push').onchange = async (e) => {
       const on = e.target.checked;
       if (on) {
@@ -207,6 +208,66 @@ function deleteAccount() {
           setTimeout(() => signOut(), 1200);
         });
       };
+    },
+  });
+}
+
+// Crop to a centred square and shrink on the phone before uploading, so the
+// upload is small and fast on mobile data. The server re-processes it anyway.
+async function squareJpeg(file, size = 512) {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) throw new Error("We couldn't open that image. Try a JPG or PNG photo.");
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = Object.assign(document.createElement('canvas'), { width: size, height: size });
+  canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, size, size);
+  bitmap.close?.();
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+function photoSheet(onDone) {
+  const p = store.get().profile;
+  sheet(String(html`${sheetHead('Profile photo', 'Shown to other players on matches and challenges')}
+    <div class="center" style="margin:6px 0 18px" id="preview">${avatar(p.username, p.avatarUrl, 'xl me')}</div>
+    <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" class="sr-only">
+    <p class="hint center">Use a clear photo of yourself or your gaming logo. No offensive images; they'll be removed.</p>
+    <div class="sheet-actions">
+      <button class="btn primary block" id="pick">${ic('camera')} Choose photo</button>
+      <button class="btn primary block" id="save" hidden>${ic('check')} Save photo</button>
+      ${p.avatarUrl ? html`<button class="btn danger block" id="remove">${ic('trash')} Remove photo</button>` : ''}
+      <button class="btn ghost block" data-close>Cancel</button>
+    </div>`), {
+    label: 'Profile photo',
+    onMount(root, close) {
+      const input = root.querySelector('#photo-file');
+      const pick = root.querySelector('#pick');
+      const save = root.querySelector('#save');
+      let blob = null;
+      pick.onclick = () => input.click();
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 20 * 1024 * 1024) return toast('That photo is too large', 'err');
+        try {
+          blob = await squareJpeg(file);
+        } catch (e) { return toastError(e); }
+        const url = URL.createObjectURL(blob);
+        root.querySelector('#preview').innerHTML = String(html`<div class="avatar xl me"><img src="${url}" alt="New photo"></div>`);
+        pick.innerHTML = String(html`${ic('image')} Choose a different photo`);
+        pick.classList.replace('primary', 'secondary');
+        save.hidden = false;
+      };
+      save.onclick = () => busy(save, async () => {
+        const fd = new FormData();
+        fd.append('image', blob, 'avatar.jpg');
+        const { avatarUrl } = await api('PUT', '/me/avatar', fd, { form: true });
+        store.set({ profile: { ...store.get().profile, avatarUrl } });
+        close(); toast('Profile photo updated'); onDone();
+      });
+      root.querySelector('#remove')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+        await del('/me/avatar');
+        store.set({ profile: { ...store.get().profile, avatarUrl: '' } });
+        close(); toast('Profile photo removed'); onDone();
+      }));
     },
   });
 }

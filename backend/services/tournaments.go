@@ -34,6 +34,7 @@ type Standing struct {
 	UserID       string `json:"userId"`
 	Username     string `json:"username"`
 	Gamertag     string `json:"gamertag"`
+	AvatarURL    string `json:"avatarUrl"`
 	Played       int    `json:"played"`
 	Wins         int    `json:"wins"`
 	Draws        int    `json:"draws"`
@@ -50,7 +51,7 @@ func Standings(ctx context.Context, q interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, tournamentID string) ([]Standing, error) {
 	rows, err := q.Query(ctx, `
-		SELECT tp.user_id, COALESCE(u.username,''), COALESCE(gp.gamertag,''),
+		SELECT tp.user_id, COALESCE(u.username,''), COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''),
 		       tp.wins, tp.draws, tp.losses, tp.goals, tp.goals_against, tp.points, tp.eliminated, tp.final_position
 		FROM tournament_players tp
 		JOIN tournaments t ON t.id = tp.tournament_id
@@ -64,7 +65,7 @@ func Standings(ctx context.Context, q interface {
 	var out []Standing
 	for rows.Next() {
 		var s Standing
-		if err := rows.Scan(&s.UserID, &s.Username, &s.Gamertag, &s.Wins, &s.Draws, &s.Losses,
+		if err := rows.Scan(&s.UserID, &s.Username, &s.Gamertag, &s.AvatarURL, &s.Wins, &s.Draws, &s.Losses,
 			&s.GoalsFor, &s.GoalsAgainst, &s.Points, &s.Eliminated, &s.Position); err != nil {
 			return nil, err
 		}
