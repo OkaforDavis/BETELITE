@@ -1,233 +1,207 @@
 package routes
 
 import (
-	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/livekit/protocol/auth"
+	"github.com/jackc/pgx/v5"
 
-	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
-	"betelite-go/models"
 	"betelite-go/services"
 	"betelite-go/utils"
 	"betelite-go/ws"
 )
 
-func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
-	lobby := api.Group("/lobby", middleware.AuthRequired())
+// Stake limits per player, in minor units.
+var (
+	minStake = map[string]int64{"NGN": 100_00, "GHS": 5_00}
+	maxStake = map[string]int64{"NGN": 100_000_00, "GHS": 2_000_00}
+)
 
-	// Get active challenges
+type challengeView struct {
+	ID          string    `json:"id"`
+	CreatorID   string    `json:"creatorId"`
+	CreatorName string    `json:"creatorName"`
+	CreatorTag  string    `json:"creatorTag"`
+	Game        string    `json:"game"`
+	GameName    string    `json:"gameName"`
+	Amount      int64     `json:"amount"`
+	Currency    string    `json:"currency"`
+	Prize       int64     `json:"prize"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
+	lobby := api.Group("/lobby", middleware.AuthRequired(), dbRequired)
+
+	// Open challenges waiting for an opponent.
 	lobby.Get("/", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return c.JSON(fiber.Map{"ok": true, "challenges": []models.Challenge{}})
-		}
-		ctx := context.Background()
-		rows, err := db.Pool.Query(ctx, `
-			SELECT e.challenge_id, e.creator_id, e.amount, u.username, e.created_at
+		rows, err := db.Pool.Query(c.Context(), `
+			SELECT e.challenge_id, e.creator_id, u.username, COALESCE(gp.gamertag,''), COALESCE(e.game,''), e.amount, COALESCE(e.currency,'NGN'), e.created_at
 			FROM escrow e
-			JOIN users u ON e.creator_id = u.id
-			WHERE e.status = 'waiting'
-		`)
+			JOIN users u ON u.id = e.creator_id
+			LEFT JOIN game_profiles gp ON gp.user_id = e.creator_id AND gp.game = e.game
+			WHERE e.status = 'waiting' ORDER BY e.created_at DESC LIMIT 100`)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer rows.Close()
-
-		var challenges []models.Challenge
+		list := []challengeView{}
 		for rows.Next() {
-			var chal models.Challenge
-			var createdAt time.Time
-			err := rows.Scan(&chal.ID, &chal.CreatorID, &chal.Amount, &chal.CreatorName, &createdAt)
-			if err == nil {
-				chal.Game = "EA FC 24" // default
-				chal.Currency = "NGN"
-				chal.Timestamp = createdAt.UnixMilli()
-				challenges = append(challenges, chal)
+			var ch challengeView
+			if rows.Scan(&ch.ID, &ch.CreatorID, &ch.CreatorName, &ch.CreatorTag, &ch.Game, &ch.Amount, &ch.Currency, &ch.CreatedAt) == nil {
+				if g := services.GameByID(ch.Game); g != nil {
+					ch.GameName = g.Short
+				}
+				ch.Prize = ch.Amount * 2 * services.P2PWinnerPercent / 100
+				list = append(list, ch)
 			}
 		}
-		if challenges == nil {
-			challenges = []models.Challenge{}
-		}
-
-		return c.JSON(fiber.Map{"ok": true, "challenges": challenges})
+		return utils.SendSuccess(c, fiber.Map{"challenges": list})
 	})
 
-	// Create a new challenge (Escrow hold)
+	// Post a challenge: the stake is held in escrow until someone accepts.
 	lobby.Post("/create", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
 		var req struct {
-			Game     string `json:"game"`
-			Amount   int64  `json:"amount"` // Note: Frontend might send string/float, ensure it's converted to int64 kobo
-			Username string `json:"username"`
+			Game   string `json:"game"`
+			Amount int64  `json:"amount"`
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
+			return utils.SendError(c, 400, "Invalid request")
 		}
-
 		uid := middleware.GetUID(c)
-		challengeID := utils.GenerateChallengeID()
-
-		// DB Transaction: Deduct wallet and create escrow
-		ctx := context.Background()
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
+		ctx := c.Context()
+		game := services.GameByID(req.Game)
+		if game == nil {
+			return utils.SendError(c, 400, "Choose a supported game")
 		}
+		if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+			return fail(c, err)
+		}
+		if err := services.RequireGameProfile(ctx, db.Pool, uid, game.ID); err != nil {
+			return fail(c, err)
+		}
+		var currency string
+		db.Pool.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&currency)
+		if req.Amount < minStake[currency] || req.Amount > maxStake[currency] {
+			return utils.SendError(c, 400, fmt.Sprintf("Stake must be between %s and %s",
+				services.FormatMoney(minStake[currency], currency), services.FormatMoney(maxStake[currency], currency)))
+		}
+		var open int
+		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM escrow WHERE creator_id = $1 AND status = 'waiting'", uid).Scan(&open)
+		if open >= 3 {
+			return utils.SendError(c, 400, "You can have at most 3 open challenges")
+		}
+
+		id := utils.GenerateChallengeID()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
-
-		// Check balance
-		var balance int64
-		err = tx.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&balance)
-		if err != nil || balance < req.Amount {
-			return utils.SendError(c, 400, "Insufficient funds")
+		if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", id); err != nil {
+			if errors.Is(err, services.ErrInsufficientFunds) {
+				return utils.SendError(c, 400, "Insufficient balance. Deposit to post this challenge.")
+			}
+			return fail(c, err)
 		}
-
-		err = services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", challengeID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to update balance")
+		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency)
+			VALUES ($1,$2,$3,$3,'waiting',$4,$5)`, id, uid, req.Amount, game.ID, currency); err != nil {
+			return fail(c, err)
 		}
-
-		// Create Escrow
-		_, err = tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status) 
-			VALUES ($1, $2, $3, $4, 'waiting')`,
-			challengeID, uid, req.Amount, req.Amount) // Pool is just creator's amount for now
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to create escrow")
-		}
-
 		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
+			return fail(c, err)
 		}
 
-		challenge := models.Challenge{
-			ID:          challengeID,
-			CreatorID:   uid,
-			CreatorName: req.Username,
-			Game:        req.Game,
-			Amount:      req.Amount,
-			Currency:    "NGN",
-			Timestamp:   time.Now().UnixMilli(),
-		}
-
-		// Broadcast new challenge
-		ws.BroadcastEvent(hub, "lobby_new_challenge", challenge)
-
-		return utils.SendSuccess(c, fiber.Map{
-			"challengeId": challengeID,
-		})
+		ws.BroadcastEvent(hub, "lobby_new_challenge", fiber.Map{"id": id, "game": game.ID})
+		return utils.SendSuccess(c, fiber.Map{"challengeId": id})
 	})
 
-	// Accept challenge
+	// Accept a challenge: stake is matched and a verified match is created.
 	lobby.Post("/accept", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
 		var req struct {
 			ChallengeID string `json:"challengeId"`
-			Username    string `json:"username"`
 		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
+		if err := c.BodyParser(&req); err != nil || req.ChallengeID == "" {
+			return utils.SendError(c, 400, "Invalid request")
 		}
-
 		uid := middleware.GetUID(c)
-		ctx := context.Background()
-
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
+		ctx := c.Context()
+		if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+			return fail(c, err)
 		}
 
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
 
-		// Get Escrow details
-		var escrow models.Escrow
-		var status string
-		var player1ID string
-		var amount int64
-		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
-			Scan(&escrow.ID, &player1ID, &amount, &status)
-		if err != nil || status != "waiting" {
-			return utils.SendError(c, 400, "Challenge not available")
+		var escrowID, amount int64
+		var creator, status, game, currency string
+		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status, COALESCE(game,''), COALESCE(currency,'NGN') FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
+			Scan(&escrowID, &creator, &amount, &status, &game, &currency)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && status != "waiting") {
+			return utils.SendError(c, 409, "This challenge is no longer available")
 		}
-
-		if player1ID == uid {
-			return utils.SendError(c, 400, "Cannot accept your own challenge")
-		}
-
-		// Check acceptor's balance
-		var balance int64
-		err = tx.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&balance)
-		if err != nil || balance < amount {
-			return utils.SendError(c, 400, "Insufficient funds")
-		}
-
-		err = services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID)
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to update balance")
+			return fail(c, err)
 		}
-
-		// Update Escrow
-		matchID := utils.GenerateMatchID()
-		pool := amount * 2
-		_, err = tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = $2, status = 'held', match_id = $3 WHERE id = $4",
-			uid, pool, matchID, escrow.ID)
+		if creator == uid {
+			return utils.SendError(c, 400, "You can't accept your own challenge")
+		}
+		if services.GameByID(game) == nil {
+			return utils.SendError(c, 400, "This challenge is for an unsupported game")
+		}
+		var myCurrency string
+		tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&myCurrency)
+		if myCurrency != currency {
+			return utils.SendError(c, 400, "This challenge is in "+currency+"; your wallet is in "+myCurrency)
+		}
+		if err := services.RequireGameProfile(ctx, tx, uid, game); err != nil {
+			return fail(c, err)
+		}
+		if err := services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID); err != nil {
+			if errors.Is(err, services.ErrInsufficientFunds) {
+				return utils.SendError(c, 400, "Insufficient balance to match this stake")
+			}
+			return fail(c, err)
+		}
+		matchID, err := services.CreateMatch(ctx, tx, "p2p", game, creator, uid, req.ChallengeID, "", 0, 0, time.Now().Add(services.P2PPlayWindow))
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to update escrow")
+			return fail(c, err)
 		}
-
+		if _, err := tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = amount * 2, status = 'held', match_id = $2 WHERE id = $3",
+			uid, matchID, escrowID); err != nil {
+			return fail(c, err)
+		}
 		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
+			return fail(c, err)
 		}
 
-		// Create match in Engine
-		match := &models.Match{
-			ID:           matchID,
-			Game:         "EA FC 24", // Would normally pull from challenge
-			HomeID:       escrow.CreatorID,
-			AwayID:       uid,
-			Status:       "live",
-			Minute:       0,
-			WagerPool:    pool,
-			WagerAmount:  escrow.Amount,
-			IsP2P:        true,
-			ChallengeID:  req.ChallengeID,
-		}
-		services.Engine.AddMatch(match)
-
-		// Broadcast removal of challenge
-		ws.BroadcastEvent(hub, "lobby_challenge_accepted", map[string]interface{}{
-			"challengeId": req.ChallengeID,
-			"creatorId":   escrow.CreatorID,
-			"acceptorId":  uid,
-			"matchId":     matchID,
-		})
-
+		ws.BroadcastEvent(hub, "lobby_challenge_removed", fiber.Map{"id": req.ChallengeID})
+		services.Notify(creator, "challenge_accepted", "Challenge accepted! ⚔️",
+			services.Username(ctx, uid)+" accepted your challenge. Play the match and upload the final result screen within 3 hours.",
+			"/match/"+matchID, map[string]any{"matchId": matchID})
 		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
 	})
 
-	// Delete challenge
+	// Cancel my open challenge and get the stake back.
 	lobby.Post("/delete", func(c *fiber.Ctx) error {
 		var req struct {
 			ChallengeID string `json:"challengeId"`
 		}
 		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
+			return utils.SendError(c, 400, "Invalid request")
 		}
-
 		uid := middleware.GetUID(c)
-		ctx := context.Background()
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
-		}
+		ctx := c.Context()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
 
@@ -235,71 +209,21 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		var status string
 		err = tx.QueryRow(ctx, "SELECT amount, status FROM escrow WHERE challenge_id = $1 AND creator_id = $2 FOR UPDATE", req.ChallengeID, uid).Scan(&amount, &status)
 		if err != nil {
-			return utils.SendError(c, 404, "Challenge not found or unauthorized")
+			return utils.SendError(c, 404, "Challenge not found")
 		}
 		if status != "waiting" {
-			return utils.SendError(c, 400, "Challenge already accepted or completed")
+			return utils.SendError(c, 409, "This challenge has already been accepted")
 		}
-
-		// Refund
-		err = services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to refund")
+		if err := services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID); err != nil {
+			return fail(c, err)
 		}
-
-		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'cancelled' WHERE challenge_id = $1", req.ChallengeID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to cancel escrow")
+		if _, err := tx.Exec(ctx, "UPDATE escrow SET status = 'cancelled' WHERE challenge_id = $1", req.ChallengeID); err != nil {
+			return fail(c, err)
 		}
-
 		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
+			return fail(c, err)
 		}
-
-		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": req.ChallengeID})
-
+		ws.BroadcastEvent(hub, "lobby_challenge_removed", fiber.Map{"id": req.ChallengeID})
 		return utils.SendSuccess(c, fiber.Map{})
-	})
-
-	// LiveKit Token Generation
-	lobby.Post("/stream/token", func(c *fiber.Ctx) error {
-		var req struct {
-			RoomName string `json:"roomName"`
-			Identity string `json:"identity"`
-			IsHost   bool   `json:"isHost"`
-		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
-		}
-
-		apiKey := config.Cfg.LiveKitAPIKey
-		apiSecret := config.Cfg.LiveKitAPISecret
-		if apiKey == "" || apiSecret == "" {
-			return utils.SendError(c, 500, "LiveKit keys not configured")
-		}
-
-		at := auth.NewAccessToken(apiKey, apiSecret)
-		grant := &auth.VideoGrant{
-			RoomJoin: true,
-			Room:     req.RoomName,
-		}
-		if req.IsHost {
-			grant.CanPublish = &[]bool{true}[0]
-			grant.CanPublishData = &[]bool{true}[0]
-		} else {
-			grant.CanPublish = &[]bool{false}[0]
-			grant.CanPublishData = &[]bool{true}[0] // allow chatting
-		}
-
-		at.AddGrant(grant).
-			SetIdentity(req.Identity).
-			SetValidFor(time.Hour * 4)
-
-		token, err := at.ToJWT()
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to create token")
-		}
-
-		return utils.SendSuccess(c, fiber.Map{"token": token})
 	})
 }

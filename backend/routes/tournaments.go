@@ -2,210 +2,236 @@ package routes
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
 
 	"betelite-go/db"
 	"betelite-go/middleware"
-	"betelite-go/models"
 	"betelite-go/services"
 	"betelite-go/utils"
 )
 
-func SetupTournamentRoutes(api fiber.Router) {
-	tournaments := api.Group("/tournaments", middleware.AuthRequired())
+type tournamentView struct {
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Game         string     `json:"game"`
+	GameName     string     `json:"gameName"`
+	Format       string     `json:"format"`
+	Icon         string     `json:"icon"`
+	EntryFee     int64      `json:"entryFee"`
+	Currency     string     `json:"currency"`
+	MaxPlayers   int        `json:"maxPlayers"`
+	PlayerCount  int        `json:"playerCount"`
+	Status       string     `json:"status"`
+	CurrentRound int        `json:"currentRound"`
+	RoundHours   int        `json:"roundHours"`
+	PrizeSplit   []float64  `json:"prizeSplit"`
+	Prizes       []int64    `json:"prizes"` // projected at full capacity
+	Joined       bool       `json:"joined"`
+	WinnerID     string     `json:"winnerId,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+}
 
-	// Get active tournaments
-	tournaments.Get("/", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			// Return empty list if no database is connected
-			return utils.SendSuccess(c, fiber.Map{"tournaments": []models.Tournament{}})
+const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon,''), t.entry_fee, t.currency, t.max_players,
+	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id), t.status, t.current_round, t.round_hours,
+	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
+	COALESCE(t.winner_id,''), t.created_at, t.started_at FROM tournaments t`
+
+func scanTournament(row pgx.Row) (*tournamentView, error) {
+	var t tournamentView
+	var split []byte
+	var seed int64
+	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
+		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt); err != nil {
+		return nil, err
+	}
+	t.PrizeSplit = services.DefaultSplit(t.Format)
+	if len(split) > 0 {
+		var s []float64
+		if json.Unmarshal(split, &s) == nil && len(s) > 0 {
+			t.PrizeSplit = s
 		}
+	}
+	t.Prizes = services.PrizeAmounts(t.EntryFee, int64(t.MaxPlayers), seed, t.PrizeSplit)
+	if g := services.GameByID(t.Game); g != nil {
+		t.GameName = g.Short
+	}
+	return &t, nil
+}
 
-		ctx := context.Background()
-		rows, err := db.Pool.Query(ctx, "SELECT id, name, game, entry_fee, max_players, prize_pool, status FROM tournaments WHERE status != 'finished'")
+func SetupTournamentRoutes(api fiber.Router) {
+	tr := api.Group("/tournaments", middleware.AuthRequired(), dbRequired)
+
+	tr.Get("/", func(c *fiber.Ctx) error {
+		rows, err := db.Pool.Query(c.Context(), tournamentSelect+`
+			WHERE t.status <> 'finished' OR t.finished_at > NOW() - INTERVAL '7 days'
+			ORDER BY (t.status = 'open') DESC, t.created_at DESC LIMIT 50`, middleware.GetUID(c))
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to fetch tournaments")
+			return fail(c, err)
 		}
 		defer rows.Close()
-
-		var results []models.Tournament
+		list := []*tournamentView{}
 		for rows.Next() {
-			var t models.Tournament
-			err := rows.Scan(&t.ID, &t.Name, &t.Game, &t.EntryFee, &t.MaxPlayers, &t.PrizePool, &t.Status)
-			if err == nil {
-				results = append(results, t)
+			t, err := scanTournament(rows)
+			if err != nil {
+				return fail(c, err)
 			}
+			list = append(list, t)
 		}
-
-		return utils.SendSuccess(c, fiber.Map{"tournaments": results})
+		return utils.SendSuccess(c, fiber.Map{"tournaments": list})
 	})
 
-	// Join tournament
-	tournaments.Post("/join", func(c *fiber.Ctx) error {
-		var req struct {
-			TournamentID string `json:"tournamentId"`
+	tr.Get("/:id", func(c *fiber.Ctx) error {
+		ctx := c.Context()
+		t, err := scanTournament(db.Pool.QueryRow(ctx, tournamentSelect+" WHERE t.id = $2", middleware.GetUID(c), c.Params("id")))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return utils.SendError(c, 404, "Tournament not found")
 		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
+		if err != nil {
+			return fail(c, err)
 		}
+		table, err := services.Standings(ctx, db.Pool, t.ID)
+		if err != nil {
+			return fail(c, err)
+		}
+		matches, err := services.TournamentMatches(ctx, t.ID)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches})
+	})
 
+	tr.Post("/:id/join", func(c *fiber.Ctx) error {
 		uid := middleware.GetUID(c)
-		ctx := context.Background()
+		ctx := c.Context()
+		tid := c.Params("id")
 
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
 
-		// 1. Get Tournament
-		var t models.Tournament
-		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, prize_pool, status FROM tournaments WHERE id = $1 FOR UPDATE", req.TournamentID).
-			Scan(&t.EntryFee, &t.MaxPlayers, &t.PrizePool, &t.Status)
-		if err != nil {
+		var fee int64
+		var maxPlayers int
+		var status, game, currency, name string
+		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name FROM tournaments WHERE id = $1 FOR UPDATE", tid).
+			Scan(&fee, &maxPlayers, &status, &game, &currency, &name)
+		if errors.Is(err, pgx.ErrNoRows) {
 			return utils.SendError(c, 404, "Tournament not found")
 		}
-		if t.Status != "open" {
-			return utils.SendError(c, 400, "Tournament not available for joining")
-		}
-
-		// 2. Check player count
-		var playerCount int
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM tournament_players WHERE tournament_id = $1", req.TournamentID).Scan(&playerCount)
-		if err != nil || playerCount >= t.MaxPlayers {
-			return utils.SendError(c, 400, "Tournament is full")
-		}
-
-		// 3. Check if already joined
-		var existing bool
-		tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tournament_players WHERE tournament_id = $1 AND user_id = $2)", req.TournamentID, uid).Scan(&existing)
-		if existing {
-			return utils.SendError(c, 400, "Already registered for this tournament")
-		}
-
-		// 4. Deduct entry fee if > 0
-		if t.EntryFee > 0 {
-			var balance int64
-			err = tx.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&balance)
-			if err != nil || balance < t.EntryFee {
-				return utils.SendError(c, 400, "Insufficient funds for entry fee")
-			}
-
-			err = services.AdjustBalance(ctx, tx, uid, -t.EntryFee, "tournament_entry", req.TournamentID)
-			if err != nil {
-				return utils.SendError(c, 500, "Failed to update balance")
-			}
-
-			// Add to prize pool (e.g., 80% to prize pool)
-			addedToPrize := int64(float64(t.EntryFee) * 0.8)
-			_, err = tx.Exec(ctx, "UPDATE tournaments SET prize_pool = prize_pool + $1 WHERE id = $2", addedToPrize, req.TournamentID)
-			if err != nil {
-				return utils.SendError(c, 500, "Failed to update prize pool")
-			}
-		}
-
-		// 5. Add player to tournament
-		_, err = tx.Exec(ctx, "INSERT INTO tournament_players (tournament_id, user_id) VALUES ($1, $2)", req.TournamentID, uid)
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to add player to tournament")
+			return fail(c, err)
 		}
-
-		// Check if tournament is now full, start it
-		if playerCount+1 == t.MaxPlayers {
-			_, err = tx.Exec(ctx, "UPDATE tournaments SET status = 'active', current_round = 1 WHERE id = $1", req.TournamentID)
-			if err != nil {
-				return utils.SendError(c, 500, "Failed to start tournament")
+		if status != "open" {
+			return utils.SendError(c, 409, "Registration for this tournament is closed")
+		}
+		if err := services.RequireGameProfile(ctx, tx, uid, game); err != nil {
+			return fail(c, err)
+		}
+		var count int
+		var joined bool
+		tx.QueryRow(ctx, "SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $2), false) FROM tournament_players WHERE tournament_id = $1", tid, uid).Scan(&count, &joined)
+		if joined {
+			return utils.SendError(c, 409, "You're already registered")
+		}
+		if count >= maxPlayers {
+			return utils.SendError(c, 409, "This tournament is full")
+		}
+		if fee > 0 {
+			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+				return fail(c, err)
 			}
-			// In a real implementation, you would also generate the first round fixtures here
-			fmt.Printf("Tournament %s is now active\n", req.TournamentID)
+			var myCurrency string
+			tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&myCurrency)
+			if myCurrency != currency {
+				return utils.SendError(c, 400, "This tournament is played in "+currency)
+			}
+			if err := services.AdjustBalance(ctx, tx, uid, -fee, "tournament_entry", tid); err != nil {
+				if errors.Is(err, services.ErrInsufficientFunds) {
+					return utils.SendError(c, 400, "Insufficient balance for the entry fee")
+				}
+				return fail(c, err)
+			}
 		}
-
+		if _, err := tx.Exec(ctx, "INSERT INTO tournament_players (tournament_id, user_id) VALUES ($1,$2)", tid, uid); err != nil {
+			return fail(c, err)
+		}
+		started := count+1 == maxPlayers
+		if started {
+			if err := services.StartTournament(ctx, tx, tid); err != nil {
+				return fail(c, err)
+			}
+		}
 		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
+			return fail(c, err)
 		}
+		if started {
+			go notifyTournamentStart(tid, name)
+		}
+		return utils.SendSuccess(c, fiber.Map{"started": started})
+	})
 
+	// Leave before it starts (entry fee refunded).
+	tr.Post("/:id/leave", func(c *fiber.Ctx) error {
+		uid := middleware.GetUID(c)
+		ctx := c.Context()
+		tid := c.Params("id")
+		tx, err := db.Pool.Begin(ctx)
+		if err != nil {
+			return fail(c, err)
+		}
+		defer tx.Rollback(ctx)
+		var fee int64
+		var status string
+		if err := tx.QueryRow(ctx, "SELECT entry_fee, status FROM tournaments WHERE id = $1 FOR UPDATE", tid).Scan(&fee, &status); err != nil {
+			return utils.SendError(c, 404, "Tournament not found")
+		}
+		if status != "open" {
+			return utils.SendError(c, 409, "You can't leave after the tournament has started")
+		}
+		tag, err := tx.Exec(ctx, "DELETE FROM tournament_players WHERE tournament_id = $1 AND user_id = $2", tid, uid)
+		if err != nil {
+			return fail(c, err)
+		}
+		if tag.RowsAffected() == 0 {
+			return utils.SendError(c, 404, "You're not registered")
+		}
+		if fee > 0 {
+			if err := services.AdjustBalance(ctx, tx, uid, fee, "tournament_refund", tid); err != nil {
+				return fail(c, err)
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fail(c, err)
+		}
 		return utils.SendSuccess(c, fiber.Map{})
 	})
+}
 
-	// Get fixtures for a tournament
-	tournaments.Get("/:id/fixtures", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return utils.SendSuccess(c, fiber.Map{"fixtures": []fiber.Map{}})
+func notifyTournamentStart(tid, name string) {
+	ctx := context.Background()
+	rows, err := db.Pool.Query(ctx, "SELECT user_id FROM tournament_players WHERE tournament_id = $1", tid)
+	if err != nil {
+		return
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
 		}
-		tID := c.Params("id")
-		ctx := context.Background()
-
-		rows, err := db.Pool.Query(ctx, "SELECT id, round, home_id, home_name, away_id, away_name, score_home, score_away, status, ai_verified FROM fixtures WHERE tournament_id = $1", tID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to fetch fixtures")
-		}
-		defer rows.Close()
-
-		var fixtures []fiber.Map
-		for rows.Next() {
-			var f struct {
-				ID         string
-				Round      int
-				HomeID     string
-				HomeName   string
-				AwayID     string
-				AwayName   string
-				ScoreHome  *int
-				ScoreAway  *int
-				Status     string
-				AIVerified bool
-			}
-			err := rows.Scan(&f.ID, &f.Round, &f.HomeID, &f.HomeName, &f.AwayID, &f.AwayName, &f.ScoreHome, &f.ScoreAway, &f.Status, &f.AIVerified)
-			if err == nil {
-				fixtures = append(fixtures, fiber.Map{
-					"id":         f.ID,
-					"round":      f.Round,
-					"homeId":     f.HomeID,
-					"homeName":   f.HomeName,
-					"awayId":     f.AwayID,
-					"awayName":   f.AwayName,
-					"scoreHome":  f.ScoreHome,
-					"scoreAway":  f.ScoreAway,
-					"status":     f.Status,
-					"aiVerified": f.AIVerified,
-				})
-			}
-		}
-
-		if fixtures == nil {
-			fixtures = []fiber.Map{}
-		}
-
-		return utils.SendSuccess(c, fiber.Map{"fixtures": fixtures})
-	})
-
-	// Submit fixture result
-	tournaments.Post("/:tournamentId/fixtures/:fixtureId/submit", func(c *fiber.Ctx) error {
-		var req struct {
-			ImageB64 string `json:"image_b64"`
-		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
-		}
-
-		fID := c.Params("fixtureId")
-		// Normally we'd pass image to AI Detection here
-		// Mock logic for now
-		scoreHome := 2
-		scoreAway := 1
-		finalScore := "2-1"
-
-		ctx := context.Background()
-		_, err := db.Pool.Exec(ctx, "UPDATE fixtures SET score_home = $1, score_away = $2, status = 'completed', ai_verified = true WHERE id = $3", scoreHome, scoreAway, fID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to update fixture")
-		}
-
-		return utils.SendSuccess(c, fiber.Map{
-			"finalScore": finalScore,
-			"aiVerified": true,
-		})
-	})
+	}
+	rows.Close()
+	for _, id := range ids {
+		services.Notify(id, "tournament_started", name+" has started! 🏁",
+			"Your first match is ready. Open the tournament to see your opponent and deadline.", "/tournaments/"+tid, map[string]any{"tournamentId": tid})
+	}
+	// Round 1 may contain only byes (odd player counts); move on if so.
+	services.AdvanceTournament(ctx, tid)
 }

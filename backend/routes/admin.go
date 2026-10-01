@@ -1,8 +1,11 @@
 package routes
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -14,288 +17,368 @@ import (
 )
 
 func SetupAdminRoutes(api fiber.Router) {
-	admin := api.Group("/admin", middleware.AuthRequired(), middleware.AdminRequired())
+	admin := api.Group("/admin", middleware.AuthRequired(), middleware.AdminRequired(), dbRequired)
 
-	// Get overall stats
 	admin.Get("/stats", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return utils.SendSuccess(c, fiber.Map{"stats": fiber.Map{"users": 0, "totalEscrow": 0, "activeMatches": 0}})
-		}
-		ctx := context.Background()
-
-		var userCount int
-		var totalEscrow int64
-		var activeMatches int
-
-		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&userCount)
-		db.Pool.QueryRow(ctx, "SELECT COALESCE(SUM(pool), 0) FROM escrow WHERE status = 'held'").Scan(&totalEscrow)
-		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM escrow WHERE status = 'held'").Scan(&activeMatches)
-
-		return utils.SendSuccess(c, fiber.Map{
-			"stats": fiber.Map{
-				"users":         userCount,
-				"totalEscrow":   totalEscrow,
-				"activeMatches": activeMatches,
-			},
-		})
+		ctx := c.Context()
+		var users, activeMatches, needsReview, pendingWithdrawals int
+		var held, wallets, feesToday int64
+		db.Pool.QueryRow(ctx, "SELECT COUNT(*), COALESCE(SUM(balance),0) FROM users WHERE deleted_at IS NULL").Scan(&users, &wallets)
+		db.Pool.QueryRow(ctx, "SELECT COALESCE(SUM(pool),0) FROM escrow WHERE status IN ('waiting','held')").Scan(&held)
+		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FILTER (WHERE status IN ('ready','submitted')), COUNT(*) FILTER (WHERE status IN ('disputed','review')) FROM matches").Scan(&activeMatches, &needsReview)
+		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'").Scan(&pendingWithdrawals)
+		db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM((metadata->>'fee')::bigint),0) FROM transactions
+			WHERE type = 'wager_win' AND created_at > NOW() - INTERVAL '1 day'`).Scan(&feesToday)
+		return utils.SendSuccess(c, fiber.Map{"stats": fiber.Map{
+			"users": users, "walletTotal": wallets, "inEscrow": held, "activeMatches": activeMatches,
+			"needsReview": needsReview, "pendingWithdrawals": pendingWithdrawals, "feesToday": feesToday,
+		}})
 	})
 
-	// Get recent transactions
 	admin.Get("/transactions", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return utils.SendSuccess(c, fiber.Map{"transactions": []fiber.Map{}})
-		}
-		ctx := context.Background()
-		rows, err := db.Pool.Query(ctx, "SELECT id, user_id, type, amount, created_at FROM transactions ORDER BY created_at DESC LIMIT 50")
+		rows, err := db.Pool.Query(c.Context(), `SELECT t.id, t.user_id, COALESCE(u.username,''), t.type, t.amount, COALESCE(t.ref_id,''), t.created_at
+			FROM transactions t LEFT JOIN users u ON u.id = t.user_id ORDER BY t.created_at DESC LIMIT 100`)
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to fetch transactions")
+			return fail(c, err)
 		}
 		defer rows.Close()
-
-		var txs []fiber.Map
+		list := []fiber.Map{}
 		for rows.Next() {
-			var id int64
-			var uid, tType string
-			var amount int64
-			var created string
-			if err := rows.Scan(&id, &uid, &tType, &amount, &created); err == nil {
-				txs = append(txs, fiber.Map{
-					"id":        id,
-					"userId":    uid,
-					"type":      tType,
-					"amount":    amount,
-					"createdAt": created,
-				})
+			var id, amount int64
+			var uid, name, typ, ref string
+			var at time.Time
+			if rows.Scan(&id, &uid, &name, &typ, &amount, &ref, &at) == nil {
+				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "type": typ, "amount": amount, "ref": ref, "createdAt": at})
 			}
 		}
-
-		return utils.SendSuccess(c, fiber.Map{"transactions": txs})
+		return utils.SendSuccess(c, fiber.Map{"transactions": list})
 	})
 
-	// Add/Remove Balance
+	// Find users by email / username (for balance adjustments and support).
+	admin.Get("/users", func(c *fiber.Ctx) error {
+		q := "%" + strings.ToLower(strings.TrimSpace(c.Query("q"))) + "%"
+		rows, err := db.Pool.Query(c.Context(), `SELECT id, email, username, balance, COALESCE(currency,'NGN'), is_admin, created_at FROM users
+			WHERE deleted_at IS NULL AND (lower(email) LIKE $1 OR lower(username) LIKE $1 OR id = $2) ORDER BY created_at DESC LIMIT 25`, q, c.Query("q"))
+		if err != nil {
+			return fail(c, err)
+		}
+		defer rows.Close()
+		list := []fiber.Map{}
+		for rows.Next() {
+			var id, email, name, cur string
+			var bal int64
+			var isAdmin bool
+			var at time.Time
+			if rows.Scan(&id, &email, &name, &bal, &cur, &isAdmin, &at) == nil {
+				list = append(list, fiber.Map{"id": id, "email": email, "username": name, "balance": bal, "currency": cur, "isAdmin": isAdmin, "createdAt": at})
+			}
+		}
+		return utils.SendSuccess(c, fiber.Map{"users": list})
+	})
+
+	// Manual balance correction (always logged with the admin and reason).
 	admin.Post("/balance", func(c *fiber.Ctx) error {
 		var req struct {
 			UserID string `json:"userId"`
-			Amount int64  `json:"amount"` // Can be negative to deduct
+			Amount int64  `json:"amount"`
 			Reason string `json:"reason"`
 		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
+		if err := c.BodyParser(&req); err != nil || req.UserID == "" || req.Amount == 0 {
+			return utils.SendError(c, 400, "User, amount and reason are required")
 		}
-
-		ctx := context.Background()
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
+		if len(strings.TrimSpace(req.Reason)) < 5 {
+			return utils.SendError(c, 400, "Give a reason (at least 5 characters)")
 		}
+		ctx := c.Context()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
-
-		err = services.AdjustBalance(ctx, tx, req.UserID, req.Amount, "admin_adjustment", req.Reason)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to update balance")
+		meta, _ := json.Marshal(map[string]string{"admin": middleware.GetUID(c), "reason": req.Reason})
+		if err := services.AdjustBalance(ctx, tx, req.UserID, req.Amount, "admin_adjustment", "admin", string(meta)); err != nil {
+			return fail(c, err)
 		}
-
 		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
+			return fail(c, err)
 		}
-
+		log.Printf("[ADMIN] %s adjusted %s by %d: %s", middleware.GetEmail(c), req.UserID, req.Amount, req.Reason)
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
-	// ─── TOURNAMENT MANAGEMENT ──────────────────────────────────────
+	// ── Disputes & reviews ──────────────────────────────────────────
 
-	// Create a tournament (free or gated with entry fee)
-	// Free tournaments (entry_fee = 0) can only be posted ONCE per week
-	admin.Post("/tournaments", func(c *fiber.Ctx) error {
-		var req struct {
-			Name       string `json:"name"`
-			Game       string `json:"game"`
-			Mode       string `json:"mode"`
-			Icon       string `json:"icon"`
-			EntryFee   int64  `json:"entryFee"`   // 0 = free, >0 = gated
-			MaxPlayers int    `json:"maxPlayers"`
-			PrizePool  int64  `json:"prizePool"`   // Admin-seeded prize for free tournaments
-		}
-		if err := c.BodyParser(&req); err != nil {
-			return utils.SendError(c, 400, "Invalid payload")
-		}
-
-		if req.Name == "" || req.Game == "" {
-			return utils.SendError(c, 400, "Name and game are required")
-		}
-		if req.MaxPlayers < 2 {
-			req.MaxPlayers = 8
-		}
-
-		uid := middleware.GetUID(c)
-		ctx := context.Background()
-
-		// ── FREE TOURNAMENT WEEKLY LIMIT ──
-		// Free tournaments (entry_fee = 0) can only be posted once per week
-		if req.EntryFee <= 0 {
-			req.EntryFee = 0 // Normalize
-
-			if db.Pool == nil {
-				return utils.SendError(c, 503, "Database not available")
-			}
-
-			// Check if a free tournament was already created this week
-			startOfWeek := getStartOfCurrentWeek()
-			var existingCount int
-			err := db.Pool.QueryRow(ctx,
-				"SELECT COUNT(*) FROM tournaments WHERE entry_fee = 0 AND created_at >= $1",
-				startOfWeek,
-			).Scan(&existingCount)
-			if err != nil {
-				return utils.SendError(c, 500, "Database error checking free tournament limit")
-			}
-			if existingCount > 0 {
-				return utils.SendError(c, 429, "A free tournament has already been posted this week. Free tournaments are limited to once per week.")
-			}
-		}
-
-		// ── CREATE TOURNAMENT ──
-		tournamentID := utils.GenerateTournamentID()
-
-		_, err := db.Pool.Exec(ctx,
-			"INSERT INTO tournaments (id, name, game, mode, icon, entry_fee, max_players, prize_pool, created_by, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', NOW())",
-			tournamentID, req.Name, req.Game, req.Mode, req.Icon, req.EntryFee, req.MaxPlayers, req.PrizePool, uid,
-		)
+	admin.Get("/matches/review", func(c *fiber.Ctx) error {
+		list, err := services.MatchesNeedingAdmin(c.Context())
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to create tournament: "+err.Error())
+			return fail(c, err)
 		}
-
-		feeType := "gated"
-		if req.EntryFee == 0 {
-			feeType = "free"
-		}
-		fmt.Printf("[ADMIN] Tournament created: %s (%s, %s, fee=%d, pool=%d) by %s\n",
-			req.Name, req.Game, feeType, req.EntryFee, req.PrizePool, uid)
-
-		return utils.SendSuccess(c, fiber.Map{
-			"tournamentId": tournamentID,
-			"type":         feeType,
-		})
+		return utils.SendSuccess(c, fiber.Map{"matches": list})
 	})
 
-	// List all tournaments (admin view — includes all statuses)
-	admin.Get("/tournaments", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return utils.SendSuccess(c, fiber.Map{"tournaments": []fiber.Map{}})
+	// What the AI read from the submitted screenshot (for the review screen).
+	admin.Get("/matches/:id/ocr", func(c *fiber.Ctx) error {
+		var raw []byte
+		db.Pool.QueryRow(c.Context(), "SELECT ocr_result FROM matches WHERE id = $1", c.Params("id")).Scan(&raw)
+		return utils.SendSuccess(c, fiber.Map{"ocr": json.RawMessage(nonNullJSON(raw))})
+	})
+
+	admin.Post("/matches/:id/resolve", func(c *fiber.Ctx) error {
+		var req struct {
+			ScoreHome *int `json:"scoreHome"`
+			ScoreAway *int `json:"scoreAway"`
+			PensHome  *int `json:"pensHome"`
+			PensAway  *int `json:"pensAway"`
 		}
-		ctx := context.Background()
-		rows, err := db.Pool.Query(ctx,
-			`SELECT id, name, game, COALESCE(mode,''), COALESCE(icon,''), entry_fee, max_players, prize_pool, status, COALESCE(created_by,''), created_at
-			 FROM tournaments ORDER BY created_at DESC`)
+		if err := c.BodyParser(&req); err != nil || req.ScoreHome == nil || req.ScoreAway == nil || *req.ScoreHome < 0 || *req.ScoreAway < 0 {
+			return utils.SendError(c, 400, "Enter both scores")
+		}
+		if err := services.AdminResolve(c.Context(), c.Params("id"), middleware.GetUID(c), *req.ScoreHome, *req.ScoreAway, req.PensHome, req.PensAway); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// Void: 1v1 → refund both; tournament → reset for a replay.
+	admin.Post("/matches/:id/void", func(c *fiber.Ctx) error {
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		c.BodyParser(&req)
+		if err := services.VoidMatch(c.Context(), c.Params("id"), middleware.GetUID(c), req.Reason); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// ── Withdrawals ─────────────────────────────────────────────────
+
+	admin.Get("/withdrawals", func(c *fiber.Ctx) error {
+		status := c.Query("status", "pending")
+		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.currency,
+			COALESCE(w.bank_name,''), w.account_number, COALESCE(w.account_name,''), w.status, COALESCE(w.note,''), w.created_at
+			FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id WHERE w.status = $1 ORDER BY w.created_at LIMIT 100`, status)
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to fetch tournaments")
+			return fail(c, err)
 		}
 		defer rows.Close()
-
-		var results []fiber.Map
+		list := []fiber.Map{}
 		for rows.Next() {
-			var id, name, game, mode, icon, status, createdBy string
-			var entryFee, prizePool int64
-			var maxPlayers int
-			var createdAt time.Time
-			if err := rows.Scan(&id, &name, &game, &mode, &icon, &entryFee, &maxPlayers, &prizePool, &status, &createdBy, &createdAt); err == nil {
-				// Get player count
-				var playerCount int
-				db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tournament_players WHERE tournament_id = $1", id).Scan(&playerCount)
-
-				feeType := "gated"
-				if entryFee == 0 {
-					feeType = "free"
-				}
-				results = append(results, fiber.Map{
-					"id":          id,
-					"name":        name,
-					"game":        game,
-					"mode":        mode,
-					"icon":        icon,
-					"entryFee":    entryFee,
-					"maxPlayers":  maxPlayers,
-					"prizePool":   prizePool,
-					"status":      status,
-					"type":        feeType,
-					"playerCount": playerCount,
-					"createdBy":   createdBy,
-					"createdAt":   createdAt,
-				})
+			var id, uid, name, email, cur, bank, acct, acctName, st, note string
+			var amount int64
+			var at time.Time
+			if rows.Scan(&id, &uid, &name, &email, &amount, &cur, &bank, &acct, &acctName, &st, &note, &at) == nil {
+				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "email": email, "amount": amount, "currency": cur,
+					"bankName": bank, "accountNumber": acct, "accountName": acctName, "status": st, "note": note, "createdAt": at})
 			}
 		}
-
-		if results == nil {
-			results = []fiber.Map{}
-		}
-
-		return utils.SendSuccess(c, fiber.Map{"tournaments": results})
+		return utils.SendSuccess(c, fiber.Map{"withdrawals": list})
 	})
 
-	// Delete a tournament (admin only, only if still open)
-	admin.Delete("/tournaments/:id", func(c *fiber.Ctx) error {
-		tID := c.Params("id")
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
+	admin.Post("/withdrawals/:id/approve", func(c *fiber.Ctx) error {
+		if err := services.ApproveWithdrawal(c.Context(), c.Params("id"), middleware.GetUID(c)); err != nil {
+			return fail(c, err)
 		}
-		ctx := context.Background()
+		return utils.SendSuccess(c, fiber.Map{})
+	})
 
-		// Only allow deleting open tournaments (not active/finished)
-		var status string
-		err := db.Pool.QueryRow(ctx, "SELECT status FROM tournaments WHERE id = $1", tID).Scan(&status)
+	admin.Post("/withdrawals/:id/reject", func(c *fiber.Ctx) error {
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		c.BodyParser(&req)
+		if strings.TrimSpace(req.Reason) == "" {
+			return utils.SendError(c, 400, "Give the user a reason")
+		}
+		if err := services.RefundWithdrawal(c.Context(), c.Params("id"), req.Reason, "pending"); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// ── Tournaments ─────────────────────────────────────────────────
+
+	admin.Post("/tournaments", func(c *fiber.Ctx) error {
+		var req struct {
+			Name       string    `json:"name"`
+			Game       string    `json:"game"`
+			Format     string    `json:"format"` // knockout | league
+			Icon       string    `json:"icon"`
+			EntryFee   int64     `json:"entryFee"`
+			Currency   string    `json:"currency"`
+			MaxPlayers int       `json:"maxPlayers"`
+			PrizePool  int64     `json:"prizePool"` // seed for free tournaments
+			PrizeSplit []float64 `json:"prizeSplit"`
+			RoundHours int       `json:"roundHours"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		if req.Name == "" || services.GameByID(req.Game) == nil {
+			return utils.SendError(c, 400, "Name and a supported game are required")
+		}
+		if req.Format != "league" {
+			req.Format = "knockout"
+		}
+		if req.Currency != "GHS" {
+			req.Currency = "NGN"
+		}
+		if req.MaxPlayers < 2 || req.MaxPlayers > 64 {
+			return utils.SendError(c, 400, "Players must be between 2 and 64")
+		}
+		if req.Format == "league" && req.MaxPlayers > 20 {
+			return utils.SendError(c, 400, "Leagues are limited to 20 players (everyone plays everyone)")
+		}
+		if req.RoundHours <= 0 {
+			req.RoundHours = 24
+		}
+		if req.EntryFee < 0 || req.PrizePool < 0 {
+			return utils.SendError(c, 400, "Amounts can't be negative")
+		}
+		if len(req.PrizeSplit) == 0 {
+			req.PrizeSplit = services.DefaultSplit(req.Format)
+			if len(req.PrizeSplit) > req.MaxPlayers {
+				req.PrizeSplit = req.PrizeSplit[:req.MaxPlayers]
+			}
+		}
+		var total float64
+		for _, p := range req.PrizeSplit {
+			if p < 0 {
+				return utils.SendError(c, 400, "Prize percentages can't be negative")
+			}
+			total += p
+		}
+		if total > 100 || len(req.PrizeSplit) > req.MaxPlayers {
+			return utils.SendError(c, 400, "Prize split must add up to 100% or less and not exceed the number of players")
+		}
+		ctx := c.Context()
+		if req.EntryFee == 0 {
+			var count int
+			db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tournaments WHERE entry_fee = 0 AND created_at >= $1", startOfWeek()).Scan(&count)
+			if count > 0 {
+				return utils.SendError(c, 429, "Only one free tournament can be posted per week")
+			}
+		}
+		split, _ := json.Marshal(req.PrizeSplit)
+		id := utils.GenerateTournamentID()
+		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, round_hours, created_by, status)
+			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,'open')`,
+			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, req.PrizePool, string(split), req.RoundHours, middleware.GetUID(c))
 		if err != nil {
+			return fail(c, err)
+		}
+		log.Printf("[ADMIN] tournament %s created: %s %s fee=%d players=%d split=%v", id, req.Format, req.Game, req.EntryFee, req.MaxPlayers, req.PrizeSplit)
+		return utils.SendSuccess(c, fiber.Map{"tournamentId": id})
+	})
+
+	// Cancel an open tournament and refund everyone who joined.
+	admin.Delete("/tournaments/:id", func(c *fiber.Ctx) error {
+		ctx := c.Context()
+		tid := c.Params("id")
+		tx, err := db.Pool.Begin(ctx)
+		if err != nil {
+			return fail(c, err)
+		}
+		defer tx.Rollback(ctx)
+		var status, name string
+		var fee int64
+		if err := tx.QueryRow(ctx, "SELECT status, entry_fee, name FROM tournaments WHERE id = $1 FOR UPDATE", tid).Scan(&status, &fee, &name); err != nil {
 			return utils.SendError(c, 404, "Tournament not found")
 		}
 		if status != "open" {
-			return utils.SendError(c, 400, "Cannot delete a tournament that is already active or finished")
+			return utils.SendError(c, 409, "Only tournaments that haven't started can be cancelled")
 		}
-
-		// Refund any players who already joined
-		rows, err := db.Pool.Query(ctx, "SELECT user_id FROM tournament_players WHERE tournament_id = $1", tID)
-		if err == nil {
-			defer rows.Close()
-			var entryFee int64
-			db.Pool.QueryRow(ctx, "SELECT entry_fee FROM tournaments WHERE id = $1", tID).Scan(&entryFee)
-
-			if entryFee > 0 {
-				for rows.Next() {
-					var userID string
-					if rows.Scan(&userID) == nil {
-						tx, err := db.Pool.Begin(ctx)
-						if err == nil {
-							services.AdjustBalance(ctx, tx, userID, entryFee, "tournament_refund", tID)
-							tx.Commit(ctx)
-						}
-					}
+		rows, err := tx.Query(ctx, "SELECT user_id FROM tournament_players WHERE tournament_id = $1", tid)
+		if err != nil {
+			return fail(c, err)
+		}
+		var players []string
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil {
+				players = append(players, id)
+			}
+		}
+		rows.Close()
+		for _, p := range players {
+			if fee > 0 {
+				if err := services.AdjustBalance(ctx, tx, p, fee, "tournament_refund", tid); err != nil {
+					return fail(c, err)
 				}
 			}
 		}
-
-		// Delete players and tournament
-		db.Pool.Exec(ctx, "DELETE FROM tournament_players WHERE tournament_id = $1", tID)
-		db.Pool.Exec(ctx, "DELETE FROM fixtures WHERE tournament_id = $1", tID)
-		_, err = db.Pool.Exec(ctx, "DELETE FROM tournaments WHERE id = $1", tID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to delete tournament")
+		if _, err := tx.Exec(ctx, "DELETE FROM tournament_players WHERE tournament_id = $1", tid); err != nil {
+			return fail(c, err)
 		}
-
-		fmt.Printf("[ADMIN] Tournament %s deleted\n", tID)
+		if _, err := tx.Exec(ctx, "UPDATE tournaments SET status = 'cancelled' WHERE id = $1", tid); err != nil {
+			return fail(c, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fail(c, err)
+		}
+		for _, p := range players {
+			services.Notify(p, "tournament_cancelled", "Tournament cancelled", name+" was cancelled. Any entry fee has been refunded.", "/tournaments", nil)
+		}
 		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// Test the OCR on a screenshot without touching any match.
+	admin.Post("/ocr-test", func(c *fiber.Ctx) error {
+		game := services.GameByID(c.FormValue("game"))
+		if game == nil {
+			return utils.SendError(c, 400, "Choose a game")
+		}
+		fh, err := c.FormFile("image")
+		if err != nil {
+			return utils.SendError(c, 400, "Attach a screenshot")
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return fail(c, err)
+		}
+		img, _ := io.ReadAll(io.LimitReader(f, services.MaxScreenshotLen))
+		f.Close()
+		var expected []services.ExpectedPlayer
+		for _, n := range []string{c.FormValue("player1"), c.FormValue("player2")} {
+			if n = strings.TrimSpace(n); n != "" {
+				expected = append(expected, services.ExpectedPlayer{Gamertag: n})
+			}
+		}
+		res, err := services.AnalyzeScreenshot(c.Context(), img, game, expected)
+		if err != nil {
+			return utils.SendError(c, 502, fmt.Sprintf("OCR failed: %v", err))
+		}
+		verdict := "accepted"
+		switch {
+		case !res.IsVersusHuman:
+			verdict = "rejected: not a player-vs-player match"
+		case !res.IsResultScreen:
+			verdict = "rejected: not a final result screen"
+		case res.Confidence < services.MinOCRConfidence:
+			verdict = "rejected: low confidence"
+		case len(expected) == 2:
+			if _, _, err := services.MatchPlayers(res, expected[0], expected[1]); err != nil {
+				verdict = "rejected: " + err.Error()
+			}
+		}
+		return utils.SendSuccess(c, fiber.Map{"ocr": res, "verdict": verdict})
 	})
 }
 
-// getStartOfCurrentWeek returns the start of the current ISO week (Monday 00:00 UTC)
-func getStartOfCurrentWeek() time.Time {
-	now := time.Now().UTC()
-	weekday := now.Weekday()
-	if weekday == time.Sunday {
-		weekday = 7
+func nonNullJSON(b []byte) []byte {
+	if len(b) == 0 {
+		return []byte("null")
 	}
-	daysToSubtract := int(weekday) - 1 // Monday = 0 days back
-	startOfWeek := time.Date(now.Year(), now.Month(), now.Day()-daysToSubtract, 0, 0, 0, 0, time.UTC)
-	return startOfWeek
+	return b
 }
 
+// startOfWeek returns Monday 00:00 UTC of the current week.
+func startOfWeek() time.Time {
+	now := time.Now().UTC()
+	wd := int(now.Weekday())
+	if wd == 0 {
+		wd = 7
+	}
+	return time.Date(now.Year(), now.Month(), now.Day()-(wd-1), 0, 0, 0, 0, time.UTC)
+}

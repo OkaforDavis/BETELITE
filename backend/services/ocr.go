@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"google.golang.org/genai"
 
@@ -17,26 +18,34 @@ import (
 
 // ── Types ────────────────────────────────────────────────────────────
 
-// PlayerScoreResult represents a detected player's score from a game screenshot.
-type PlayerScoreResult struct {
-	GamerTag string `json:"gamertag"`
-	Score    int    `json:"score"`
-	Side     string `json:"side,omitempty"` // LEFT or RIGHT for football games
+// OCRPlayer is one player/club as read from a result screen.
+type OCRPlayer struct {
+	Name         string `json:"name"`
+	InGameID     string `json:"ingame_id,omitempty"`
+	Score        int    `json:"score"`
+	PenaltyScore *int   `json:"penalty_score,omitempty"`
+	Side         string `json:"side,omitempty"` // LEFT or RIGHT
 }
 
-// AIResult is the structured output from the Gemini vision OCR.
-type AIResult struct {
-	Detected     bool               `json:"detected"`
-	GameType     string             `json:"game_type,omitempty"`
-	TargetPlayer *PlayerScoreResult `json:"target_player,omitempty"`
-	Opponent     *PlayerScoreResult `json:"opponent,omitempty"`
-	Notes        string             `json:"notes"`
-	Winner       string             `json:"-"` // Computed after parsing
-	Score1       int                `json:"-"` // Computed after parsing
-	Score2       int                `json:"-"` // Computed after parsing
+// OCRResult is the structured output Gemini returns for a screenshot.
+type OCRResult struct {
+	IsResultScreen bool        `json:"is_result_screen"`
+	IsVersusHuman  bool        `json:"is_versus_human"`
+	Mode           string      `json:"mode"`
+	InGameMatchID  string      `json:"ingame_match_id,omitempty"`
+	Players        []OCRPlayer `json:"players"`
+	Confidence     int         `json:"confidence"`
+	RejectReason   string      `json:"reject_reason,omitempty"`
+	Notes          string      `json:"notes"`
 }
 
-// ── Singleton Gemini Client ──────────────────────────────────────────
+// ExpectedPlayer is a registered player we expect to find on the screenshot.
+type ExpectedPlayer struct {
+	Gamertag string
+	InGameID string
+}
+
+// ── Gemini client ────────────────────────────────────────────────────
 
 var (
 	geminiClient     *genai.Client
@@ -44,193 +53,201 @@ var (
 	geminiClientErr  error
 )
 
-// getGeminiClient returns a lazily-initialised Gemini API client.
 func getGeminiClient(ctx context.Context) (*genai.Client, error) {
 	geminiClientOnce.Do(func() {
-		apiKey := config.Cfg.GeminiAPIKey
-		if apiKey == "" {
+		if config.Cfg.GeminiAPIKey == "" {
 			geminiClientErr = fmt.Errorf("GEMINI_API_KEY is not configured")
 			return
 		}
 		geminiClient, geminiClientErr = genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  apiKey,
+			APIKey:  config.Cfg.GeminiAPIKey,
 			Backend: genai.BackendGeminiAPI,
 		})
 		if geminiClientErr == nil {
-			log.Println("[INFO] Gemini API client initialised successfully")
+			log.Printf("[INFO] Gemini client ready (model %s)", config.Cfg.GeminiModel)
 		}
 	})
 	return geminiClient, geminiClientErr
 }
 
-// ── JSON Schema for Structured Output ────────────────────────────────
-
-// gameScoreSchema defines the JSON response schema enforced via Gemini's
-// structured output mode so we always get parseable JSON back.
-var gameScoreSchema = &genai.Schema{
+var playerSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
-		"detected": {
-			Type:        genai.TypeBoolean,
-			Description: "True if game scores were detected in the screenshot",
-		},
-		"game_type": {
-			Type:        genai.TypeString,
-			Description: "The detected game type (e.g. EA FC 25, COD Mobile, DLS)",
-		},
-		"target_player": {
-			Type: genai.TypeObject,
-			Properties: map[string]*genai.Schema{
-				"gamertag": {Type: genai.TypeString, Description: "The player name or gamertag"},
-				"score":    {Type: genai.TypeInteger, Description: "The player's score or kills"},
-				"side":     {Type: genai.TypeString, Description: "LEFT or RIGHT for football games only"},
-			},
-			Required: []string{"gamertag", "score"},
-		},
-		"opponent": {
-			Type: genai.TypeObject,
-			Properties: map[string]*genai.Schema{
-				"gamertag": {Type: genai.TypeString, Description: "The opponent's name or gamertag"},
-				"score":    {Type: genai.TypeInteger, Description: "The opponent's score or kills"},
-				"side":     {Type: genai.TypeString, Description: "LEFT or RIGHT for football games only"},
-			},
-			Required: []string{"gamertag", "score"},
-		},
-		"notes": {
-			Type:        genai.TypeString,
-			Description: "Brief description of the match results detected or why detection failed",
-		},
+		"name":          {Type: genai.TypeString, Description: "Username / club name exactly as displayed"},
+		"ingame_id":     {Type: genai.TypeString, Description: "Player ID number if displayed, else empty"},
+		"score":         {Type: genai.TypeInteger, Description: "Final goals scored (excluding penalty shoot-out)"},
+		"penalty_score": {Type: genai.TypeInteger, Description: "Penalty shoot-out goals, only if a shoot-out happened", Nullable: genai.Ptr(true)},
+		"side":          {Type: genai.TypeString, Enum: []string{"LEFT", "RIGHT"}},
 	},
-	Required: []string{"detected", "notes"},
+	Required: []string{"name", "score", "side"},
 }
 
-// ── Prompt ────────────────────────────────────────────────────────────
-
-func buildDetectionPrompt(gameType, targetGamertag, opponentGamertag string) string {
-	if gameType == "" || gameType == "auto" {
-		gameType = "auto-detect"
-	}
-	if targetGamertag == "" {
-		targetGamertag = "unknown"
-	}
-	if opponentGamertag == "" {
-		opponentGamertag = "unknown"
-	}
-
-	return fmt.Sprintf(`You are a gaming score detection AI. Analyze this screenshot from a competitive mobile/console game match and extract the scores.
-
-Game type: %s
-Target player gamertag: %s
-Opponent gamertag: %s
-
-Instructions:
-1. Identify the scoreboard or result screen in the screenshot
-2. Find the scores for each player/team
-3. If gamertags are provided, match them to the correct scores using fuzzy matching
-4. For football games (FIFA, eFootball, EA FC, DLS, Dream League), identify LEFT and RIGHT sides
-5. For FPS games (COD Mobile, PUBG, Free Fire), find kill counts or match scores
-6. If there is a clear "Victory/Defeat" or "Win/Lose" indicator, use it to confirm the winner`, gameType, targetGamertag, opponentGamertag)
+var resultSchema = &genai.Schema{
+	Type: genai.TypeObject,
+	Properties: map[string]*genai.Schema{
+		"is_result_screen": {Type: genai.TypeBoolean, Description: "True only for the final full-time result screen of a completed match"},
+		"is_versus_human":  {Type: genai.TypeBoolean, Description: "True only if both sides are human players (not CPU/AI, not a scenario/event/campaign)"},
+		"mode":             {Type: genai.TypeString, Description: "Game mode shown, e.g. Head-to-Head, Friend Match, Scenario, vs AI"},
+		"ingame_match_id":  {Type: genai.TypeString, Description: "Match ID / code shown by the game, else empty"},
+		"players":          {Type: genai.TypeArray, Items: playerSchema, Description: "Exactly the two sides, LEFT first"},
+		"confidence":       {Type: genai.TypeInteger, Description: "0-100 confidence that names and scores are read correctly"},
+		"reject_reason":    {Type: genai.TypeString, Description: "If the screenshot is not a valid human-vs-human final result, say why in one short sentence"},
+		"notes":            {Type: genai.TypeString},
+	},
+	Required: []string{"is_result_screen", "is_versus_human", "mode", "players", "confidence", "notes"},
 }
 
-// ── Public API ────────────────────────────────────────────────────────
+func buildPrompt(game *Game, expected []ExpectedPlayer) string {
+	var exp strings.Builder
+	for i, p := range expected {
+		fmt.Fprintf(&exp, "  Player %d: name %q", i+1, p.Gamertag)
+		if p.InGameID != "" {
+			fmt.Fprintf(&exp, ", in-game ID %q", p.InGameID)
+		}
+		exp.WriteString("\n")
+	}
+	if exp.Len() == 0 {
+		exp.WriteString("  (not provided)\n")
+	}
+	return fmt.Sprintf(`You verify esports match results for a real-money platform. Be strict: a wrong "valid" answer costs players money.
 
-// VerifyMatchResult sends a game screenshot to Gemini vision and returns
-// structured score detection results. This is a pure-Go implementation
-// that eliminates the need for a separate Python detection service.
-func VerifyMatchResult(imagePath string, gameType string, targetGamertag string, opponentGamertag string) (*AIResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+Game: %s
+%s
+
+Registered players for this match:
+%s
+Read the screenshot and report exactly what is displayed. Do not guess or invent names, IDs or scores; if something is unreadable, lower the confidence and explain in notes.
+- is_result_screen: true only for the final full-time result of a finished match.
+- is_versus_human: false for CPU/AI opponents, scenarios, events, campaigns or objectives (e.g. "TARGET: WIN BY 2").
+- players: the two sides as displayed (LEFT first), with the names exactly as shown.
+- If the screen shows only national/club team names and not the players' usernames (where the game normally shows usernames), set is_result_screen=false and explain in reject_reason.`,
+		game.Name, game.ocrHints, exp.String())
+}
+
+// AnalyzeScreenshot sends a result screenshot to Gemini and returns what it read.
+func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []ExpectedPlayer) (*OCRResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	client, err := getGeminiClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gemini client error: %w", err)
+		return nil, err
 	}
 
-	// Read the image file
-	imgData, err := os.ReadFile(imagePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image file: %w", err)
+	mime := http.DetectContentType(img)
+	switch mime {
+	case "image/jpeg", "image/png", "image/webp":
+	default:
+		return nil, fmt.Errorf("unsupported image type %s", mime)
 	}
 
-	// Detect MIME type from extension
-	mimeType := "image/jpeg"
-	lower := strings.ToLower(imagePath)
-	switch {
-	case strings.HasSuffix(lower, ".png"):
-		mimeType = "image/png"
-	case strings.HasSuffix(lower, ".webp"):
-		mimeType = "image/webp"
-	case strings.HasSuffix(lower, ".gif"):
-		mimeType = "image/gif"
-	}
-
-	prompt := buildDetectionPrompt(gameType, targetGamertag, opponentGamertag)
-
-	// Build multimodal content: text prompt + inline image
-	parts := []*genai.Part{
-		{Text: prompt},
-		{InlineData: &genai.Blob{Data: imgData, MIMEType: mimeType}},
-	}
-	contents := []*genai.Content{{Parts: parts}}
-
-	// Configure structured JSON output via response schema
-	genConfig := &genai.GenerateContentConfig{
-		Temperature:      genai.Ptr[float32](0.1), // Low temp for consistent structured output
+	contents := []*genai.Content{{Parts: []*genai.Part{
+		{Text: buildPrompt(game, expected)},
+		{InlineData: &genai.Blob{Data: img, MIMEType: mime}},
+	}}}
+	cfg := &genai.GenerateContentConfig{
+		Temperature:      genai.Ptr[float32](0),
 		MaxOutputTokens:  1024,
 		ResponseMIMEType: "application/json",
-		ResponseSchema:   gameScoreSchema,
+		ResponseSchema:   resultSchema,
 	}
 
-	result, err := client.Models.GenerateContent(ctx, config.Cfg.GeminiModel, contents, genConfig)
+	resp, err := client.Models.GenerateContent(ctx, config.Cfg.GeminiModel, contents, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("gemini API call failed: %w", err)
+		return nil, fmt.Errorf("gemini: %w", err)
 	}
-
-	// Extract text response
-	responseText := result.Text()
-	if responseText == "" {
-		return nil, fmt.Errorf("gemini returned empty response")
+	text := resp.Text()
+	if text == "" {
+		return nil, fmt.Errorf("gemini returned an empty response")
 	}
-
-	log.Printf("[OCR] Gemini raw response: %s", responseText)
-
-	// Parse structured JSON
-	var aiResult AIResult
-	if err := json.Unmarshal([]byte(responseText), &aiResult); err != nil {
-		return nil, fmt.Errorf("failed to parse Gemini JSON response: %w, raw: %s", err, responseText)
+	var out OCRResult
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, fmt.Errorf("parse gemini response: %w", err)
 	}
-
-	// Compute derived fields
-	if aiResult.Detected && aiResult.TargetPlayer != nil && aiResult.Opponent != nil {
-		aiResult.Score1 = aiResult.TargetPlayer.Score
-		aiResult.Score2 = aiResult.Opponent.Score
-		if aiResult.TargetPlayer.Score > aiResult.Opponent.Score {
-			aiResult.Winner = aiResult.TargetPlayer.GamerTag
-		} else if aiResult.Opponent.Score > aiResult.TargetPlayer.Score {
-			aiResult.Winner = aiResult.Opponent.GamerTag
-		} else {
-			aiResult.Winner = "draw"
-		}
-	}
-
-	return &aiResult, nil
+	return &out, nil
 }
 
-// VerifyMatchResultFromBytes is a convenience wrapper that accepts raw image
-// bytes instead of a file path. It writes to a temp file and delegates to
-// VerifyMatchResult.
-func VerifyMatchResultFromBytes(imgData []byte, gameType, targetGamertag, opponentGamertag string) (*AIResult, error) {
-	tmpFile, err := os.CreateTemp("", "ocr_*.jpg")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
+// ── Name matching ────────────────────────────────────────────────────
 
-	if _, err := tmpFile.Write(imgData); err != nil {
-		tmpFile.Close()
-		return nil, fmt.Errorf("failed to write temp file: %w", err)
+// normalizeName lowercases and strips everything but letters and digits so
+// "Davis_99 " and "DAVIS99" compare equal.
+func normalizeName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
 	}
-	tmpFile.Close()
+	return b.String()
+}
 
-	return VerifyMatchResult(tmpFile.Name(), gameType, targetGamertag, opponentGamertag)
+func levenshtein(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		cur := make([]int, len(rb)+1)
+		cur[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(rb)]
+}
+
+// NamesMatch tolerates small OCR slips (one wrong character per 6) but never
+// matches very short names loosely.
+func NamesMatch(read, registered string) bool {
+	a, b := normalizeName(read), normalizeName(registered)
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if len([]rune(b)) < 6 {
+		return false
+	}
+	return levenshtein(a, b) <= len([]rune(b))/6
+}
+
+// MatchPlayers finds which read player belongs to each registered player.
+// It returns indexes into res.Players for home and away, or an error that is
+// safe to show the user.
+func MatchPlayers(res *OCRResult, home, away ExpectedPlayer) (int, int, error) {
+	if len(res.Players) != 2 {
+		return -1, -1, fmt.Errorf("we could not find exactly two players on the screenshot")
+	}
+	find := func(p ExpectedPlayer) int {
+		for i, rp := range res.Players {
+			if p.InGameID != "" && rp.InGameID != "" && normalizeName(p.InGameID) == normalizeName(rp.InGameID) {
+				return i
+			}
+		}
+		for i, rp := range res.Players {
+			if NamesMatch(rp.Name, p.Gamertag) {
+				return i
+			}
+		}
+		return -1
+	}
+	h, a := find(home), find(away)
+	switch {
+	case h < 0 && a < 0:
+		return -1, -1, fmt.Errorf("neither player's name (%s, %s) is on the screenshot", home.Gamertag, away.Gamertag)
+	case h < 0:
+		return -1, -1, fmt.Errorf("%s's name is not on the screenshot", home.Gamertag)
+	case a < 0:
+		return -1, -1, fmt.Errorf("%s's name is not on the screenshot", away.Gamertag)
+	case h == a:
+		return -1, -1, fmt.Errorf("both registered names matched the same player on the screenshot")
+	}
+	return h, a, nil
 }

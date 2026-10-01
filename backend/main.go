@@ -3,9 +3,14 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/websocket/v2"
 
 	"betelite-go/config"
@@ -17,49 +22,44 @@ import (
 )
 
 func main() {
-	// 1. Load config
 	config.Load()
-
-	// 2. Initialize PostgreSQL
 	ctx := context.Background()
+
 	if err := db.Connect(ctx, config.Cfg.DatabaseURL); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
-
-	// 3. Run Migrations
 	if err := db.RunMigrations(ctx); err != nil {
 		log.Fatalf("Migration failed: %v", err)
 	}
-
-	// 4. Initialize Firebase Auth
 	if err := middleware.InitFirebaseAuth(ctx); err != nil {
 		log.Printf("[WARN] Failed to initialize Firebase Auth: %v", err)
 	}
 
-	// 5. Setup Fiber
 	app := fiber.New(fiber.Config{
-		BodyLimit: 10 * 1024 * 1024, // 10MB limit
+		BodyLimit:               10 * 1024 * 1024,
+		ProxyHeader:             fiber.HeaderXForwardedFor, // Render sits behind a proxy
+		EnableIPValidation:      true,
+		EnableTrustedProxyCheck: false,
+		ReadTimeout:             90 * time.Second,
+		WriteTimeout:            90 * time.Second,
 	})
-
-	// Middleware
+	app.Use(recover.New())
 	app.Use(middleware.Cors())
+	app.Use(securityHeaders)
 
-	// Serve PWA static frontend
-	app.Static("/", "./static", fiber.Static{
-		Compress:  true,
-		ByteRange: true,
-		Index:     "index.html",
-	})
-
-	// 6. Setup WebSocket Hub and Engine
+	// WebSocket hub: live lobby, match updates, chat and in-app notifications.
 	hub := ws.NewHub()
 	go hub.Run()
-
-	services.InitEngine(hub)
-
-	// 6b. Start background automation (match timeout, stale challenge cleanup)
-	services.StartAutomation(hub, services.DefaultAutomationConfig())
+	services.Hub = hub
+	ws.VerifyToken = func(token string) (string, error) {
+		id, err := middleware.VerifyToken(context.Background(), token)
+		if err != nil {
+			return "", err
+		}
+		return id.UID, nil
+	}
+	ws.DisplayName = func(uid string) string { return services.Username(context.Background(), uid) }
 
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
@@ -67,84 +67,108 @@ func main() {
 		}
 		return fiber.ErrUpgradeRequired
 	})
-
 	app.Get("/ws", websocket.New(func(c *websocket.Conn) {
-		client := &ws.Client{
-			Hub:  hub,
-			Conn: c,
-			Send: make(chan []byte, 256),
-		}
+		client := &ws.Client{Hub: hub, Conn: c, Send: make(chan []byte, 256)}
 		hub.Register <- client
-
 		go client.WritePump()
 		client.ReadPump()
 	}))
 
-	// 7. Routes (Phase 1 basics)
 	api := app.Group("/api", middleware.RateLimiter())
-
 	api.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "db": db.Pool != nil})
+		return c.JSON(fiber.Map{"status": "ok", "db": db.Pool != nil, "version": config.Cfg.AppVersion})
 	})
-
+	// The PWA polls this to show "New version available".
+	api.Get("/version", func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store")
+		return c.JSON(fiber.Map{"version": config.Cfg.AppVersion, "minVersion": config.Cfg.MinAppVersion})
+	})
 	api.Get("/settings", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"success": true,
-			"settings": fiber.Map{
-				"paystackKey":   config.Cfg.PaystackPublicKey,
-				"paystackKeyGH": config.Cfg.PaystackPublicKeyGH,
-			},
-		})
+		return c.JSON(fiber.Map{"success": true, "settings": fiber.Map{
+			"paystackKey":   config.Cfg.PaystackPublicKey,
+			"paystackKeyGH": config.Cfg.PaystackPublicKeyGH,
+			"vapidKey":      config.Cfg.VAPIDPublicKey,
+			"termsVersion":  services.TermsVersion,
+		}})
 	})
 
-	api.Get("/streams", func(c *fiber.Ctx) error {
-		// Return live P2P matches as active streams
-		activeMatches := services.Engine.GetActiveMatches()
-		var streams []fiber.Map
-		for _, m := range activeMatches {
-			if m.IsP2P && m.Status == "live" {
-				streams = append(streams, fiber.Map{
-					"id":       m.ID,
-					"host":     m.Home,
-					"hostId":   m.HomeID,
-					"game":     m.Label,
-					"viewers":  0,
-					"status":   "live",
-					"matchId":  m.ID,
-				})
-			}
-		}
-		if streams == nil {
-			streams = []fiber.Map{}
-		}
-		return c.JSON(fiber.Map{"streams": streams})
-	})
-
-	// Setup Routes
+	routes.SetupMeRoutes(api)
+	routes.SetupPaymentRoutes(api)
 	routes.SetupMatchRoutes(api)
 	routes.SetupLobbyRoutes(api, hub)
-	routes.SetupBetRoutes(api)
 	routes.SetupTournamentRoutes(api)
-	routes.SetupPaymentRoutes(api)
-	routes.SetupDetectRoutes(api)
-	routes.SetupFootballRoutes(api)
+	routes.SetupStreamRoutes(api, hub)
 	routes.SetupNotificationRoutes(api)
 	routes.SetupReferralRoutes(api)
-	routes.SetupAdminRoutes(api)
 	routes.SetupSettingsRoutes(api)
+	routes.SetupFootballRoutes(api)
+	routes.SetupAdminRoutes(api)
 
-	// SPA fallback — registered last so it only catches paths no route matched.
-	// Unknown /api and /ws paths still 404 instead of returning the HTML page.
+	setupStatic(app)
+
+	services.StartAutomation(hub, services.DefaultAutomationConfig())
+
+	go func() {
+		log.Printf("Server %s listening on port %s", config.Cfg.AppVersion, config.Cfg.Port)
+		if err := app.Listen(":" + config.Cfg.Port); err != nil {
+			log.Fatalf("Error starting server: %v", err)
+		}
+	}()
+
+	// Graceful shutdown so in-flight payouts finish on redeploy.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	log.Println("Shutting down...")
+	app.ShutdownWithTimeout(20 * time.Second)
+}
+
+func securityHeaders(c *fiber.Ctx) error {
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	c.Set("X-Frame-Options", "SAMEORIGIN")
+	c.Set("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()")
+	if config.Cfg.Env == "production" {
+		c.Set("Strict-Transport-Security", "max-age=31536000")
+	}
+	return c.Next()
+}
+
+// setupStatic serves the PWA. index.html and sw.js get the build version
+// stamped in (so each deploy installs a fresh service worker) and are never
+// cached; other assets are cached briefly and busted with ?v=<version>.
+func setupStatic(app *fiber.App) {
+	versioned := map[string]string{}
+	for _, f := range []string{"index.html", "sw.js"} {
+		b, err := os.ReadFile("./static/" + f)
+		if err != nil {
+			log.Printf("[WARN] static/%s missing: %v", f, err)
+			continue
+		}
+		versioned[f] = strings.ReplaceAll(string(b), "__APP_VERSION__", config.Cfg.AppVersion)
+	}
+	serve := func(name, ctype string) fiber.Handler {
+		return func(c *fiber.Ctx) error {
+			c.Set("Cache-Control", "no-cache")
+			c.Type(ctype)
+			return c.SendString(versioned[name])
+		}
+	}
+	app.Get("/sw.js", func(c *fiber.Ctx) error {
+		c.Set("Service-Worker-Allowed", "/")
+		return serve("sw.js", "js")(c)
+	})
+	app.Get("/", serve("index.html", "html"))
+	app.Get("/index.html", serve("index.html", "html"))
+
+	app.Static("/", "./static", fiber.Static{Compress: true, MaxAge: 3600})
+
+	// SPA fallback: any other non-API path renders the app (deep links like /match/123).
 	app.Use(func(c *fiber.Ctx) error {
-		path := c.Path()
-		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") {
+		p := c.Path()
+		if strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/ws") || strings.Contains(p[strings.LastIndex(p, "/")+1:], ".") {
 			return fiber.ErrNotFound
 		}
-		return c.SendFile("./static/index.html")
+		return serve("index.html", "html")(c)
 	})
-
-	log.Printf("Server listening on port %s", config.Cfg.Port)
-	if err := app.Listen(":" + config.Cfg.Port); err != nil {
-		log.Fatalf("Error starting server: %v", err)
-	}
 }
