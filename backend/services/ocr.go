@@ -181,7 +181,7 @@ func VerifyMatchResult(imagePath string, gameType string, targetGamertag string,
 		ResponseSchema:   gameScoreSchema,
 	}
 
-	result, err := client.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, genConfig)
+	result, err := client.Models.GenerateContent(ctx, config.Cfg.GeminiModel, contents, genConfig)
 	if err != nil {
 		return nil, fmt.Errorf("gemini API call failed: %w", err)
 	}

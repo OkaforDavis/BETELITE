@@ -25,6 +25,7 @@ type Config struct {
 	APIFootballKey             string
 	AnthropicAPIKey            string
 	GeminiAPIKey               string
+	GeminiModel                string
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 }
@@ -58,6 +59,7 @@ func Load() {
 		APIFootballKey:             getEnv("API_FOOTBALL_KEY", ""),
 		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
 		GeminiAPIKey:               getEnv("GEMINI_API_KEY", ""),
+		GeminiModel:                getEnv("GEMINI_MODEL", "gemini-3.8-flash"),
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 	}

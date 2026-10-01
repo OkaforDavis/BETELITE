@@ -3971,18 +3971,20 @@
           body: formData
         });
 
-        if (!res.ok) throw new Error('Detection failed');
-        const data = await res.json();
-        if (data.error && !data.demo) {
-          throw new Error(data.error);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'Detection failed');
         }
-        if (data.error && data.demo) {
-          toast('⚠️ API Error: ' + data.error + '. Showing demo result.');
+        if (!data.detected || data.score1 == null || data.score2 == null) {
+          lastAiDetection = null;
+          resCard.style.display = 'none';
+          toast('🔍 Could not read a final score. ' + (data.notes || 'Upload the full-time result screen.'));
+          return;
         }
         lastAiDetection = data;
 
-        const score1 = data.score1 ?? data.score_home ?? 0;
-        const score2 = data.score2 ?? data.score_away ?? 0;
+        const score1 = data.score1;
+        const score2 = data.score2;
         
         document.getElementById('ai-res-title').textContent = `Score Detected — ${data.game_detected || 'Match'}`;
         document.getElementById('ai-res-score').innerHTML = `My Team <span style="color:#fff">${score1} - ${score2}</span> Opposing Team`;

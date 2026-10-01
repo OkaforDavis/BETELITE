@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,16 +44,9 @@ func SetupDetectRoutes(api fiber.Router) {
 
 		aiResult, err := services.VerifyMatchResultFromBytes(imgData, game, targetGamertag, opponentGamertag)
 		if err != nil {
-			// If detection fails, return a demo/fallback result
-			return c.JSON(fiber.Map{
-				"detected":      false,
-				"error":         "Detection failed: " + err.Error(),
-				"demo":          true,
-				"score1":        0,
-				"score2":        0,
-				"game_detected": game,
-				"notes":         "AI detection service encountered an error. Please try again later.",
-			})
+			// Never return placeholder scores: a fake 0-0 looks like a real result.
+			log.Printf("[OCR] detection failed: %v", err)
+			return utils.SendError(c, 502, "Score detection is unavailable right now. Please try again in a moment.")
 		}
 
 		// Map fields for frontend compatibility
