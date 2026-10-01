@@ -36,10 +36,10 @@ export default async function matchPage(view, { id }) {
           ${statusBadge(m.status)}
         </div>
         <div class="versus" style="margin:22px 0 18px">
-          <div class="side ${m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, '', 'lg ' + (m.homeId === uid ? 'me' : ''))}
+          <div class="side ${m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, m.homeAvatar, 'lg ' + (m.homeId === uid ? 'me' : ''))}
             <div class="name ellipsis">${m.homeId === uid ? 'You' : m.homeName}</div><div class="tag ellipsis">${m.homeTag}</div></div>
           <div class="mid">${scoreLine(m)}</div>
-          <div class="side ${m.winnerId === m.awayId ? 'winner' : ''}">${avatar(m.awayName, '', 'lg ' + (m.awayId === uid ? 'me' : ''))}
+          <div class="side ${m.winnerId === m.awayId ? 'winner' : ''}">${avatar(m.awayName, m.awayAvatar, 'lg ' + (m.awayId === uid ? 'me' : ''))}
             <div class="name ellipsis">${m.awayId === uid ? 'You' : m.awayName}</div><div class="tag ellipsis">${m.awayTag}</div></div>
         </div>
         ${m.status !== 'void' ? html`<div class="steps" aria-label="Match progress">${STEPS.map((s, i) => html`<div class="step ${i < step ? 'done' : i === step ? (m.status === 'confirmed' ? 'done' : 'now') : ''}">${s}</div>`)}</div>` : ''}

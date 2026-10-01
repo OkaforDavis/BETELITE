@@ -57,7 +57,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	// Find users by email / username (for balance adjustments and support).
 	admin.Get("/users", func(c *fiber.Ctx) error {
 		q := "%" + strings.ToLower(strings.TrimSpace(c.Query("q"))) + "%"
-		rows, err := db.Pool.Query(c.Context(), `SELECT id, email, username, balance, COALESCE(currency,'NGN'), is_admin, created_at FROM users
+		rows, err := db.Pool.Query(c.Context(), `SELECT id, email, username, balance, COALESCE(currency,'NGN'), is_admin, created_at, COALESCE(avatar_url,'') FROM users
 			WHERE deleted_at IS NULL AND (lower(email) LIKE $1 OR lower(username) LIKE $1 OR id = $2) ORDER BY created_at DESC LIMIT 25`, q, c.Query("q"))
 		if err != nil {
 			return fail(c, err)
@@ -65,12 +65,12 @@ func SetupAdminRoutes(api fiber.Router) {
 		defer rows.Close()
 		list := []fiber.Map{}
 		for rows.Next() {
-			var id, email, name, cur string
+			var id, email, name, cur, avatar string
 			var bal int64
 			var isAdmin bool
 			var at time.Time
-			if rows.Scan(&id, &email, &name, &bal, &cur, &isAdmin, &at) == nil {
-				list = append(list, fiber.Map{"id": id, "email": email, "username": name, "balance": bal, "currency": cur, "isAdmin": isAdmin, "createdAt": at})
+			if rows.Scan(&id, &email, &name, &bal, &cur, &isAdmin, &at, &avatar) == nil {
+				list = append(list, fiber.Map{"id": id, "email": email, "username": name, "balance": bal, "currency": cur, "isAdmin": isAdmin, "createdAt": at, "avatarUrl": avatar})
 			}
 		}
 		return utils.SendSuccess(c, fiber.Map{"users": list})
@@ -103,6 +103,16 @@ func SetupAdminRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		log.Printf("[ADMIN] %s adjusted %s by %d: %s", middleware.GetEmail(c), req.UserID, req.Amount, req.Reason)
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// Remove an offensive profile photo.
+	admin.Delete("/users/:id/avatar", func(c *fiber.Ctx) error {
+		if err := services.RemoveAvatar(c.Context(), c.Params("id")); err != nil {
+			return fail(c, err)
+		}
+		log.Printf("[ADMIN] %s removed the profile photo of %s", middleware.GetEmail(c), c.Params("id"))
+		services.Notify(c.Params("id"), "photo_removed", "Profile photo removed", "Your profile photo was removed because it broke our rules. You can upload a different one.", "/profile", nil)
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 

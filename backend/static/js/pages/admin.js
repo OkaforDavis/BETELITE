@@ -1,6 +1,6 @@
 import { get, post, del, upload } from '../api.js';
 import { store, gameName } from '../store.js';
-import { html, ic, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
+import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
 import { gameChips } from '../components.js';
 
 const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['users', 'Users'], ['ocr', 'OCR test']];
@@ -182,9 +182,14 @@ async function users(body) {
     e.preventDefault();
     const { users: list } = await get('/admin/users?q=' + encodeURIComponent(new FormData(e.target).get('q')));
     res.innerHTML = String(list.length ? html`<div class="list">${list.map((u) => html`<div class="list-row">
+      ${avatar(u.username, u.avatarUrl, "sm")}
       <div class="grow"><div class="h3">${u.username}${u.isAdmin ? ' (admin)' : ''}</div><div class="small muted ellipsis">${u.email}</div><div class="tiny faint">${u.id}</div></div>
-      <div style="text-align:right"><b class="num">${money(u.balance, u.currency)}</b><br><button class="link-btn small" data-adj="${u.id}" data-cur="${u.currency}">Adjust</button></div></div>`)}</div>`
+      <div style="text-align:right"><b class="num">${money(u.balance, u.currency)}</b><br><button class="link-btn small" data-adj="${u.id}" data-cur="${u.currency}">Adjust</button>${u.avatarUrl ? html`<br><button class="link-btn small danger-text" data-unphoto="${u.id}">Remove photo</button>` : ""}</div></div>`)}</div>`
       : html`<div class="card flat">${empty('search', 'No users found', 'Try another search.')}</div>`);
+    res.querySelectorAll("[data-unphoto]").forEach((b) => (b.onclick = async () => {
+      if (await confirmSheet({ title: "Remove this photo?", message: "The player is notified and can upload a different one.", confirm: "Remove photo", danger: true }))
+        busy(b, async () => { await del("/admin/users/" + b.dataset.unphoto + "/avatar"); toast("Photo removed"); body.querySelector("#us").requestSubmit(); });
+    }));
     res.querySelectorAll('[data-adj]').forEach((b) => (b.onclick = () => {
       sheet(String(html`${sheetHead('Adjust balance')}<form id="adj">
         <label class="field"><span class="label">Amount (${b.dataset.cur}, negative to deduct)</span><input class="input num" name="amt" required inputmode="decimal"></label>

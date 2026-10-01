@@ -59,9 +59,11 @@ type MatchView struct {
 	HomeID          string     `json:"homeId"`
 	HomeName        string     `json:"homeName"`
 	HomeTag         string     `json:"homeTag"`
+	HomeAvatar      string     `json:"homeAvatar"`
 	AwayID          string     `json:"awayId"`
 	AwayName        string     `json:"awayName"`
 	AwayTag         string     `json:"awayTag"`
+	AwayAvatar      string     `json:"awayAvatar"`
 	TournamentID    string     `json:"tournamentId,omitempty"`
 	TournamentName  string     `json:"tournamentName,omitempty"`
 	Round           int        `json:"round,omitempty"`
@@ -85,8 +87,8 @@ type MatchView struct {
 }
 
 const matchSelect = `
-SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.gamertag,''),
-       COALESCE(m.away_id,''), COALESCE(au.username,''), COALESCE(ag.gamertag,''),
+SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.gamertag,''), COALESCE(hu.avatar_url,''),
+       COALESCE(m.away_id,''), COALESCE(au.username,''), COALESCE(ag.gamertag,''), COALESCE(au.avatar_url,''),
        COALESCE(m.tournament_id,''), COALESCE(t.name,''), COALESCE(m.round,0), m.status,
        m.score_home, m.score_away, m.pens_home, m.pens_away, COALESCE(m.winner_id,''),
        COALESCE(m.submitted_by,''), m.dispute_deadline, m.play_deadline,
@@ -103,8 +105,8 @@ LEFT JOIN escrow e ON e.challenge_id = m.challenge_id`
 
 func scanMatch(row pgx.Row) (*MatchView, error) {
 	var m MatchView
-	err := row.Scan(&m.ID, &m.Kind, &m.Game, &m.HomeID, &m.HomeName, &m.HomeTag,
-		&m.AwayID, &m.AwayName, &m.AwayTag,
+	err := row.Scan(&m.ID, &m.Kind, &m.Game, &m.HomeID, &m.HomeName, &m.HomeTag, &m.HomeAvatar,
+		&m.AwayID, &m.AwayName, &m.AwayTag, &m.AwayAvatar,
 		&m.TournamentID, &m.TournamentName, &m.Round, &m.Status,
 		&m.ScoreHome, &m.ScoreAway, &m.PensHome, &m.PensAway, &m.WinnerID,
 		&m.SubmittedBy, &m.DisputeDeadline, &m.PlayDeadline,

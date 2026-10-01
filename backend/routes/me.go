@@ -2,6 +2,8 @@ package routes
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,6 +21,22 @@ import (
 func SetupMeRoutes(api fiber.Router) {
 	api.Get("/games", func(c *fiber.Ctx) error {
 		return utils.SendSuccess(c, fiber.Map{"games": services.Games()})
+	})
+
+	// Public: profile photos. The URL carries ?v=<timestamp>, so it can be cached long.
+	api.Get("/avatars/:uid", dbRequired, func(c *fiber.Ctx) error {
+		img, ctype, updated, err := services.LoadAvatar(c.Context(), c.Params("uid"))
+		if err != nil {
+			return fail(c, err)
+		}
+		if img == nil {
+			return fiber.ErrNotFound
+		}
+		c.Set("Cache-Control", "public, max-age=604800, immutable")
+		c.Set("Last-Modified", updated.UTC().Format(http.TimeFormat))
+		c.Type("jpg")
+		c.Set("Content-Type", ctype)
+		return c.Send(img)
 	})
 
 	me := api.Group("/me", middleware.AuthRequired(), dbRequired)
@@ -42,12 +60,11 @@ func SetupMeRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"profile": p, "termsVersion": services.TermsVersion})
 	})
 
-	// Update display name / avatar. Currency can only change before any money moved.
+	// Update display name. (Photos go through PUT /me/avatar.) Currency can only change before any money moved.
 	me.Put("/", func(c *fiber.Ctx) error {
 		var req struct {
-			Username  *string `json:"username"`
-			AvatarURL *string `json:"avatarUrl"`
-			Currency  *string `json:"currency"`
+			Username *string `json:"username"`
+			Currency *string `json:"currency"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -60,18 +77,6 @@ func SetupMeRoutes(api fiber.Router) {
 				return utils.SendError(c, 400, "Display name must be 3–24 characters")
 			}
 			if _, err := db.Pool.Exec(ctx, "UPDATE users SET username = $2, updated_at = NOW() WHERE id = $1", uid, name); err != nil {
-				return fail(c, err)
-			}
-		}
-		if req.AvatarURL != nil {
-			url := strings.TrimSpace(*req.AvatarURL)
-			if url != "" && !strings.HasPrefix(url, "https://") {
-				return utils.SendError(c, 400, "Avatar must be an https image link")
-			}
-			if len(url) > 1000 {
-				return utils.SendError(c, 400, "Avatar link is too long")
-			}
-			if _, err := db.Pool.Exec(ctx, "UPDATE users SET avatar_url = NULLIF($2,''), updated_at = NOW() WHERE id = $1", uid, url); err != nil {
 				return fail(c, err)
 			}
 		}
@@ -163,6 +168,41 @@ func SetupMeRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"gameProfiles": list})
+	})
+
+	me.Put("/avatar", func(c *fiber.Ctx) error {
+		fh, err := c.FormFile("image")
+		if err != nil {
+			return utils.SendError(c, 400, "Choose a photo")
+		}
+		if fh.Size > services.AvatarMaxUpload {
+			return utils.SendError(c, 400, "Choose an image under 5 MB")
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return fail(c, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(f, services.AvatarMaxUpload+1))
+		f.Close()
+		if err != nil {
+			return fail(c, err)
+		}
+		jpg, err := services.ProcessAvatar(data)
+		if err != nil {
+			return fail(c, err)
+		}
+		url, err := services.SaveAvatar(c.Context(), middleware.GetUID(c), jpg)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"avatarUrl": url})
+	})
+
+	me.Delete("/avatar", func(c *fiber.Ctx) error {
+		if err := services.RemoveAvatar(c.Context(), middleware.GetUID(c)); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
 	})
 
 	me.Get("/transactions", func(c *fiber.Ctx) error {

@@ -226,6 +226,14 @@ var migrations = []string{
 	CREATE INDEX IF NOT EXISTS withdrawals_status_idx ON withdrawals(status, created_at);
 
 	CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, created_at DESC);`,
+
+	// 3: profile photos (stored in the DB so they survive redeploys and host moves).
+	`CREATE TABLE IF NOT EXISTS avatars (
+		user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		image BYTEA NOT NULL,
+		content_type TEXT NOT NULL,
+		updated_at TIMESTAMPTZ DEFAULT NOW()
+	);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

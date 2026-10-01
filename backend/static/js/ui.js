@@ -1,5 +1,6 @@
 // UI helpers: safe HTML templating, toasts, sheets, money/time formatting.
 import { icon } from './icons.js';
+import { API_BASE } from './api.js';
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
@@ -54,9 +55,11 @@ export function timeLeft(iso) {
 export const initials = (name = '?') =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
 export function avatar(name, url, cls = '') {
-  return url
-    ? html`<div class="avatar ${cls}"><img src="${url}" alt="" loading="lazy"></div>`
-    : html`<div class="avatar ${cls}">${initials(name)}</div>`;
+  if (url && url.startsWith('/api/')) url = API_BASE + url;
+  // Initials sit underneath the photo, so a photo that fails to load falls back cleanly.
+  return html`<div class="avatar ${cls}"><span>${initials(name)}</span>${url
+    ? html`<img src="${url}" alt="" loading="lazy" onerror="this.remove()">`
+    : ''}</div>`;
 }
 
 // Live countdowns: any [data-countdown=iso] element updates every second.
