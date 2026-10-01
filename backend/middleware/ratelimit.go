@@ -3,9 +3,9 @@ package middleware
 import (
 	"time"
 
+	"betelite-go/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"betelite-go/utils"
 )
 
 // RateLimiter returns a fiber rate limiting middleware (Global Default)

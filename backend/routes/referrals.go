@@ -2,8 +2,8 @@ package routes
 
 import (
 	"context"
-	"fmt"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 
 	"github.com/gofiber/fiber/v2"
@@ -110,7 +110,7 @@ func SetupReferralRoutes(api fiber.Router) {
 		// 4. Reward referrer (e.g., 500 kobo / 5 NGN)
 		rewardAmount := int64(500)
 		refID := fmt.Sprintf("ref_%s", uid)
-		
+
 		err = services.AdjustBalance(ctx, tx, referrerID, rewardAmount, "referral", refID)
 		if err != nil {
 			return utils.SendError(c, 500, "Failed to reward referrer")

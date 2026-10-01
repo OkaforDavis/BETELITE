@@ -48,7 +48,7 @@ func Load() {
 
 	Cfg = Config{
 		Env:                        getEnv("GO_ENV", "development"),
-		Port:                      getEnv("PORT", "3000"),
+		Port:                       getEnv("PORT", "3000"),
 		DatabaseURL:                getEnv("DATABASE_URL", ""),
 		FirebaseProjectID:          getEnv("FIREBASE_PROJECT_ID", ""),
 		FirebaseServiceAccountJSON: getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", ""),

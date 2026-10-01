@@ -11,9 +11,9 @@ import (
 
 type FixtureData struct {
 	Fixture struct {
-		ID        int    `json:"id"`
-		Date      string `json:"date"`
-		Status    struct {
+		ID     int    `json:"id"`
+		Date   string `json:"date"`
+		Status struct {
 			Short string `json:"short"`
 		} `json:"status"`
 	} `json:"fixture"`

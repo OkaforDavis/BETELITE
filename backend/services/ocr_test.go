@@ -76,8 +76,8 @@ func TestRetryable(t *testing.T) {
 
 func TestGeminiModelsAlwaysHaveFallback(t *testing.T) {
 	cases := map[string][]string{
-		"":                                  {"gemini-3.8-flash", "gemini-3.5-flash"},
-		"gemini-3.8-flash":                  {"gemini-3.8-flash", "gemini-3.5-flash"},
+		"":                                     {"gemini-3.8-flash", "gemini-3.5-flash"},
+		"gemini-3.8-flash":                     {"gemini-3.8-flash", "gemini-3.5-flash"},
 		" gemini-3.7-flash , gemini-3.8-flash": {"gemini-3.7-flash", "gemini-3.8-flash", "gemini-3.5-flash"},
 	}
 	for in, want := range cases {
