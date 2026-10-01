@@ -30,6 +30,10 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OCR_PROVIDERS
+        value: "gemini,claude"
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY

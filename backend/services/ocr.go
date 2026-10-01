@@ -128,7 +128,56 @@ Read the screenshot and report exactly what is displayed. Do not guess or invent
 
 // AnalyzeScreenshot sends a result screenshot to Gemini and returns what it read.
 func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []ExpectedPlayer) (*OCRResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 80*time.Second)
+	mime := http.DetectContentType(img)
+	switch mime {
+	case "image/jpeg", "image/png", "image/webp":
+	default:
+		return nil, fmt.Errorf("unsupported image type %s", mime)
+	}
+	prompt := buildPrompt(game, expected)
+
+	// Providers are tried in order (OCR_PROVIDERS, default gemini,claude). Each
+	// retries its own temporary errors; a second company means one provider's
+	// outage can't block result uploads.
+	var errs []string
+	for _, p := range config.Cfg.OCRProviders {
+		var res *OCRResult
+		var err error
+		switch p {
+		case "gemini":
+			res, err = analyzeGemini(ctx, img, mime, prompt)
+		case "claude":
+			res, err = analyzeClaude(ctx, img, mime, prompt)
+		default:
+			continue
+		}
+		if err == nil {
+			return res, nil
+		}
+		if errors.Is(err, errProviderNotConfigured) {
+			continue
+		}
+		log.Printf("[OCR] %s failed: %v", p, err)
+		errs = append(errs, err.Error())
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if len(errs) == 0 {
+		return nil, fmt.Errorf("no OCR provider configured (set GEMINI_API_KEY and/or ANTHROPIC_API_KEY)")
+	}
+	return nil, fmt.Errorf("%s", strings.Join(errs, " | "))
+}
+
+var errProviderNotConfigured = errors.New("provider not configured")
+
+// analyzeGemini reads a screenshot with Gemini, retrying busy models and
+// falling back across GEMINI_MODEL.
+func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRResult, error) {
+	if config.Cfg.GeminiAPIKey == "" {
+		return nil, errProviderNotConfigured
+	}
+	ctx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
 
 	client, err := getGeminiClient(ctx)
@@ -136,15 +185,8 @@ func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []E
 		return nil, err
 	}
 
-	mime := http.DetectContentType(img)
-	switch mime {
-	case "image/jpeg", "image/png", "image/webp":
-	default:
-		return nil, fmt.Errorf("unsupported image type %s", mime)
-	}
-
 	contents := []*genai.Content{{Parts: []*genai.Part{
-		{Text: buildPrompt(game, expected)},
+		{Text: prompt},
 		{InlineData: &genai.Blob{Data: img, MIMEType: mime}},
 	}}}
 	cfg := &genai.GenerateContentConfig{
@@ -162,7 +204,7 @@ func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []E
 			if ctx.Err() != nil {
 				return nil, fmt.Errorf("gemini: timed out (last error: %v)", lastErr)
 			}
-			callCtx, cancelCall := context.WithTimeout(ctx, 30*time.Second)
+			callCtx, cancelCall := context.WithTimeout(ctx, 20*time.Second)
 			resp, err := client.Models.GenerateContent(callCtx, model, contents, cfg)
 			cancelCall()
 			if err == nil {

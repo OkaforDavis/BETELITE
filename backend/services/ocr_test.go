@@ -49,6 +49,8 @@ func TestAnalyzeScreenshotFallsBackWhenModelBusy(t *testing.T) {
 	geminiClientOnce.Do(func() {}) // use our client, not the real one
 	geminiClient, geminiClientErr = client, nil
 	config.Cfg.GeminiModels = []string{"busy-model", "good-model"}
+	config.Cfg.GeminiAPIKey = "test"
+	config.Cfg.OCRProviders = []string{"gemini"}
 
 	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 32))
 	res, err := AnalyzeScreenshot(context.Background(), png, GameByID("fc_mobile"), nil)

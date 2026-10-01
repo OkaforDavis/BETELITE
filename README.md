@@ -53,6 +53,8 @@ Tests: `go test ./...`
 | `GO_ENV` | `production` on Render (disables test logins) |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Sign-in verification |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Screenshot reading. `GEMINI_MODEL` is a comma-separated list tried in order (busy models are retried, then the next is used); `gemini-3.8-flash,gemini-3.5-flash` are always included as fallbacks |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` | Backup screenshot reader (Claude, default `claude-opus-5`) used when Gemini is busy or down |
+| `OCR_PROVIDERS` | Order of screenshot readers, default `gemini,claude` (use `claude,gemini` to prefer Claude) |
 | `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_SECRET_KEY` (+ `_GH`) | Deposits and withdrawals |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web Push notifications |
 | `ADMIN_EMAIL` | Verified email that gets admin access |
