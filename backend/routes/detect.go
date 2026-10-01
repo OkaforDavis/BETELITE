@@ -20,7 +20,7 @@ func SetupDetectRoutes(api fiber.Router) {
 
 	// ── /frame: Lightweight detection endpoint for the Detect tab ──
 	// Frontend sends: FormData with 'game', 'image_b64', optionally 'match_id'
-	// This forwards to the Python detection service and returns the raw AI result.
+	// Returns the raw AI result from the native Go Gemini OCR.
 	detect.Post("/frame", func(c *fiber.Ctx) error {
 		game := c.FormValue("game", "auto")
 		imageB64 := c.FormValue("image_b64", "")
@@ -41,20 +41,9 @@ func SetupDetectRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Invalid base64 image")
 		}
 
-		tempFile, err := os.CreateTemp("", "frame_*.jpg")
+		aiResult, err := services.VerifyMatchResultFromBytes(imgData, game, targetGamertag, opponentGamertag)
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to create temp file")
-		}
-		defer os.Remove(tempFile.Name())
-
-		if _, err := tempFile.Write(imgData); err != nil {
-			return utils.SendError(c, 500, "Failed to write temp file")
-		}
-		tempFile.Close()
-
-		aiResult, err := services.VerifyMatchResult(tempFile.Name(), game, targetGamertag, opponentGamertag)
-		if err != nil {
-			// If detection service fails, return a demo/fallback result
+			// If detection fails, return a demo/fallback result
 			return c.JSON(fiber.Map{
 				"detected":      false,
 				"error":         "Detection failed: " + err.Error(),
@@ -62,7 +51,7 @@ func SetupDetectRoutes(api fiber.Router) {
 				"score1":        0,
 				"score2":        0,
 				"game_detected": game,
-				"notes":         "AI detection service is currently offline. Please try again later.",
+				"notes":         "AI detection service encountered an error. Please try again later.",
 			})
 		}
 
@@ -114,7 +103,7 @@ func SetupDetectRoutes(api fiber.Router) {
 		}
 		defer os.Remove(tempPath)
 
-		// Send to AI service with game context
+		// Send to native Go Gemini OCR
 		aiResult, err := services.VerifyMatchResult(tempPath, gameType, targetGamertag, opponentGamertag)
 		if err != nil {
 			return utils.SendError(c, 500, "AI detection failed: "+err.Error())
