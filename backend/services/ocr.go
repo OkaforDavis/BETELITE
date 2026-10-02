@@ -177,7 +177,7 @@ func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRRe
 	if config.Cfg.GeminiAPIKey == "" {
 		return nil, errProviderNotConfigured
 	}
-	ctx, cancel := context.WithTimeout(ctx, 35*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
 
 	client, err := getGeminiClient(ctx)
@@ -204,7 +204,7 @@ func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRRe
 			if ctx.Err() != nil {
 				return nil, fmt.Errorf("gemini: timed out (last error: %v)", lastErr)
 			}
-			callCtx, cancelCall := context.WithTimeout(ctx, 20*time.Second)
+			callCtx, cancelCall := context.WithTimeout(ctx, 25*time.Second)
 			resp, err := client.Models.GenerateContent(callCtx, model, contents, cfg)
 			cancelCall()
 			if err == nil {

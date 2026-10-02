@@ -292,7 +292,7 @@ func SubmitResult(ctx context.Context, matchID, uid string, img []byte) (*MatchV
 	res, err := AnalyzeScreenshot(ctx, img, game, []ExpectedPlayer{*home, *away})
 	if err != nil {
 		log.Printf("[OCR] match %s: %v", matchID, err)
-		return nil, userErr(502, "We couldn't read the screenshot right now. Please try again in a minute.")
+		return nil, userErr(502, "Our score reader is very busy right now. Nothing was lost: please tap Try again in a minute.")
 	}
 	ocrJSON, _ := json.Marshal(res)
 

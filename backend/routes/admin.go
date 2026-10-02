@@ -192,6 +192,22 @@ func SetupAdminRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
+	// Record a withdrawal paid by hand (bank transfer) instead of through Paystack.
+	admin.Post("/withdrawals/:id/mark-paid", func(c *fiber.Ctx) error {
+		var req struct {
+			Note string `json:"note"`
+		}
+		c.BodyParser(&req)
+		if len(strings.TrimSpace(req.Note)) < 3 {
+			return utils.SendError(c, 400, "Add the bank transfer reference")
+		}
+		if err := services.MarkWithdrawalPaid(c.Context(), c.Params("id"), middleware.GetUID(c), req.Note); err != nil {
+			return fail(c, err)
+		}
+		log.Printf("[ADMIN] %s marked withdrawal %s paid manually (%s)", middleware.GetEmail(c), c.Params("id"), req.Note)
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
 	admin.Post("/withdrawals/:id/reject", func(c *fiber.Ctx) error {
 		var req struct {
 			Reason string `json:"reason"`

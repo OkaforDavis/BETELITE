@@ -98,7 +98,7 @@ func appVersion() string {
 
 // defaultGeminiModels are always available as fallbacks. Each model runs on
 // separate capacity, so when one is overloaded the next usually answers.
-var defaultGeminiModels = []string{"gemini-3.8-flash", "gemini-3.5-flash"}
+var defaultGeminiModels = []string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"}
 
 // ParseGeminiModels parses GEMINI_MODEL (comma-separated, preferred first) and
 // appends the defaults that aren't already listed.

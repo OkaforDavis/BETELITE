@@ -99,8 +99,28 @@ async function withdrawals(body, redraw) {
     <div class="row between"><div class="h2 num">${money(w.amount, w.currency)}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
     <div class="small" style="margin-top:8px"><b>${w.accountName}</b> · ${w.bankName} · ${w.accountNumber}</div>
     <div class="small muted">${w.username} (${w.email})</div>
-    <div class="grid-2" style="margin-top:12px"><button class="btn danger sm" data-reject="${w.id}">Reject</button><button class="btn primary sm" data-approve="${w.id}">Approve & send</button></div>
+    <div class="grid-3" style="margin-top:12px"><button class="btn danger sm" data-reject="${w.id}">Reject</button><button class="btn secondary sm" data-manual="${w.id}">Mark paid</button><button class="btn primary sm" data-approve="${w.id}">Paystack</button></div>
+    <p class="tiny faint" style="margin-top:8px">"Paystack" sends the money automatically. "Mark paid" is for when you sent the bank transfer yourself.</p>
   </div>`)}</div>`);
+  body.querySelectorAll('[data-manual]').forEach((b) => (b.onclick = () => {
+    const w = list.find((x) => x.id === b.dataset.manual);
+    sheet(String(html`${sheetHead('Mark as paid', money(w.amount, w.currency) + ' to ' + w.accountName)}
+      <div class="notice warn">${ic('alert')}<div class="small">Only do this <b>after</b> you have sent <b>${money(w.amount, w.currency)}</b> to
+        <b>${w.accountName}</b>, ${w.bankName} ${w.accountNumber}. The player is told the money has been sent.</div></div>
+      <form id="mp" style="margin-top:14px"><label class="field"><span class="label">Bank transfer reference</span>
+        <input class="input" name="note" required minlength="3" placeholder="e.g. session ID from your bank app"></label>
+        <div class="sheet-actions"><button class="btn primary block">Confirm paid</button></div></form>`), {
+      onMount(root, close) {
+        root.querySelector('#mp').onsubmit = (e) => {
+          e.preventDefault();
+          busy(e.target.querySelector('button'), async () => {
+            await post(`/admin/withdrawals/${w.id}/mark-paid`, { note: new FormData(e.target).get('note') });
+            close(); toast('Marked as paid. The player has been notified.'); redraw();
+          });
+        };
+      },
+    });
+  }));
   body.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = async () => {
     const w = list.find((x) => x.id === b.dataset.approve);
     if (await confirmSheet({ title: 'Send ' + money(w.amount, w.currency) + '?', message: `Paystack will transfer the money to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))

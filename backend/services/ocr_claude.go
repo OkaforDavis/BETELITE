@@ -68,7 +68,7 @@ func analyzeClaude(ctx context.Context, img []byte, mime, prompt string) (*OCRRe
 	if config.Cfg.AnthropicAPIKey == "" {
 		return nil, errProviderNotConfigured
 	}
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
 
 	resp, err := getClaudeClient().Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
