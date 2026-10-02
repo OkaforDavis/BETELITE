@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -68,6 +69,9 @@ func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
 	if err != nil {
 		// Put it back so the admin can retry or reject.
 		db.Pool.Exec(ctx, "UPDATE withdrawals SET status = 'pending', updated_at = NOW() WHERE id = $1 AND status = 'processing'", id)
+		if strings.Contains(err.Error(), "starter business") {
+			return userErr(502, "Paystack payouts are not enabled on your account yet (Starter business). Pay the player by bank transfer, then use \"Mark as paid\".")
+		}
 		return userErr(502, "Paystack could not start the transfer: %v", err)
 	}
 	_, err = db.Pool.Exec(ctx, "UPDATE withdrawals SET recipient_code = $2, transfer_code = $3, updated_at = NOW() WHERE id = $1", id, recipient, transfer)
@@ -77,4 +81,23 @@ func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
 // NotifyAdmins sends a notification to every admin.
 func NotifyAdmins(ctx context.Context, title, message string) {
 	notifyAdmins(ctx, title, message, "")
+}
+
+// MarkWithdrawalPaid records a withdrawal the admin paid by hand (e.g. a bank
+// transfer while Paystack payouts aren't available). The money was already
+// held from the player's wallet when they requested it, so no balance moves.
+func MarkWithdrawalPaid(ctx context.Context, id, adminID, note string) error {
+	var uid, currency string
+	var amount int64
+	err := db.Pool.QueryRow(ctx, `UPDATE withdrawals SET status = 'paid', reviewed_by = $2, note = $3, updated_at = NOW()
+		WHERE id = $1 AND status IN ('pending','processing') RETURNING user_id, amount, currency`, id, adminID, "Paid manually: "+note).
+		Scan(&uid, &amount, &currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return userErr(409, "This withdrawal is already completed or was rejected")
+	}
+	if err != nil {
+		return err
+	}
+	Notify(uid, "withdrawal", "Withdrawal sent", FormatMoney(amount, currency)+" has been sent to your bank account.", "/wallet", nil)
+	return nil
 }

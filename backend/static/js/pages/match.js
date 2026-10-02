@@ -157,11 +157,13 @@ export default async function matchPage(view, { id }) {
       drop.addEventListener('drop', (e) => pick(e.dataTransfer.files[0]));
       submit.onclick = () => {
         if (!chosen) return;
-        const fd = new FormData();
-        fd.append('image', chosen);
         submit.innerHTML = String(html`Reading the score…`);
+        // Google can be slow when busy; tell the player we are still working.
+        const slow = setTimeout(() => { submit.innerHTML = String(html`Still reading… retrying, please wait`); }, 15000);
         busy(submit, async () => {
           try {
+            const fd = new FormData();
+            fd.append('image', await shrinkScreenshot(chosen), 'result.jpg');
             const res = await upload(`/matches/${m.id}/result`, fd);
             m = res.match;
             toast('Result submitted. Your opponent has 15 minutes to check it.', 'ok', 'Score verified');
@@ -170,6 +172,8 @@ export default async function matchPage(view, { id }) {
           } catch (e) {
             view.querySelector('#upload-error').innerHTML = String(html`<div class="notice danger" style="margin-top:14px">${ic('alert')}<div><b>Screenshot not accepted</b><div class="small">${e.message}</div></div></div>`);
             submit.innerHTML = String(html`${ic('zap')} Try again`);
+          } finally {
+            clearTimeout(slow);
           }
         });
       };
@@ -212,4 +216,23 @@ export default async function matchPage(view, { id }) {
   document.addEventListener('match_update', onUpdate);
   await load();
   return () => document.removeEventListener('match_update', onUpdate);
+}
+
+// Phone screenshots are often 2–5 MB PNGs. Re-encode large ones as a JPEG
+// no wider than 1920px: still sharp enough to read names and scores, but much
+// faster to upload on mobile data and quicker for the AI to process.
+export async function shrinkScreenshot(file) {
+  const MAX = 1920;
+  if (file.size < 1024 * 1024 && file.type === 'image/jpeg') return file;
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+  const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+  if (scale === 1 && file.size < 1024 * 1024) { bitmap.close?.(); return file; }
+  const canvas = Object.assign(document.createElement('canvas'), {
+    width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale),
+  });
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  return blob && blob.size < file.size ? blob : file;
 }
