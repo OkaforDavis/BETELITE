@@ -15,6 +15,9 @@ import (
 
 var paystackHTTP = &http.Client{Timeout: 20 * time.Second}
 
+// paystackBaseURL is a variable so tests can point it at a fake server.
+var paystackBaseURL = "https://api.paystack.co"
+
 // PaystackSecret returns the secret key for a currency (Ghana may use a
 // separate Paystack account).
 func PaystackSecret(currency string) string {
@@ -35,7 +38,7 @@ func paystack(ctx context.Context, currency, method, path string, body any, out 
 		b, _ := json.Marshal(body)
 		rdr = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "https://api.paystack.co"+path, rdr)
+	req, err := http.NewRequestWithContext(ctx, method, paystackBaseURL+path, rdr)
 	if err != nil {
 		return err
 	}

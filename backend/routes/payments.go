@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5"
 
 	"betelite-go/config"
 	"betelite-go/db"
@@ -112,7 +111,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 		if owner != middleware.GetUID(c) {
 			return utils.SendError(c, 404, "Deposit not found")
 		}
-		status, err := creditDeposit(c.Context(), req.Reference)
+		status, err := services.CreditDeposit(c.Context(), req.Reference)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -230,60 +229,6 @@ func SetupPaymentRoutes(api fiber.Router) {
 	})
 }
 
-// creditDeposit verifies a deposit with Paystack and credits it exactly once.
-func creditDeposit(ctx context.Context, reference string) (string, error) {
-	var uid, currency, status string
-	var amount int64
-	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status FROM deposits WHERE reference = $1", reference).Scan(&uid, &currency, &amount, &status)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", &services.UserError{Status: 404, Msg: "Deposit not found"}
-	}
-	if err != nil {
-		return "", err
-	}
-	if status != "pending" {
-		return status, nil
-	}
-
-	txn, err := services.PaystackVerify(ctx, currency, reference)
-	if err != nil {
-		return "", err
-	}
-	switch txn.Status {
-	case "success":
-	case "failed", "abandoned", "reversed":
-		db.Pool.Exec(ctx, "UPDATE deposits SET status = 'failed' WHERE reference = $1 AND status = 'pending'", reference)
-		return "failed", nil
-	default:
-		return "pending", nil
-	}
-	if txn.Currency != currency || txn.Amount < amount {
-		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, amount, currency)
-		return "", &services.UserError{Status: 409, Msg: "Payment amount mismatch. Please contact support."}
-	}
-
-	tx, err := db.Pool.Begin(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-	tag, err := tx.Exec(ctx, "UPDATE deposits SET status = 'paid', paid_at = NOW() WHERE reference = $1 AND status = 'pending'", reference)
-	if err != nil {
-		return "", err
-	}
-	if tag.RowsAffected() == 0 {
-		return "paid", nil // credited by a concurrent call
-	}
-	if err := services.AdjustBalance(ctx, tx, uid, amount, "deposit", reference); err != nil {
-		return "", err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", err
-	}
-	services.Notify(uid, "deposit", "Deposit received", services.FormatMoney(amount, currency)+" has been added to your wallet.", "/wallet", nil)
-	return "paid", nil
-}
-
 func paystackWebhook(c *fiber.Ctx) error {
 	body := c.Body()
 	sig := c.Get("x-paystack-signature")
@@ -319,7 +264,7 @@ func paystackWebhook(c *fiber.Ctx) error {
 
 	switch ev.Event {
 	case "charge.success":
-		if _, err := creditDeposit(ctx, ev.Data.Reference); err != nil {
+		if _, err := services.CreditDeposit(ctx, ev.Data.Reference); err != nil {
 			log.Printf("[PAYMENTS] webhook credit %s: %v", ev.Data.Reference, err)
 			return c.SendStatus(500) // Paystack retries
 		}
