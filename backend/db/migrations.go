@@ -234,6 +234,11 @@ var migrations = []string{
 		content_type TEXT NOT NULL,
 		updated_at TIMESTAMPTZ DEFAULT NOW()
 	);`,
+
+	// 4: deposit reconciliation bookkeeping.
+	`ALTER TABLE deposits ADD COLUMN IF NOT EXISTS checked_at TIMESTAMPTZ;
+	ALTER TABLE deposits ADD COLUMN IF NOT EXISTS gateway_status TEXT;
+	CREATE INDEX IF NOT EXISTS deposits_status_idx ON deposits(status, created_at);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

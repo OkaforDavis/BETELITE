@@ -51,6 +51,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 		}
 	}()
 	ctx := context.Background()
+	ReconcileDeposits(ctx)
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)
 	cleanupStaleChallenges(ctx, hub, cfg.ChallengeExpireDuration)
