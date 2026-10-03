@@ -36,7 +36,7 @@
     <tr><td>Age</td><td>Date of birth, used only to confirm you are 18 or older.</td><td>You</td></tr>
     <tr><td>Location</td><td>Your country and wallet currency (Nigeria or Ghana). An approximate country from your IP address may be used to suggest a currency.</td><td>You / your device</td></tr>
     <tr><td>Game IDs</td><td>Your in-game names and optional in-game ID numbers for supported games.</td><td>You</td></tr>
-    <tr><td>Match results</td><td>Result screenshots you upload. We send the image to our AI providers (Google, or Anthropic as a backup) to read the score. <strong>We do not store the image.</strong> We keep what was read from it (names, scores, game mode), a fingerprint (hash) of the image to stop it being reused, and any in-game match ID shown.</td><td>You</td></tr>
+    <tr><td>Match results</td><td>Result screenshots you upload. We send the image to our AI providers (Google, or Anthropic as a backup) to read the score. We keep the screenshot, with hidden data such as location removed, <strong>for 30 days after the match is final</strong> so both players and our admins can check it in a dispute; then it is deleted automatically. We also keep what was read from it (names, scores, game mode), a fingerprint (hash) of the image to stop it being reused, and any in-game match ID shown. Screenshots you attach to a dispute are kept the same way.</td><td>You</td></tr>
     <tr><td>Wallet and payments</td><td>Balance, transaction history, deposit references and amounts. For withdrawals: bank name, account number and account holder name. Card details are entered directly with Paystack; we never receive them.</td><td>You / Paystack</td></tr>
     <tr><td>Competition data</td><td>Challenges, matches, tournament entries, results, disputes and the reasons you give.</td><td>You / other players</td></tr>
     <tr><td>Notifications</td><td>In-app notifications, and if you enable alerts, a push subscription address for your device.</td><td>Your device</td></tr>
@@ -77,7 +77,7 @@
   <ul>
     <li><strong>Account data</strong>: while your account is open. When you delete your account we remove your personal details, profile photo, game IDs, notifications and push subscriptions straight away.</li>
     <li><strong>Financial and match records</strong> (transactions, deposits, withdrawals, results): kept for <span class="fill">[6]</span> years after the transaction to meet tax, accounting and anti-money-laundering laws. After account deletion these records are anonymised and bank account numbers are masked.</li>
-    <li><strong>Screenshot data</strong>: the image is not stored. What was read from it is kept with the match record.</li>
+    <li><strong>Match screenshots</strong>: 30 days after the match is final, then deleted automatically. What was read from them is kept with the match record.</li>
     <li><strong>Server logs</strong>: up to <span class="fill">[30]</span> days.</li>
   </ul>
 

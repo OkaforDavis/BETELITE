@@ -2,6 +2,8 @@ package routes
 
 import (
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -81,18 +83,68 @@ func SetupMatchRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"match": match})
 	})
 
+	// Dispute: reason plus an optional screenshot as proof (multipart form,
+	// or JSON {"reason"} from older app versions).
 	m.Post("/:id/dispute", func(c *fiber.Ctx) error {
-		var req struct {
-			Reason string `json:"reason"`
+		reason := c.FormValue("reason")
+		if reason == "" {
+			var req struct {
+				Reason string `json:"reason"`
+			}
+			c.BodyParser(&req)
+			reason = req.Reason
 		}
-		c.BodyParser(&req)
-		if len(req.Reason) < 5 {
+		if len(strings.TrimSpace(reason)) < 5 {
 			return utils.SendError(c, 400, "Tell us briefly what is wrong with the result")
 		}
-		match, err := services.DisputeResult(c.Context(), c.Params("id"), middleware.GetUID(c), req.Reason)
+		var evidence []byte
+		if fh, err := c.FormFile("image"); err == nil {
+			if fh.Size > services.MaxScreenshotLen {
+				return utils.SendError(c, 400, "Screenshot is too large (max 8 MB)")
+			}
+			f, err := fh.Open()
+			if err != nil {
+				return fail(c, err)
+			}
+			evidence, err = io.ReadAll(io.LimitReader(f, services.MaxScreenshotLen+1))
+			f.Close()
+			if err != nil {
+				return fail(c, err)
+			}
+		}
+		match, err := services.DisputeResult(c.Context(), c.Params("id"), middleware.GetUID(c), reason, evidence)
 		if err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"match": match})
+	})
+
+	// Screenshot evidence: visible to the two players and admins for 30 days.
+	m.Get("/:id/screenshots", func(c *fiber.Ctx) error {
+		if !services.CanViewEvidence(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c)) {
+			return utils.SendError(c, 403, "Only the players in this match can view its screenshots")
+		}
+		list, err := services.ListEvidence(c.Context(), c.Params("id"))
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"screenshots": list})
+	})
+
+	m.Get("/:id/screenshots/:sid", func(c *fiber.Ctx) error {
+		sid, err := strconv.ParseInt(c.Params("sid"), 10, 64)
+		if err != nil {
+			return utils.SendError(c, 400, "Invalid screenshot")
+		}
+		img, ctype, matchID, err := services.LoadEvidence(c.Context(), sid)
+		if err != nil {
+			return fail(c, err)
+		}
+		if matchID != c.Params("id") || !services.CanViewEvidence(c.Context(), matchID, middleware.GetUID(c), middleware.IsAdminCtx(c)) {
+			return utils.SendError(c, 403, "Only the players in this match can view its screenshots")
+		}
+		c.Set("Cache-Control", "private, max-age=3600")
+		c.Set("Content-Type", ctype)
+		return c.Send(img)
 	})
 }

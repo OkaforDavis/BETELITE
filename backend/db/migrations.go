@@ -239,6 +239,19 @@ var migrations = []string{
 	`ALTER TABLE deposits ADD COLUMN IF NOT EXISTS checked_at TIMESTAMPTZ;
 	ALTER TABLE deposits ADD COLUMN IF NOT EXISTS gateway_status TEXT;
 	CREATE INDEX IF NOT EXISTS deposits_status_idx ON deposits(status, created_at);`,
+
+	// 5: match screenshot evidence, kept 30 days after a match is final.
+	`CREATE TABLE IF NOT EXISTS match_screenshots (
+		id BIGSERIAL PRIMARY KEY,
+		match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+		uploaded_by TEXT NOT NULL REFERENCES users(id),
+		kind TEXT NOT NULL,
+		image BYTEA NOT NULL,
+		content_type TEXT NOT NULL DEFAULT 'image/jpeg',
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS match_screenshots_match_idx ON match_screenshots(match_id);
+	CREATE INDEX IF NOT EXISTS match_screenshots_created_idx ON match_screenshots(created_at);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.
