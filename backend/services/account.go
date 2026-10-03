@@ -139,6 +139,7 @@ func ExportUserData(ctx context.Context, uid string) (map[string]any, error) {
 		"withdrawals":   "SELECT id, amount, currency, bank_name, account_number, status, created_at FROM withdrawals WHERE user_id = $1 ORDER BY created_at",
 		"matches":       "SELECT id, kind, game, home_id, away_id, status, score_home, score_away, created_at FROM matches WHERE home_id = $1 OR away_id = $1 ORDER BY created_at",
 		"notifications": "SELECT type, title, message, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at",
+		"screenshots":   "SELECT id, match_id, kind, created_at FROM match_screenshots WHERE uploaded_by = $1 ORDER BY created_at",
 	}
 	for key, q := range queries {
 		rows, err := db.Pool.Query(ctx, q, uid)

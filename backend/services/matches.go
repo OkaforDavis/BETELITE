@@ -353,6 +353,9 @@ func SubmitResult(ctx context.Context, matchID, uid string, img []byte) (*MatchV
 	if tag.RowsAffected() == 0 {
 		return nil, userErr(409, "A result has already been submitted for this match")
 	}
+	if err := SaveEvidence(ctx, matchID, uid, "result", img); err != nil {
+		log.Printf("[EVIDENCE] save result screenshot for %s: %v", matchID, err)
+	}
 
 	m, err = GetMatch(ctx, matchID)
 	if err != nil {
@@ -392,9 +395,17 @@ func ConfirmResult(ctx context.Context, matchID, uid string) (*MatchView, error)
 }
 
 // DisputeResult stops the automatic settlement and sends the match to an admin.
-func DisputeResult(ctx context.Context, matchID, uid, reason string) (*MatchView, error) {
+func DisputeResult(ctx context.Context, matchID, uid, reason string, evidence []byte) (*MatchView, error) {
 	if len(reason) > 500 {
 		reason = reason[:500]
+	}
+	if len(evidence) > MaxScreenshotLen {
+		return nil, userErr(400, "Screenshot is too large (max 8 MB)")
+	}
+	if len(evidence) > 0 {
+		if _, err := evidenceJPEG(evidence); err != nil { // reject unreadable files before disputing
+			return nil, err
+		}
 	}
 	tag, err := db.Pool.Exec(ctx, `UPDATE matches SET status = 'disputed', disputed_by = $2, dispute_reason = $3
 		WHERE id = $1 AND status = 'submitted' AND submitted_by <> $2 AND (home_id = $2 OR away_id = $2)
@@ -404,6 +415,11 @@ func DisputeResult(ctx context.Context, matchID, uid, reason string) (*MatchView
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, userErr(409, "This result can no longer be disputed")
+	}
+	if len(evidence) > 0 {
+		if err := SaveEvidence(ctx, matchID, uid, "dispute", evidence); err != nil {
+			log.Printf("[EVIDENCE] save dispute screenshot for %s: %v", matchID, err)
+		}
 	}
 	m, err := GetMatch(ctx, matchID)
 	if err != nil {

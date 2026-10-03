@@ -2,6 +2,7 @@ import { get, post, upload } from '../api.js';
 import { store, gameName } from '../store.js';
 import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet } from '../ui.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
+import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
 const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
@@ -46,6 +47,7 @@ export default async function matchPage(view, { id }) {
       </div>
 
       <section class="section" id="action">${mine ? actionArea(m, uid, opp) : spectatorNote(m)}</section>
+      ${(mine || store.get().profile.isAdmin) && m.status !== 'ready' ? html`<section class="section"><div class="section-head"><h2 class="h2">Screenshots</h2></div><div id="evidence">${skeleton(90)}</div></section>` : ''}
 
       <section class="section">
         <div class="list">
@@ -65,6 +67,8 @@ export default async function matchPage(view, { id }) {
       toast('Match ID copied');
     });
     bindActions(uid);
+    const ev = view.querySelector('#evidence');
+    if (ev) loadEvidence(m.id).then((list) => { ev.innerHTML = String(evidenceGallery(list)); bindEvidence(ev); }).catch((e) => { ev.innerHTML = String(html`<p class="small muted">${e.message}</p>`); });
   }
 
   function actionArea(m, uid, opp) {
@@ -194,6 +198,8 @@ export default async function matchPage(view, { id }) {
       sheet(String(html`${sheetHead('Dispute result', 'An admin will check both sides')}
         <form id="dsp"><label class="field"><span class="label">What's wrong?</span>
           <textarea class="textarea" name="reason" maxlength="500" required placeholder="e.g. The real score was 2–3. The screenshot is from a different match."></textarea></label>
+          <label class="field"><span class="label">Your screenshot as proof <span class="faint">(recommended)</span></span>
+            <input class="input" type="file" name="image" accept="image/png,image/jpeg,image/webp" style="padding-top:12px"></label>
           <div class="notice warn" style="margin-top:12px">${ic('alert')}<div class="small">False disputes slow everyone down and may lead to account restrictions.</div></div>
           <div class="sheet-actions"><button class="btn danger block" type="submit">Send dispute</button></div></form>`), {
         label: 'Dispute',
@@ -201,7 +207,12 @@ export default async function matchPage(view, { id }) {
           root.querySelector('#dsp').onsubmit = (e) => {
             e.preventDefault();
             busy(e.target.querySelector('[type=submit]'), async () => {
-              ({ match: m } = await post(`/matches/${m.id}/dispute`, { reason: new FormData(e.target).get('reason') }));
+              const form = new FormData(e.target);
+              const fd = new FormData();
+              fd.append('reason', form.get('reason'));
+              const proof = form.get('image');
+              if (proof && proof.size) fd.append('image', await shrinkScreenshot(proof), 'proof.jpg');
+              ({ match: m } = await upload(`/matches/${m.id}/dispute`, fd));
               close();
               toast('Dispute sent. An admin will review it.', 'info');
               refreshCurrent(); draw();

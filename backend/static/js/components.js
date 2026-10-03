@@ -92,3 +92,32 @@ export function gameChips(selected, { all = false } = {}) {
 export function hasGameProfile(game) {
   return store.get().profile?.gameProfiles?.some((g) => g.game === game);
 }
+
+// Match screenshot evidence (players + admins). Images need the auth token,
+// so they are fetched as blobs and shown via object URLs.
+export async function loadEvidence(matchId) {
+  const { api } = await import('./api.js');
+  const { screenshots } = await api('GET', `/matches/${encodeURIComponent(matchId)}/screenshots`);
+  return Promise.all(screenshots.map(async (s) => {
+    const res = await api('GET', `/matches/${encodeURIComponent(matchId)}/screenshots/${s.id}`, undefined, { raw: true });
+    return { ...s, url: res.ok ? URL.createObjectURL(await res.blob()) : '' };
+  }));
+}
+
+export function evidenceGallery(list) {
+  if (!list.length) return html`<p class="small muted">No screenshots for this match.</p>`;
+  return html`<div class="evidence">${list.map((s) => html`
+    <button class="evidence-item" data-full="${s.url}" aria-label="Open screenshot">
+      ${s.url ? html`<img src="${s.url}" alt="Match screenshot">` : ''}
+      <span class="tiny"><b>${s.kind === 'dispute' ? 'Dispute proof' : 'Result'}</b> · ${s.uploader} · ${new Date(s.createdAt).toLocaleString()}</span>
+    </button>`)}</div>
+    <p class="tiny faint" style="margin-top:8px">Screenshots are deleted 30 days after the match is final.</p>`;
+}
+
+// Tap a screenshot to view it full size.
+export function bindEvidence(root) {
+  root.querySelectorAll('[data-full]').forEach((b) => (b.onclick = async () => {
+    const { sheet, sheetHead } = await import('./ui.js');
+    sheet(String(html`${sheetHead('Screenshot')}<img src="${b.dataset.full}" alt="Match screenshot" style="width:100%;border-radius:12px">`), { label: 'Screenshot' });
+  }));
+}

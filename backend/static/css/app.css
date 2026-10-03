@@ -458,3 +458,8 @@ button.list-row:active { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── Screenshot evidence ─────────────────────────────────── */
+.evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.evidence-item { display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--text-2); }
+.evidence-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line-2); background: #000; }

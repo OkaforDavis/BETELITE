@@ -1,7 +1,7 @@
 import { get, post, del, upload } from '../api.js';
 import { store, gameName } from '../store.js';
 import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
-import { gameChips } from '../components.js';
+import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
 const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['users', 'Users'], ['ocr', 'OCR test']];
 
@@ -52,14 +52,17 @@ async function review(body, redraw) {
     ${m.disputeReason ? html`<div class="notice warn">${ic('flag')}<div class="small"><b>${m.status === 'disputed' ? 'Dispute' : 'Reason'}:</b> ${m.disputeReason}</div></div>` : ''}
     <div class="small faint" style="margin-top:8px">Created ${timeAgo(m.createdAt)} · ID ${m.id}</div>
     <div class="grid-3" style="margin-top:12px">
-      <button class="btn secondary sm" data-ocr="${m.id}">${ic('eye')} AI read</button>
+      <button class="btn secondary sm" data-ocr="${m.id}">${ic('image')} Evidence</button>
       <button class="btn danger sm" data-void="${m.id}">${ic('xCircle')} Void</button>
       <button class="btn primary sm" data-resolve="${m.id}">${ic('check')} Decide</button></div>
   </div>`)}</div>`);
 
   body.querySelectorAll('[data-ocr]').forEach((b) => (b.onclick = () => busy(b, async () => {
-    const { ocr } = await get(`/admin/matches/${b.dataset.ocr}/ocr`);
-    sheet(String(html`${sheetHead('What the AI read')}<pre style="white-space:pre-wrap;font-size:13px;color:var(--text-2)">${JSON.stringify(ocr, null, 2) || 'No screenshot submitted'}</pre>`));
+    const [{ ocr }, shots] = await Promise.all([get(`/admin/matches/${b.dataset.ocr}/ocr`), loadEvidence(b.dataset.ocr)]);
+    sheet(String(html`${sheetHead('Evidence')}${evidenceGallery(shots)}
+      <div class="h3" style="margin-top:18px">What the AI read</div>
+      <pre style="white-space:pre-wrap;font-size:13px;color:var(--text-2)">${ocr ? JSON.stringify(ocr, null, 2) : 'No AI reading for this match.'}</pre>`),
+    { label: 'Evidence', onMount: (root) => bindEvidence(root) });
   })));
   body.querySelectorAll('[data-void]').forEach((b) => (b.onclick = async () => {
     const m = matches.find((x) => x.id === b.dataset.void);
