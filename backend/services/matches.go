@@ -484,6 +484,11 @@ func SettleMatch(ctx context.Context, matchID, resolvedBy string) error {
 		announceResult(m)
 		broadcastMatch(m)
 	}
+	// A first paid match unlocks invite rewards for either player.
+	go func(a, b string) {
+		RewardReferral(context.Background(), a)
+		RewardReferral(context.Background(), b)
+	}(homeID, *awayID)
 	if kind == "tournament" {
 		go AdvanceTournament(context.Background(), deref(tournamentID))
 	}

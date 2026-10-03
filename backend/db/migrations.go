@@ -252,6 +252,10 @@ var migrations = []string{
 	);
 	CREATE INDEX IF NOT EXISTS match_screenshots_match_idx ON match_screenshots(match_id);
 	CREATE INDEX IF NOT EXISTS match_screenshots_created_idx ON match_screenshots(created_at);`,
+
+	// 6: referral rewards are paid once, after the invited friend's first paid match.
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded_at TIMESTAMPTZ;
+	CREATE INDEX IF NOT EXISTS users_referred_by_idx ON users(referred_by);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

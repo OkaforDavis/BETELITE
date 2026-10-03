@@ -1,5 +1,6 @@
 // Firebase is used for sign-in only. Money and profile live in the Go API.
 import { html, ic, $, busy, toast } from './ui.js';
+import { pendingInvite, setPendingInvite } from './invite.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCBMcP7ikJCYVkNjGksvglVkVp0ZTvsz0w',
@@ -41,12 +42,15 @@ function friendly(e) {
   return map[e?.code] || e?.message || 'Something went wrong. Please try again.';
 }
 
-export function renderAuth(root, mode = 'signin') {
+export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
   const signup = mode === 'signup';
+  const invite = pendingInvite();
   root.innerHTML = String(html`
   <main class="auth">
     <img class="wordmark" src="/icons/wordmark.png" alt="CrestArena" height="34">
     <p class="tagline">Play. Prove it. Get paid.</p>
+    ${invite ? html`<div class="notice brand" style="margin:-12px 0 18px">${ic('users')}<div class="small"><b>You've been invited!</b>
+      Create your account and invite code <b>${invite}</b> is applied automatically.</div></div>` : ''}
 
     <div class="seg" role="tablist" style="margin-bottom:20px">
       <button role="tab" class="${signup ? '' : 'active'}" data-mode="signin">Sign in</button>
@@ -60,6 +64,8 @@ export function renderAuth(root, mode = 'signin') {
         <input class="input" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
       <label class="field"><span class="label">Password</span>
         <input class="input" name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? 'At least 8 characters' : 'Your password'}" required></label>
+      ${signup ? html`<label class="field"><span class="label">Invite code <span class="faint">(optional)</span></span>
+        <input class="input" name="invite" maxlength="12" autocapitalize="characters" autocomplete="off" value="${invite}" placeholder="e.g. UT802R6Q"></label>` : ''}
       <div class="form-error" id="auth-error" role="alert" hidden></div>
       <button class="btn primary block" style="margin-top:20px" type="submit">${signup ? 'Create account' : 'Sign in'}</button>
       ${signup ? '' : html`<button class="btn ghost block" type="button" data-forgot style="margin-top:6px">Forgot password?</button>`}
@@ -85,6 +91,7 @@ export function renderAuth(root, mode = 'signin') {
     busy(e.target.querySelector('[type=submit]'), async () => {
       try {
         if (signup) {
+          setPendingInvite(String(f.get('invite') || ''));
           const name = String(f.get('name') || '').trim();
           if (name.length < 3) throw { message: 'Display name must be at least 3 characters.' };
           if (password.length < 8) throw { code: 'auth/weak-password' };
@@ -109,6 +116,8 @@ export function renderAuth(root, mode = 'signin') {
   });
 
   root.querySelector('[data-google]').onclick = async (e) => {
+    const typed = root.querySelector('[name=invite]')?.value;
+    if (typed) setPendingInvite(typed);
     const provider = new firebase.auth.GoogleAuthProvider();
     await busy(e.currentTarget, async () => {
       try {

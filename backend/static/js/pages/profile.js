@@ -1,6 +1,7 @@
 import { api, get, put, del } from '../api.js';
 import { store } from '../store.js';
-import { html, ic, avatar, sheet, sheetHead, busy, toast, toastError } from '../ui.js';
+import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError } from '../ui.js';
+import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
 import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification } from '../auth.js';
@@ -71,9 +72,29 @@ export default async function profilePage(view, { query }) {
       </section>
 
       ${ref.code ? html`<section class="section">
-        <div class="section-head"><h2 class="h2">Invite friends</h2><span class="small faint">${ref.referrals || 0} joined</span></div>
-        <div class="card row between"><div><div class="tiny faint">YOUR CODE</div><div class="h2 num" style="letter-spacing:.12em">${ref.code}</div></div>
-          <button class="btn outline sm" id="share">${ic('share')} Share</button></div>
+        <div class="section-head"><h2 class="h2">Invite friends</h2></div>
+        <div class="card">
+          <p class="small muted">Share your link. When a friend joins and plays their first paid match, you get
+            <b class="brand-text">${money(ref.inviterReward, ref.currency)}</b> and they get <b class="brand-text">${money(ref.friendReward, ref.currency)}</b>.</p>
+          <div class="row" style="margin-top:14px;gap:8px">
+            <input class="input grow" readonly value="${inviteLink(ref.code)}" aria-label="Your invite link" style="font-size:14px">
+            <button class="btn secondary sm" id="copy-link" aria-label="Copy link">${ic('copy')}</button>
+          </div>
+          <button class="btn primary block" id="share" style="margin-top:10px">${ic('share')} Share invite</button>
+          <div class="grid-3" style="margin-top:14px">
+            <div><div class="tiny faint">JOINED</div><div class="h3 num">${ref.referrals || 0}</div></div>
+            <div><div class="tiny faint">PLAYED</div><div class="h3 num">${ref.rewarded || 0}</div></div>
+            <div><div class="tiny faint">EARNED</div><div class="h3 num brand-text">${money(ref.earned || 0, ref.currency)}</div></div>
+          </div>
+          <p class="tiny faint" style="margin-top:10px">Your code: <b class="num" style="letter-spacing:.08em">${ref.code}</b></p>
+        </div>
+        ${ref.referredBy ? html`<p class="small muted" style="margin-top:10px">You were invited by <b>${ref.referredBy}</b>.</p>` : ''}
+        ${ref.canClaim ? html`<form class="card flat" id="claim" style="margin-top:12px">
+          <div class="h3">Invited by a friend?</div>
+          <p class="small muted" style="margin-top:2px">Add their code in your first 7 days, before your first paid match.</p>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <input class="input grow" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Invite code" required>
+            <button class="btn secondary">Apply</button></div></form>` : ''}
       </section>` : ''}
 
       <section class="section">
@@ -137,9 +158,23 @@ export default async function profilePage(view, { query }) {
     };
     view.querySelector('#email').onchange = (e) => api('POST', '/user/settings/update', { emailEnabled: e.target.checked }).then(refreshProfile).catch(toastError);
     view.querySelector('#share')?.addEventListener('click', () => {
-      const text = `Join me on CrestArena and play FC Mobile, eFootball & DLS for prizes. Use my code ${ref.code}: ${location.origin}`;
-      if (navigator.share) navigator.share({ title: 'CrestArena', text }).catch(() => {});
-      else { navigator.clipboard?.writeText(text); toast('Invite copied to clipboard'); }
+      const url = inviteLink(ref.code);
+      const text = `Join me on CrestArena and play FC Mobile, eFootball & DLS for prizes. Sign up with my link and we both get a bonus after your first match:`;
+      if (navigator.share) navigator.share({ title: 'CrestArena', text, url }).catch(() => {});
+      else { navigator.clipboard?.writeText(`${text} ${url}`); toast('Invite copied to clipboard'); }
+    });
+    view.querySelector('#copy-link')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(inviteLink(ref.code));
+      toast('Invite link copied');
+    });
+    view.querySelector('#claim')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      busy(e.target.querySelector('button'), async () => {
+        const { referredBy } = await api('POST', '/referrals/claim', { code: new FormData(e.target).get('code') });
+        Object.assign(ref, { referredBy, canClaim: false });
+        toast(`You'll get ${money(ref.friendReward, ref.currency)} after your first paid match.`, 'ok', `Invited by ${referredBy}`);
+        draw();
+      });
     });
     view.querySelector('#install')?.addEventListener('click', promptInstall);
     view.querySelector('#update').onclick = async () => {

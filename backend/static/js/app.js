@@ -7,6 +7,9 @@ import { route, startRouter, onRouteChange, navigate } from './router.js';
 import * as rt from './realtime.js';
 import { registerSW, syncPushSubscription, setBadge } from './pwa.js';
 import { cookieNotice, needsConsent, consentGate } from './consent.js';
+import { captureInvite, applyPendingInvite } from './invite.js';
+
+captureInvite();
 
 setTokenProvider(getToken);
 
@@ -21,6 +24,7 @@ route('/notifications', () => import('./pages/notifications.js'));
 route('/watch', () => import('./pages/watch.js'), { tab: 'home' });
 route('/watch/:id', () => import('./pages/watch.js'), { tab: 'home' });
 route('/admin', () => import('./pages/admin.js'));
+route('/join/:code', () => import('./pages/home.js'), { tab: 'home' });
 
 const root = document.getElementById('root');
 let shellMounted = false;
@@ -137,7 +141,7 @@ async function onUser(user) {
     shellMounted = false;
     rt.disconnect();
     store.set({ user: null, profile: null, current: null, unread: 0 });
-    renderAuth(root, 'signin');
+    renderAuth(root);
     cookieNotice(true);
     return;
   }
@@ -158,6 +162,7 @@ async function onUser(user) {
   refreshUnread();
   handleDepositReturn();
   syncPushSubscription();
+  applyPendingInvite();
   if (new URLSearchParams(location.search).get('open') === 'current' && store.get().current) navigate('/match/' + store.get().current.id);
 
   const profile = store.get().profile;
