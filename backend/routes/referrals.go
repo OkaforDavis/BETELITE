@@ -1,125 +1,42 @@
 package routes
 
 import (
-	"context"
-	"crypto/rand"
-	"fmt"
-	"math/big"
-
 	"github.com/gofiber/fiber/v2"
 
-	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
 	"betelite-go/utils"
 )
 
-func generateReferralCode() string {
-	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 8)
-	for i := range b {
-		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		b[i] = charset[n.Int64()]
-	}
-	return string(b)
-}
-
 func SetupReferralRoutes(api fiber.Router) {
-	referrals := api.Group("/referrals", middleware.AuthRequired())
+	referrals := api.Group("/referrals", middleware.AuthRequired(), dbRequired)
 
-	// Get my referral code and stats
+	// My invite code, link stats and whether I can still add a code.
 	referrals.Get("/", func(c *fiber.Ctx) error {
-		if db.Pool == nil {
-			return utils.SendSuccess(c, fiber.Map{"code": "", "referrals": 0})
-		}
-		uid := middleware.GetUID(c)
-		ctx := context.Background()
-
-		var code string
-		err := db.Pool.QueryRow(ctx, "SELECT COALESCE(referral_code,'') FROM users WHERE id = $1", uid).Scan(&code)
+		info, err := services.GetReferralInfo(c.Context(), middleware.GetUID(c))
 		if err != nil {
-			return utils.SendError(c, 500, "Failed to fetch user")
+			return fail(c, err)
 		}
-
-		if code == "" {
-			// Generate new code
-			code = generateReferralCode()
-			_, err = db.Pool.Exec(ctx, "UPDATE users SET referral_code = $1 WHERE id = $2", code, uid)
-			if err != nil {
-				return utils.SendError(c, 500, "Failed to generate code")
-			}
-		}
-
-		// Count referrals
-		var count int
-		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE referred_by = $1", uid).Scan(&count)
-
 		return utils.SendSuccess(c, fiber.Map{
-			"code":      code,
-			"referrals": count,
+			"code": info.Code, "referrals": info.Joined, "rewarded": info.Rewarded, "earned": info.Earned,
+			"currency": info.Currency, "inviterReward": info.InviterGets, "friendReward": info.FriendGets,
+			"referredBy": info.ReferredBy, "canClaim": info.CanClaim,
 		})
 	})
 
-	// Process referral entry (called when someone signs up or claims a code)
+	// Link a new account to the friend who invited it (from an invite link or
+	// a typed code). Rewards are paid after the first paid match.
 	referrals.Post("/claim", func(c *fiber.Ctx) error {
 		var req struct {
 			Code string `json:"code"`
 		}
-		if err := c.BodyParser(&req); err != nil || req.Code == "" {
-			return utils.SendError(c, 400, "Invalid payload")
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
 		}
-
-		uid := middleware.GetUID(c)
-		ctx := context.Background()
-
-		if db.Pool == nil {
-			return utils.SendError(c, 503, "Database not available")
-		}
-
-		// DB Transaction
-		tx, err := db.Pool.Begin(ctx)
+		name, err := services.ClaimReferral(c.Context(), middleware.GetUID(c), req.Code)
 		if err != nil {
-			return utils.SendError(c, 500, "Database error")
+			return fail(c, err)
 		}
-		defer tx.Rollback(ctx)
-
-		// 1. Check if user already claimed a code
-		var existingRef *string
-		err = tx.QueryRow(ctx, "SELECT referred_by FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&existingRef)
-		if err == nil && existingRef != nil {
-			return utils.SendError(c, 400, "You have already claimed a referral code")
-		}
-
-		// 2. Find referrer
-		var referrerID string
-		err = tx.QueryRow(ctx, "SELECT id FROM users WHERE referral_code = $1", req.Code).Scan(&referrerID)
-		if err != nil || referrerID == "" {
-			return utils.SendError(c, 400, "Invalid referral code")
-		}
-
-		if referrerID == uid {
-			return utils.SendError(c, 400, "You cannot refer yourself")
-		}
-
-		// 3. Update user
-		_, err = tx.Exec(ctx, "UPDATE users SET referred_by = $1 WHERE id = $2", referrerID, uid)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to claim referral")
-		}
-
-		// 4. Reward referrer (e.g., 500 kobo / 5 NGN)
-		rewardAmount := int64(500)
-		refID := fmt.Sprintf("ref_%s", uid)
-
-		err = services.AdjustBalance(ctx, tx, referrerID, rewardAmount, "referral", refID)
-		if err != nil {
-			return utils.SendError(c, 500, "Failed to reward referrer")
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return utils.SendError(c, 500, "Transaction commit failed")
-		}
-
-		return utils.SendSuccess(c, fiber.Map{})
+		return utils.SendSuccess(c, fiber.Map{"referredBy": name})
 	})
 }
