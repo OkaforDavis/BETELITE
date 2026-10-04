@@ -1,4 +1,4 @@
-import { get, post } from '../api.js';
+import { get, post, quietPost } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, sym, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton } from '../ui.js';
 import { needsConsent, consentGate } from '../consent.js';
@@ -24,7 +24,7 @@ const WD_STATUS = { pending: ['Awaiting approval', 'warn'], processing: ['Sendin
 const QUICK = { NGN: [1000, 2000, 5000, 10000], GHS: [20, 50, 100, 200] };
 
 export default async function wallet(view, { query }) {
-  view.innerHTML = String(html`<div class="page">${skeleton(200)}${skeleton(300)}</div>`);
+  // The router already shows this page's skeleton.
   let w;
 
   async function load() {
@@ -132,7 +132,7 @@ export default async function wallet(view, { query }) {
       if (polling !== ref) return;
       tries++;
       try {
-        const { status } = await post('/wallet/deposit/verify', { reference: ref });
+        const { status } = await quietPost('/wallet/deposit/verify', { reference: ref });
         if (status === 'paid') {
           polling = null;
           toast('Your wallet has been topped up.', 'ok', 'Deposit received');

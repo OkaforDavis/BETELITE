@@ -1,5 +1,5 @@
 // CrestArena PWA entry point.
-import { get, post, setTokenProvider, currentToken } from './api.js';
+import { get, post, quietGet, setTokenProvider, currentToken } from './api.js';
 import { initAuth, getToken, renderAuth } from './auth.js';
 import { store } from './store.js';
 import { html, ic, money, toast, $ } from './ui.js';
@@ -8,23 +8,26 @@ import * as rt from './realtime.js';
 import { registerSW, syncPushSubscription, setBadge } from './pwa.js';
 import { cookieNotice, needsConsent, consentGate } from './consent.js';
 import { captureInvite, applyPendingInvite } from './invite.js';
+import { sk } from './skeletons.js';
+import { render as rerender } from './router.js';
+import { installPullToRefresh } from './pull.js';
 
 captureInvite();
 
 setTokenProvider(getToken);
 
-route('/', () => import('./pages/home.js'), { tab: 'home' });
-route('/play', () => import('./pages/play.js'), { tab: 'play' });
-route('/match/:id', () => import('./pages/match.js'), { tab: 'play' });
-route('/tournaments', () => import('./pages/tournaments.js'), { tab: 'tournaments' });
-route('/tournaments/:id', () => import('./pages/tournament.js'), { tab: 'tournaments' });
-route('/wallet', () => import('./pages/wallet.js'), { tab: 'wallet' });
-route('/profile', () => import('./pages/profile.js'), { tab: 'profile' });
-route('/notifications', () => import('./pages/notifications.js'));
-route('/watch', () => import('./pages/watch.js'), { tab: 'home' });
-route('/watch/:id', () => import('./pages/watch.js'), { tab: 'home' });
-route('/admin', () => import('./pages/admin.js'));
-route('/join/:code', () => import('./pages/home.js'), { tab: 'home' });
+route('/', () => import('./pages/home.js'), { tab: 'home', skeleton: sk.home });
+route('/play', () => import('./pages/play.js'), { tab: 'play', skeleton: sk.play });
+route('/match/:id', () => import('./pages/match.js'), { tab: 'play', skeleton: sk.match });
+route('/tournaments', () => import('./pages/tournaments.js'), { tab: 'tournaments', skeleton: sk.tournaments });
+route('/tournaments/:id', () => import('./pages/tournament.js'), { tab: 'tournaments', skeleton: sk.tournament });
+route('/wallet', () => import('./pages/wallet.js'), { tab: 'wallet', skeleton: sk.wallet });
+route('/profile', () => import('./pages/profile.js'), { tab: 'profile', skeleton: sk.profile });
+route('/notifications', () => import('./pages/notifications.js'), { skeleton: sk.notifications });
+route('/watch', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
+route('/watch/:id', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
+route('/admin', () => import('./pages/admin.js'), { skeleton: sk.admin });
+route('/join/:code', () => import('./pages/home.js'), { tab: 'home', skeleton: sk.home });
 
 const root = document.getElementById('root');
 let shellMounted = false;
@@ -36,12 +39,12 @@ export async function refreshProfile() {
   return profile;
 }
 export async function refreshCurrent() {
-  const { match } = await get('/matches/current').catch(() => ({ match: null }));
+  const { match } = await quietGet('/matches/current').catch(() => ({ match: null }));
   store.set({ current: match });
   return match;
 }
 export async function refreshUnread() {
-  const { unread } = await get('/notifications').catch(() => ({ unread: 0 }));
+  const { unread } = await quietGet('/notifications').catch(() => ({ unread: 0 }));
   store.set({ unread });
   setBadge(unread);
 }
@@ -146,7 +149,10 @@ async function onUser(user) {
     return;
   }
   store.set({ user });
-  root.innerHTML = '<div class="auth"><div class="skeleton" style="height:56px;width:56px;border-radius:50%;margin:0 auto"></div></div>';
+  // Skeleton of the whole app while we sign in. On the free hosting plan the
+  // server may be asleep, so after a few seconds explain the wait.
+  root.innerHTML = String(sk.shell());
+  const wake = setTimeout(() => { const w = root.querySelector('.sk-wake'); if (w) w.hidden = false; }, 6000);
   try {
     const [{ games }] = await Promise.all([get('/games'), refreshProfile()]);
     store.set({ games });
@@ -155,8 +161,10 @@ async function onUser(user) {
       <p class="muted" style="margin:8px 0 20px">${e.message}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`);
     return;
   }
+  clearTimeout(wake);
   mountShell();
   wireRealtime();
+  installPullToRefresh(async () => { await Promise.all([refreshProfile(), refreshCurrent(), refreshUnread()]); await rerender(); });
   await startRouter();
   refreshCurrent();
   refreshUnread();

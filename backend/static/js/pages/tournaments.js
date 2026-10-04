@@ -1,5 +1,6 @@
 import { get } from '../api.js';
 import { html, skeleton, empty } from '../ui.js';
+import { sk } from '../skeletons.js';
 import { tournamentCard, gameChips } from '../components.js';
 
 export default async function tournaments(view) {
@@ -12,7 +13,7 @@ export default async function tournaments(view) {
       <button role="tab" data-tab="open">Open</button><button role="tab" data-tab="active">In progress</button><button role="tab" data-tab="mine">Mine</button>
     </div>
     <div id="filters" style="margin-top:14px"></div>
-    <div id="list" style="margin-top:14px">${skeleton(170, 3)}</div>
+    <div id="list" style="margin-top:14px">${sk.tournamentList()}</div>
   </div>`);
 
   const { tournaments: all } = await get('/tournaments');

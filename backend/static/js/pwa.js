@@ -1,5 +1,5 @@
 // Service worker, "new version" prompt, install prompt and Web Push.
-import { get, post } from './api.js';
+import { quietGet, quietPost, post } from './api.js';
 import { html, ic, sheet, sheetHead, toast, toastError } from './ui.js';
 
 export const APP_VERSION = window.APP_VERSION || 'dev';
@@ -46,7 +46,7 @@ export async function registerSW() {
 
 async function checkVersion() {
   try {
-    const v = await get('/version');
+    const v = await quietGet('/version');
     if (v.version && v.version !== APP_VERSION && APP_VERSION !== 'dev') {
       reg?.update().catch(() => {});
       showUpdate(v.force);
@@ -144,11 +144,11 @@ export async function syncPushSubscription(announce = false) {
   if (pushState() !== 'granted') return false;
   try {
     const r = reg || (await navigator.serviceWorker.ready);
-    const { publicKey } = await get('/notifications/vapid-public-key');
+    const { publicKey } = await quietGet('/notifications/vapid-public-key');
     if (!publicKey) return false;
     let sub = await r.pushManager.getSubscription();
     if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
-    await post('/notifications/subscribe', sub.toJSON());
+    await quietPost('/notifications/subscribe', sub.toJSON());
     if (announce) toast("Match alerts are on. We'll notify you when it's your move.");
     return true;
   } catch (e) {

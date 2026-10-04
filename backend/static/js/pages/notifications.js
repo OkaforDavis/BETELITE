@@ -13,7 +13,7 @@ const ICONS = {
 };
 
 export default async function notificationsPage(view) {
-  view.innerHTML = String(html`<div class="page">${skeleton(64, 6)}</div>`);
+  // The router already shows this page's skeleton.
 
   async function draw() {
     const { notifications, unread } = await get('/notifications');

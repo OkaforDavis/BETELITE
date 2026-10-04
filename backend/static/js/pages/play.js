@@ -1,6 +1,7 @@
 import { get, post } from '../api.js';
 import { store, gameName } from '../store.js';
-import { html, ic, money, sym, avatar, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton, confirmSheet } from '../ui.js';
+import { html, ic, money, sym, avatar, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton, confirmSheet, sectionError } from '../ui.js';
+import { sk } from '../skeletons.js';
 import { matchHero, matchRow, gameChips, hasGameProfile } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
@@ -33,8 +34,12 @@ export default async function play(view, { query }) {
 
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-    body.innerHTML = String(skeleton(84, 3));
-    if (tab === 'open') await drawOpen(); else await drawMine();
+    body.innerHTML = String(tab === 'open' ? sk.lobby() : sk.matchList());
+    try {
+      if (tab === 'open') await drawOpen(); else await drawMine();
+    } catch (e) {
+      sectionError(body, e.message, draw);
+    }
   }
 
   async function drawOpen() {
@@ -101,8 +106,10 @@ export default async function play(view, { query }) {
     });
   }
 
-  const offA = rt.on('lobby_new_challenge', () => tab === 'open' && drawOpen());
-  const offB = rt.on('lobby_challenge_removed', () => tab === 'open' && drawOpen());
+  // Live lobby updates refresh quietly; a failed refresh keeps the current list.
+  const refreshOpen = () => tab === 'open' && drawOpen().catch(() => {});
+  const offA = rt.on('lobby_new_challenge', refreshOpen);
+  const offB = rt.on('lobby_challenge_removed', refreshOpen);
   await draw();
   return () => { offA(); offB(); };
 }
