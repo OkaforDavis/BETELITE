@@ -8,7 +8,7 @@ const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
 
 export default async function matchPage(view, { id }) {
-  view.innerHTML = String(html`<div class="page">${skeleton(260)}${skeleton(160)}</div>`);
+  // The router already shows this page's skeleton.
   let m;
 
   async function load() {

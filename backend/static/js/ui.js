@@ -155,3 +155,11 @@ export function scoreLine(m) {
   return html`<div class="score">${m.scoreHome}<span class="sep">–</span>${m.scoreAway}</div>
     ${m.pensHome != null ? html`<div class="pens">Pens ${m.pensHome}–${m.pensAway}</div>` : ''}`;
 }
+
+// Inline error for a section that failed to load, with a retry button.
+export function sectionError(el, message, retry) {
+  if (!el) return;
+  el.innerHTML = String(html`<div class="notice">${ic('alert')}<div class="grow small">${message || "Couldn't load this. Check your connection."}</div>
+    <button class="btn secondary sm" data-retry>${ic('refresh')} Retry</button></div>`);
+  el.querySelector('[data-retry]').onclick = retry;
+}

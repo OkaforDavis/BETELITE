@@ -6,7 +6,7 @@ const SHELL = [
   '/',
   '/css/app.css',
   '/js/app.js', '/js/api.js', '/js/store.js', '/js/ui.js', '/js/icons.js', '/js/router.js',
-  '/js/realtime.js', '/js/pwa.js', '/js/auth.js', '/js/consent.js', '/js/components.js', '/js/gameid.js', '/js/invite.js',
+  '/js/realtime.js', '/js/pwa.js', '/js/auth.js', '/js/consent.js', '/js/components.js', '/js/gameid.js', '/js/invite.js', '/js/skeletons.js', '/js/progress.js', '/js/pull.js',
   '/js/pages/home.js', '/js/pages/play.js', '/js/pages/match.js', '/js/pages/tournaments.js',
   '/js/pages/tournament.js', '/js/pages/wallet.js', '/js/pages/profile.js', '/js/pages/notifications.js',
   '/js/pages/watch.js', '/js/pages/admin.js',

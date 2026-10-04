@@ -463,3 +463,47 @@ button.list-row:active { background: var(--surface-2); }
 .evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .evidence-item { display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--text-2); }
 .evidence-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line-2); background: #000; }
+
+/* ── Skeleton screens ────────────────────────────────────── */
+.sk {
+  display: block; flex: none; border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 40%, var(--surface-2) 80%);
+  background-size: 300% 100%; animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.sk-circle { border-radius: 50%; }
+.sk-pill { border-radius: var(--r-pill); }
+.sk-stack { display: flex; flex-direction: column; gap: 8px; }
+.sk-head { margin-bottom: 12px; }
+.sk-chips { display: flex; gap: 8px; margin-top: 18px; overflow: hidden; }
+.sk-versus { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin: 20px 0 16px; }
+.sk-side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.sk-wallet { border-color: var(--line-2); background: var(--surface); }
+.sk-wallet .sk { background-color: rgba(255, 255, 255, 0.06); }
+.sk-wake { margin-top: 24px; animation: fade 0.4s; }
+@keyframes sk-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+/* Thin progress bar at the top while pages or data load. */
+.topbar {
+  position: fixed; top: 0; left: 0; z-index: 90; height: 3px; width: 0; opacity: 0;
+  background: var(--brand); box-shadow: 0 0 10px var(--brand); pointer-events: none;
+  transition: width 0.4s var(--ease), opacity 0.3s;
+}
+.topbar.on { opacity: 1; width: 70%; transition: width 8s cubic-bezier(0.1, 0.6, 0.2, 1), opacity 0.2s; }
+.topbar.done { opacity: 0; width: 100%; transition: width 0.25s, opacity 0.4s 0.2s; }
+
+/* Pull-to-refresh indicator. */
+.ptr {
+  position: fixed; left: 50%; top: calc(var(--appbar-h) + var(--safe-top) + 8px); z-index: 35;
+  width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--line-2); box-shadow: var(--shadow); color: var(--brand);
+  transform: translateY(-80px); opacity: 0; transition: opacity 0.2s;
+}
+.ptr svg { width: 20px; height: 20px; }
+.ptr.ready svg { transform: rotate(180deg); transition: transform 0.2s; }
+.ptr.loading svg { animation: spin 0.8s linear infinite; }
+
+/* Error state with retry. */
+.page-error { text-align: center; padding: 48px 20px; }
+.page-error .icon-tile { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 14px; }
+
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }

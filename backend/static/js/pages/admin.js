@@ -1,6 +1,7 @@
 import { get, post, del, upload } from '../api.js';
 import { store, gameName } from '../store.js';
 import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
+import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
 const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['users', 'Users'], ['ocr', 'OCR test']];
@@ -20,7 +21,7 @@ export default async function admin(view, { query }) {
 
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-    body.innerHTML = String(skeleton(80, 3));
+    body.innerHTML = String(sk.adminRows());
     try { await ({ overview, review, withdrawals, tournaments, users, ocr })[tab](body, draw); }
     catch (e) { body.innerHTML = String(empty('alert', 'Could not load', e.message)); }
   }

@@ -74,7 +74,7 @@ func main() {
 		client.ReadPump()
 	}))
 
-	api := app.Group("/api", middleware.RateLimiter())
+	api := app.Group("/api", middleware.RateLimiter(), middleware.RateLimiterUser())
 	api.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "db": db.Pool != nil, "version": config.Cfg.AppVersion})
 	})

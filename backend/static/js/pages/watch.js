@@ -1,6 +1,7 @@
 import { get, post, del } from '../api.js';
 import { store, gameName } from '../store.js';
 import { html, ic, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, toastError, esc } from '../ui.js';
+import { sk } from '../skeletons.js';
 import { gameChips } from '../components.js';
 import { navigate } from '../router.js';
 import * as rt from '../realtime.js';
@@ -16,7 +17,7 @@ async function list(view) {
   view.innerHTML = String(html`<div class="page">
     <div class="row between"><div><div class="h1">Live</div><div class="muted small" style="margin-top:4px">Watch players compete in real time.</div></div>
       <button class="btn primary sm" id="golive">${ic('radio')} Go live</button></div>
-    <div id="streams" style="margin-top:18px">${skeleton(90, 3)}</div></div>`);
+    <div id="streams" style="margin-top:18px">${sk.rows(3)}</div></div>`);
   view.querySelector('#golive').onclick = goLive;
 
   const draw = async () => {

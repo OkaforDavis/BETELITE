@@ -12,7 +12,7 @@ const ordinal = (n) => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n] || 'th');
 export default async function tournamentPage(view, { id }) {
   let tab = 'overview';
   let data;
-  view.innerHTML = String(html`<div class="page">${skeleton(200)}${skeleton(240)}</div>`);
+  // The router already shows this page's skeleton.
 
   async function load() {
     try { data = await get('/tournaments/' + encodeURIComponent(id)); }
