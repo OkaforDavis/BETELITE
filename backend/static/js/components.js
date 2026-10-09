@@ -26,7 +26,7 @@ export function nextStep(m) {
 export function matchHero(m) {
   const uid = me();
   const step = nextStep(m);
-  const prize = m.kind === 'p2p' ? money(Math.floor((m.pool * 80) / 100), m.currency) : '';
+  const prize = m.kind === 'p2p' && m.pool > 0 ? money(Math.floor((m.pool * 80) / 100), m.currency) : '';
   const deadline = m.status === 'submitted' ? m.disputeDeadline : m.status === 'ready' ? m.playDeadline : null;
   return html`
   <a class="card highlight tap" href="/match/${m.id}" style="display:block;color:inherit">
@@ -60,21 +60,49 @@ export function matchRow(m) {
   </a>`;
 }
 
+// Tournament formats: label, icon, badge style.
+export const FORMATS = {
+  knockout: ['Knockout', 'trophy', ''],
+  league: ['League', 'list', 'info'],
+  swiss: ['Points', 'grid', 'info'],
+};
+export const formatBadge = (t) => {
+  const [label, icon, cls] = FORMATS[t.format] || FORMATS.knockout;
+  return html`<span class="badge ${cls}">${ic(icon)}${label}</span>`;
+};
+
+// Prize amounts (1st place first) in the currency shown to this player.
+// Fixed-prize tournaments are paid in each winner's own currency.
+export function tournamentPrizes(t) {
+  const cur = store.get().profile?.currency || t.currency;
+  if (t.fixedPrizes) {
+    const c = t.fixedPrizes[cur] ? cur : Object.keys(t.fixedPrizes)[0];
+    return { list: t.fixedPrizes[c] || [], cur: c };
+  }
+  return { list: (t.prizes || []).filter((p) => p > 0), cur: t.currency };
+}
+
+// Membership badge next to a player's name.
+export const TIER_NAMES = { pro: 'Pro', pro_plus: 'Pro Plus', elite: 'Elite' };
+export const tierBadge = (tier) => (TIER_NAMES[tier] ? html`<span class="badge tier-${tier}">${ic(tier === 'elite' ? 'crown' : 'sparkles')}${TIER_NAMES[tier]}</span>` : '');
+
 export function tournamentCard(t) {
   const pct = Math.round((t.playerCount / t.maxPlayers) * 100);
-  const top = t.prizes?.[0] || 0;
+  const prizes = tournamentPrizes(t);
+  const top = prizes.list[0] || 0;
+  const early = t.status === 'open' && t.membersOnlyUntil && new Date(t.membersOnlyUntil) > new Date();
   const status = { open: ['Registering', 'brand'], active: ['In progress', 'live info'], finished: ['Finished', ''], cancelled: ['Cancelled', 'danger'] }[t.status] || [t.status, ''];
   return html`
   <a class="card tap" href="/tournaments/${t.id}" style="display:block;color:inherit">
     <div class="row between">
-      <span class="badge ${t.format === 'league' ? 'info' : ''}">${ic(t.format === 'league' ? 'list' : 'trophy')}${t.format === 'league' ? 'League' : 'Knockout'}</span>
+      <span class="row" style="gap:6px">${formatBadge(t)}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
       <span class="badge ${status[1]}">${status[0]}</span>
     </div>
     <div class="h3" style="margin-top:12px">${t.name}</div>
     <div class="small muted">${t.gameName}${t.joined ? html` · <span class="brand-text">You're in</span>` : ''}</div>
     <div class="grid-3" style="margin-top:14px">
-      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : 'Free'}</div></div>
-      <div><div class="tiny faint">1ST PRIZE</div><div class="h3 num brand-text">${top ? money(top, t.currency) : '—'}</div></div>
+      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : '1 entry'}</div></div>
+      <div><div class="tiny faint">1ST PRIZE</div><div class="h3 num brand-text">${top ? money(top, prizes.cur) : '—'}</div></div>
       <div><div class="tiny faint">PLAYERS</div><div class="h3 num">${t.playerCount}/${t.maxPlayers}</div></div>
     </div>
     <div class="progress" style="margin-top:12px" aria-label="${pct}% full"><span style="width:${pct}%"></span></div>

@@ -19,6 +19,10 @@
   --warn-soft: rgba(255, 176, 32, 0.12);
   --info: #3db2ff;
   --info-soft: rgba(61, 178, 255, 0.12);
+  --gold: #f5c542;
+  --gold-soft: rgba(245, 197, 66, 0.14);
+  --violet: #a78bfa;
+  --violet-soft: rgba(167, 139, 250, 0.14);
 
   --text: #f2f5fa;
   --text-2: #a3aec2;
@@ -216,6 +220,9 @@ button.list-row:active { background: var(--surface-2); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.danger { background: var(--danger-soft); color: var(--danger); }
 .badge.info { background: var(--info-soft); color: var(--info); }
+.badge.tier-pro { background: var(--brand-soft); color: var(--brand); }
+.badge.tier-pro_plus { background: var(--violet-soft); color: var(--violet); }
+.badge.tier-elite { background: var(--gold-soft); color: var(--gold); }
 .badge.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.4s infinite; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
@@ -507,3 +514,18 @@ button.list-row:active { background: var(--surface-2); }
 .page-error .icon-tile { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 14px; }
 
 @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+/* ── Membership ─────────────────────────────────────────────── */
+.plans { display: grid; gap: 12px; }
+.plan.current { border-color: var(--brand-line); box-shadow: 0 0 0 1px var(--brand-line) inset; }
+.plan-name { font: 700 20px/1.1 var(--font-display); letter-spacing: 0.02em; }
+.plan.tier-pro .plan-name { color: var(--brand); }
+.plan.tier-pro_plus .plan-name { color: var(--violet); }
+.plan.tier-elite .plan-name { color: var(--gold); }
+.plan-price { font: 700 30px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.plan-price small { font: 500 13px var(--font); color: var(--text-3); margin-left: 4px; }
+.plan-entries { font-weight: 700; color: var(--text); }
+.usage-dots { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.usage-dots span { width: 22px; height: 8px; border-radius: var(--r-pill); background: var(--surface-3); }
+.usage-dots span.used { background: var(--brand); }
+@media (min-width: 720px) { .plans { grid-template-columns: repeat(2, 1fr); } }

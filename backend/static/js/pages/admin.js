@@ -148,48 +148,74 @@ async function tournaments(body, redraw) {
   const { tournaments: list } = await get('/tournaments');
   body.innerHTML = String(html`<button class="btn primary block" id="new">${ic('plus')} Create tournament</button>
     <div class="list" style="margin-top:16px">${list.length ? list.map((t) => html`<div class="list-row">
-      <div class="grow"><div class="h3">${t.name}</div><div class="small muted">${t.format} · ${t.gameName} · ${t.playerCount}/${t.maxPlayers} · ${t.entryFee ? money(t.entryFee, t.currency) : 'free'} · ${t.status}</div></div>
+      <div class="grow"><div class="h3">${t.name}</div><div class="small muted">${t.format} · ${t.gameName} · ${t.playerCount}/${t.maxPlayers} · ${t.entryFee ? money(t.entryFee, t.currency) : t.fixedPrizes ? '1st ' + money(t.fixedPrizes.GHS?.[0] || 0, 'GHS') : 'free'} · ${t.status}</div></div>
       ${t.status === 'open' ? html`<button class="btn danger sm" data-cancel="${t.id}">Cancel</button>` : html`<a class="btn secondary sm" href="/tournaments/${t.id}">View</a>`}</div>`) : html`<div class="list-row muted">No tournaments yet</div>`}</div>`);
 
   body.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = async () => {
-    if (await confirmSheet({ title: 'Cancel tournament?', message: 'Everyone who joined gets their entry fee back.', confirm: 'Cancel tournament', danger: true }))
+    if (await confirmSheet({ title: 'Cancel tournament?', message: 'Everyone who joined gets their entry back.', confirm: 'Cancel tournament', danger: true }))
       busy(b, async () => { await del('/admin/tournaments/' + b.dataset.cancel); toast('Tournament cancelled'); redraw(); });
   }));
   body.querySelector('#new').onclick = () => {
     let game = store.get().games[0].id;
     let format = 'knockout';
-    sheet(String(html`${sheetHead('Create tournament')}
+    const staking = store.get().stakingEnabled;
+    // Suggested fixed prizes (major units), from the launch plan.
+    const PRESETS = {
+      knockout: { 8: [[60], [6000]], 16: [[100], [10000]], 32: [[150], [15000]] },
+      swiss: { 8: [[35, 15, 10], [3500, 1500, 1000]], 16: [[60, 25, 15], [6000, 2500, 1500]], 32: [[80, 40, 30], [8000, 4000, 3000]] },
+      league: { 8: [[35, 15, 10], [3500, 1500, 1000]], 16: [[60, 25, 15], [6000, 2500, 1500]] },
+    };
+    sheet(String(html`${sheetHead('Create tournament', 'Fixed prizes in cedis and naira, paid by CrestArena')}
       <form id="ct">
         <label class="field"><span class="label">Name</span><input class="input" name="name" required maxlength="60" placeholder="e.g. Friday Night Cup"></label>
         <div class="field"><span class="label">Game</span><div id="g">${gameChips(game)}</div></div>
-        <div class="field"><span class="label">Format</span><div class="seg" id="fmt"><button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="league">League</button></div></div>
+        <div class="field"><span class="label">Format</span><div class="seg" id="fmt">
+          <button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="swiss">Points</button><button type="button" data-f="league">League</button></div>
+          <p class="hint" id="fmt-hint"></p></div>
         <div class="grid-2" style="margin-top:14px">
-          <label class="field"><span class="label">Players</span><input class="input num" name="max" inputmode="numeric" value="8" required></label>
-          <label class="field" style="margin-top:0"><span class="label">Entry fee (₦, 0 = free)</span><input class="input num" name="fee" inputmode="numeric" value="0"></label></div>
+          <label class="field"><span class="label">Players</span><select class="select" name="max"><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option></select></label>
+          <label class="field" style="margin-top:0"><span class="label">Hours per round</span><input class="input num" name="hours" inputmode="numeric" value="24"></label></div>
         <div class="grid-2" style="margin-top:14px">
-          <label class="field"><span class="label">Hours per round</span><input class="input num" name="hours" inputmode="numeric" value="24"></label>
-          <label class="field" style="margin-top:0"><span class="label">Prize seed (free only, ₦)</span><input class="input num" name="seed" inputmode="numeric" value="0"></label></div>
-        <label class="field"><span class="label">Prize split % (1st, 2nd, …)</span><input class="input" name="split" value="70"></label>
-        <p class="hint" id="split-hint">Knockout default: 70 (winner only). League default: 30, 10, 4.5, 4.5. The rest is the platform's share.</p>
+          <label class="field"><span class="label">Prizes ₵ (1st, 2nd, …)</span><input class="input" name="ghs" required></label>
+          <label class="field" style="margin-top:0"><span class="label">Prizes ₦ (1st, 2nd, …)</span><input class="input" name="ngn" required></label></div>
+        <label class="field"><span class="label">Members-only early sign-up (hours, 0 = none)</span><input class="input num" name="early" inputmode="numeric" value="12"></label>
+        ${staking ? html`<label class="field"><span class="label">Entry fee (₦, 0 = prize tournament)</span><input class="input num" name="fee" inputmode="numeric" value="0"></label>` : ''}
+        <p class="hint">Every player uses one monthly entry. Prizes are the same for everyone and don't depend on how many members paid.</p>
         <div class="sheet-actions"><button class="btn primary block" type="submit">Create</button></div></form>`), {
       onMount(root, close) {
         const f = root.querySelector('#ct');
+        const hint = root.querySelector('#fmt-hint');
+        const HINTS = {
+          knockout: 'Lose once and you are out. Pays 1st (and optionally 2nd).',
+          swiss: 'Everyone plays every round (8 players: 3 rounds, 16: 4, 32: 5) against players on similar points. Top 3 by points win.',
+          league: 'Everyone plays everyone once. Best for 8 players or fewer (up to 20).',
+        };
+        const preset = () => {
+          const p = PRESETS[format]?.[f.max.value];
+          if (p) { f.ghs.value = p[0].join(', '); f.ngn.value = p[1].join(', '); }
+          hint.textContent = HINTS[format];
+        };
         const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); }));
         bindG();
         root.querySelectorAll('[data-f]').forEach((b) => (b.onclick = () => {
           format = b.dataset.f;
           root.querySelectorAll('[data-f]').forEach((x) => x.classList.toggle('active', x === b));
-          f.split.value = format === 'league' ? '30, 10, 4.5, 4.5' : '70';
-          f.max.value = format === 'league' ? '16' : '8';
+          if (format === 'league' && +f.max.value > 16) f.max.value = '8';
+          preset();
         }));
+        f.max.onchange = preset;
+        preset();
+        const list = (s) => s.split(',').map((x) => Math.round(parseFloat(x) * 100)).filter((x) => x > 0);
         f.onsubmit = (e) => {
           e.preventDefault();
-          const num = (k) => parseFloat(f[k].value) || 0;
+          const num = (k) => parseFloat(f[k]?.value) || 0;
+          const ghs = list(f.ghs.value);
+          const ngn = list(f.ngn.value);
+          if (ghs.length !== ngn.length) return toast('Give the same number of prizes in cedis and naira', 'err');
           busy(f.querySelector('[type=submit]'), async () => {
             await post('/admin/tournaments', {
-              name: f.name.value, game, format, maxPlayers: num('max'), entryFee: Math.round(num('fee') * 100),
-              roundHours: num('hours'), prizePool: Math.round(num('seed') * 100),
-              prizeSplit: f.split.value.split(',').map((x) => parseFloat(x)).filter((x) => !isNaN(x)),
+              name: f.name.value, game, format, maxPlayers: num('max'), roundHours: num('hours'), earlyHours: num('early'),
+              entryFee: Math.round(num('fee') * 100), prizes: { GHS: ghs, NGN: ngn },
             });
             close(); toast('Tournament created'); redraw();
           });

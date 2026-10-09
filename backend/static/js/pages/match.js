@@ -51,7 +51,7 @@ export default async function matchPage(view, { id }) {
 
       <section class="section">
         <div class="list">
-          ${m.kind === 'p2p' ? html`
+          ${m.kind === 'p2p' && m.stake > 0 ? html`
             <div class="list-row"><div class="icon-tile">${ic('coins')}</div><div class="grow muted">Stake (each)</div><b class="num">${money(m.stake, m.currency)}</b></div>
             <div class="list-row"><div class="icon-tile brand">${ic('trophy')}</div><div class="grow muted">Winner gets</div><b class="num brand-text">${money(prize, m.currency)}</b></div>` : ''}
           <div class="list-row"><div class="icon-tile">${ic('hash')}</div><div class="grow muted">Match ID</div>
@@ -97,7 +97,7 @@ export default async function matchPage(view, { id }) {
         const prize = m.kind === 'p2p' ? Math.floor((m.pool * 80) / 100) : 0;
         return html`<div class="notice ${won ? 'brand' : ''}">${ic(won ? 'trophy' : draw ? 'scale' : 'checkCircle')}<div>
           <b>${won ? 'You won!' : draw ? 'Draw' : 'Match finished'}</b>
-          <div class="small">${won && prize ? html`${money(prize, m.currency)} was added to your wallet.` : draw && m.kind === 'p2p' ? 'Both stakes were refunded.' : won ? 'You advance in the tournament.' : 'Better luck next time. Ready for a rematch?'}</div></div></div>
+          <div class="small">${won && prize ? html`${money(prize, m.currency)} was added to your wallet.` : draw && m.kind === 'p2p' ? (m.stake > 0 ? 'Both stakes were refunded.' : 'Honours even. Ready for a rematch?') : won ? 'You advance in the tournament.' : 'Better luck next time. Ready for a rematch?'}</div></div></div>
           ${m.kind === 'p2p' ? html`<a class="btn secondary block" href="/play" style="margin-top:12px">${ic('swords')} Play again</a>` : ''}`;
       }
       case 'void':

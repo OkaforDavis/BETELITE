@@ -508,6 +508,10 @@ func settleEscrow(ctx context.Context, tx pgx.Tx, challengeID, winner, homeID, a
 	if status != "held" {
 		return nil
 	}
+	if pool == 0 { // free friendly match: nothing to pay
+		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'paid_out' WHERE id = $1", escrowID)
+		return err
+	}
 	if winner == "" {
 		if err := AdjustBalance(ctx, tx, homeID, amount, "wager_refund", challengeID); err != nil {
 			return err
@@ -565,7 +569,11 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 		if err := tx.QueryRow(ctx, "SELECT id, amount, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", deref(challengeID)).Scan(&escrowID, &amount, &est); err != nil {
 			return err
 		}
-		if est == "held" {
+		if est == "held" && amount == 0 {
+			if _, err := tx.Exec(ctx, "UPDATE escrow SET status = 'refunded' WHERE id = $1", escrowID); err != nil {
+				return err
+			}
+		} else if est == "held" {
 			if err := AdjustBalance(ctx, tx, homeID, amount, "wager_refund", deref(challengeID)); err != nil {
 				return err
 			}
@@ -585,6 +593,9 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 	}
 
 	msg := "The match was cancelled and your stake refunded. " + reason
+	if kind != "tournament" && stakeless(ctx, deref(challengeID)) {
+		msg = "The match was cancelled. " + reason
+	}
 	if kind == "tournament" {
 		msg = "The result was cleared. Please replay the match and submit a new screenshot. " + reason
 	}
@@ -639,7 +650,9 @@ func announceResult(m *MatchView) {
 		switch {
 		case m.WinnerID == p:
 			title = "You won! 🏆"
-			if m.Kind == "p2p" {
+			if m.Kind == "p2p" && m.Pool == 0 {
+				body = score + ". Nice win!"
+			} else if m.Kind == "p2p" {
 				body = fmt.Sprintf("%s. %s winnings added to your wallet.", score, FormatMoney(m.Pool*P2PWinnerPercent/100, m.Currency))
 			} else {
 				body = score + ". You advance in " + m.TournamentName + "."
@@ -647,7 +660,7 @@ func announceResult(m *MatchView) {
 		case m.WinnerID != "":
 			title = "Match result confirmed"
 		default:
-			if m.Kind == "p2p" {
+			if m.Kind == "p2p" && m.Pool > 0 {
 				body = score + ". Your stake has been refunded."
 			}
 		}
@@ -720,4 +733,13 @@ func capitalize(s string) string {
 // TournamentMatches lists a tournament's fixtures in round order.
 func TournamentMatches(ctx context.Context, tournamentID string) ([]*MatchView, error) {
 	return queryMatches(ctx, "WHERE m.tournament_id = $1 ORDER BY m.round, m.slot", tournamentID)
+}
+
+// stakeless reports whether a 1v1 challenge was a free friendly match.
+func stakeless(ctx context.Context, challengeID string) bool {
+	var amount int64
+	if err := db.Pool.QueryRow(ctx, "SELECT amount FROM escrow WHERE challenge_id = $1", challengeID).Scan(&amount); err != nil {
+		return false
+	}
+	return amount == 0
 }

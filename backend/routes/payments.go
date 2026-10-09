@@ -80,22 +80,11 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, fmt.Sprintf("Deposits must be between %s and %s",
 				services.FormatMoney(minDeposit[currency], currency), services.FormatMoney(maxDeposit[currency], currency)))
 		}
-		ref := "dep_" + utils.GenerateBaseID()
-		if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency) VALUES ($1,$2,$3,$4)", ref, uid, req.Amount, currency); err != nil {
-			return fail(c, err)
-		}
-		authURL, accessCode, err := services.PaystackInit(ctx, email, req.Amount, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+		checkout, err := startDeposit(c, uid, email, req.Amount, currency, "")
 		if err != nil {
 			return fail(c, err)
 		}
-		publicKey := config.Cfg.PaystackPublicKey
-		if currency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
-			publicKey = config.Cfg.PaystackPublicKeyGH
-		}
-		return utils.SendSuccess(c, fiber.Map{
-			"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
-			"email": email, "amount": req.Amount, "currency": currency,
-		})
+		return utils.SendSuccess(c, checkout)
 	})
 
 	// Called by the app after checkout; safe to call repeatedly.
@@ -291,4 +280,27 @@ func appURL(c *fiber.Ctx) string {
 		return strings.TrimRight(config.Cfg.AppURL, "/")
 	}
 	return c.BaseURL()
+}
+
+// startDeposit records a pending deposit and opens a Paystack checkout. A
+// purpose such as "membership:pro" is acted on once the payment is confirmed.
+func startDeposit(c *fiber.Ctx, uid, email string, amount int64, currency, purpose string) (fiber.Map, error) {
+	ctx := c.Context()
+	ref := "dep_" + utils.GenerateBaseID()
+	if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency, purpose) VALUES ($1,$2,$3,$4,NULLIF($5,''))",
+		ref, uid, amount, currency, purpose); err != nil {
+		return nil, err
+	}
+	authURL, accessCode, err := services.PaystackInit(ctx, email, amount, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+	if err != nil {
+		return nil, err
+	}
+	publicKey := config.Cfg.PaystackPublicKey
+	if currency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
+		publicKey = config.Cfg.PaystackPublicKeyGH
+	}
+	return fiber.Map{
+		"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
+		"email": email, "amount": amount, "currency": currency,
+	}, nil
 }

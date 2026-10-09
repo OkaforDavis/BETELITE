@@ -18,6 +18,7 @@ const TX = {
   tournament_prize: ['Tournament prize', 'crown', 'brand'],
   referral: ['Invite reward', 'users', 'brand'],
   referral_bonus: ['Welcome bonus', 'sparkles', 'brand'],
+  membership: ['Membership', 'sparkles', ''],
   admin_adjustment: ['Balance adjustment', 'settings', ''],
 };
 const WD_STATUS = { pending: ['Awaiting approval', 'warn'], processing: ['Sending', 'info'], paid: ['Paid', 'brand'], rejected: ['Rejected', 'danger'], failed: ['Failed, refunded', 'danger'] };

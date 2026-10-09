@@ -18,7 +18,7 @@ export default async function play(view, { query }) {
 
   view.innerHTML = String(html`<div class="page">
     <div class="row between">
-      <div><div class="h1">Play 1v1</div><div class="muted small" style="margin-top:4px">Stake, play, upload the result. Winner takes ${WIN_PCT}%.</div></div>
+      <div><div class="h1">Play 1v1</div><div class="muted small" style="margin-top:4px">${store.get().stakingEnabled ? `Stake, play, upload the result. Winner takes ${WIN_PCT}%.` : 'Free 1v1 matches. Challenge a player, play, upload the result.'}</div></div>
     </div>
     <button class="btn primary block" style="margin-top:16px" id="new">${ic('plus')} Post a challenge</button>
     <div class="seg" style="margin-top:20px" role="tablist">
@@ -54,9 +54,9 @@ export default async function play(view, { query }) {
             <div class="h3 ellipsis">${c.creatorId === uid ? 'Your challenge' : c.creatorName}</div>
             <div class="small muted ellipsis">${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>
           </div>
-          <div style="text-align:right">
+          <div style="text-align:right">${c.amount ? html`
             <div class="h3 num">${money(c.amount, c.currency)}</div>
-            <div class="tiny brand-text">Win ${money(c.prize, c.currency)}</div>
+            <div class="tiny brand-text">Win ${money(c.prize, c.currency)}</div>` : html`<span class="badge">Friendly</span>`}
           </div>
           ${c.creatorId === uid
             ? html`<button class="btn danger sm" data-cancel="${c.id}" aria-label="Cancel challenge">${ic('x')}</button>`
@@ -85,6 +85,7 @@ export default async function play(view, { query }) {
 
   async function accept(c, btn) {
     const profile = store.get().profile;
+    if (!c.amount) return acceptFree(c, btn);
     if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => accept(c, btn));
     if (profile.balance < c.amount) {
@@ -106,7 +107,23 @@ export default async function play(view, { query }) {
     });
   }
 
-  // Live lobby updates refresh quietly; a failed refresh keeps the current list.
+  async function acceptFree(c, btn) {
+    if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptFree(c, btn));
+    const ok = await confirmSheet({
+      title: `Play ${c.creatorName}?`,
+      message: `A free friendly match. Play ${gameName(c.game)} within 3 hours and upload the full-time screen showing both usernames.`,
+      confirm: 'Accept challenge',
+    });
+    if (!ok) return;
+    busy(btn, async () => {
+      const { matchId } = await post('/lobby/accept', { challengeId: c.id });
+      toast("Challenge accepted. It's game time!", 'ok');
+      refreshCurrent();
+      navigate('/match/' + matchId);
+    });
+  }
+
+$1; a failed refresh keeps the current list.
   const refreshOpen = () => tab === 'open' && drawOpen().catch(() => {});
   const offA = rt.on('lobby_new_challenge', refreshOpen);
   const offB = rt.on('lobby_challenge_removed', refreshOpen);
@@ -115,6 +132,7 @@ export default async function play(view, { query }) {
 }
 
 function createChallenge(onDone) {
+  if (!store.get().stakingEnabled) return createFreeChallenge(onDone);
   const profile = store.get().profile;
   if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
   const cur = profile.currency;
@@ -174,6 +192,45 @@ function createChallenge(onDone) {
           close();
           toast('Challenge posted. We’ll notify you when someone accepts.');
           refreshProfile();
+          onDone();
+        });
+      };
+    },
+  });
+}
+
+// Free friendly challenge (staking is off until CrestArena is licensed).
+function createFreeChallenge(onDone) {
+  const profile = store.get().profile;
+  const games = store.get().games;
+  let game = profile.gameProfiles[0]?.game || games[0].id;
+
+  sheet(String(html`${sheetHead('Post a challenge', 'A free friendly match against another player')}
+    <form id="cc">
+      <span class="label">Game</span>
+      <div id="games">${gameChips(game)}</div>
+      <ul class="checklist" style="margin-top:18px">
+        <li class="ok">${ic('check')}<span>Play a <b>player-vs-player</b> match (not vs AI or a scenario)</span></li>
+        <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>
+        <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute, then the result is final</span></li>
+      </ul>
+      <div class="sheet-actions"><button class="btn primary block" type="submit">Post challenge</button></div>
+    </form>`), {
+    label: 'Post a challenge',
+    onMount(root, close) {
+      const bindGames = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
+        game = b.dataset.game;
+        root.querySelector('#games').innerHTML = String(gameChips(game));
+        bindGames();
+      }));
+      bindGames();
+      root.querySelector('#cc').onsubmit = (e) => {
+        e.preventDefault();
+        if (!hasGameProfile(game)) { close(); return gameIdSheet(game, () => createFreeChallenge(onDone)); }
+        busy(e.target.querySelector('[type=submit]'), async () => {
+          await post('/lobby/create', { game, amount: 0 });
+          close();
+          toast('Challenge posted. We’ll notify you when someone accepts.');
           onDone();
         });
       };

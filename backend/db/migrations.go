@@ -256,6 +256,25 @@ var migrations = []string{
 	// 6: referral rewards are paid once, after the invited friend's first paid match.
 	`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded_at TIMESTAMPTZ;
 	CREATE INDEX IF NOT EXISTS users_referred_by_idx ON users(referred_by);`,
+
+	// 7: memberships (monthly plans that set how many tournaments a player can
+	// enter), fixed per-currency tournament prizes, members-only early sign-up,
+	// and deposits that buy a plan as soon as they are paid.
+	`CREATE TABLE IF NOT EXISTS memberships (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		tier TEXT NOT NULL,
+		price BIGINT NOT NULL,
+		currency TEXT NOT NULL,
+		starts_at TIMESTAMPTZ NOT NULL,
+		ends_at TIMESTAMPTZ NOT NULL,
+		reminded BOOLEAN NOT NULL DEFAULT FALSE,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS memberships_user_idx ON memberships(user_id, ends_at DESC);
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prizes JSONB;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS members_only_until TIMESTAMPTZ;
+	ALTER TABLE deposits ADD COLUMN IF NOT EXISTS purpose TEXT;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

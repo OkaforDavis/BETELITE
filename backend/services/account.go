@@ -10,7 +10,7 @@ import (
 
 // TermsVersion is the current Terms/Privacy version users must accept.
 // Bump it when the legal documents change materially.
-const TermsVersion = "2026-10-01"
+const TermsVersion = "2026-10-09"
 
 // MinAge is the minimum age to use real-money features.
 const MinAge = 18
@@ -38,6 +38,7 @@ type Profile struct {
 	EmailVerified    bool          `json:"emailVerified"`
 	AdminPending     bool          `json:"adminPending"` // admin email, not yet verified
 	GameProfiles     []GameProfile `json:"gameProfiles"`
+	Tier             string        `json:"tier"` // active membership tier ("free" without a plan)
 	CreatedAt        time.Time     `json:"createdAt"`
 }
 
@@ -66,6 +67,7 @@ func LoadProfile(ctx context.Context, uid string) (*Profile, error) {
 	if strings.HasSuffix(p.Email, ".invalid") {
 		p.Email = ""
 	}
+	p.Tier = ActiveTier(ctx, uid)
 	p.GameProfiles, err = ListGameProfiles(ctx, uid)
 	return &p, err
 }
@@ -107,7 +109,7 @@ func RequireMoneyAccess(ctx context.Context, uid string) error {
 		return userErr(403, "Please accept the latest Terms and Privacy Policy to continue")
 	}
 	if birth == nil || age(*birth) < MinAge {
-		return userErr(403, "You must be 18 or older to play for money")
+		return userErr(403, "You must be 18 or older to play for prizes or money")
 	}
 	return nil
 }

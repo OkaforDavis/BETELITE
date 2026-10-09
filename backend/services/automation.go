@@ -52,6 +52,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	}()
 	ctx := context.Background()
 	ReconcileDeposits(ctx)
+	RemindExpiringMemberships(ctx)
 	purgeOldEvidence(ctx)
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)
@@ -115,7 +116,7 @@ func cleanupStaleChallenges(ctx context.Context, hub *ws.Hub, expiry time.Durati
 		var creator string
 		var amount int64
 		err = tx.QueryRow(ctx, "SELECT creator_id, amount FROM escrow WHERE challenge_id = $1 AND status = 'waiting' FOR UPDATE", cid).Scan(&creator, &amount)
-		if err == nil {
+		if err == nil && amount > 0 {
 			err = AdjustBalance(ctx, tx, creator, amount, "challenge_expired_refund", cid)
 		}
 		if err == nil {
@@ -127,6 +128,10 @@ func cleanupStaleChallenges(ctx context.Context, hub *ws.Hub, expiry time.Durati
 		}
 		log.Printf("[AUTOMATION] expired challenge %s, refunded %d to %s", cid, amount, creator)
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": cid, "reason": "expired"})
-		Notify(creator, "challenge_expired", "Challenge expired", "Nobody accepted your challenge in 24 hours. Your stake has been refunded.", "/wallet", nil)
+		msg := "Nobody accepted your challenge in 24 hours. Your stake has been refunded."
+		if amount == 0 {
+			msg = "Nobody accepted your challenge in 24 hours. Post a new one any time."
+		}
+		Notify(creator, "challenge_expired", "Challenge expired", msg, "/play", nil)
 	}
 }

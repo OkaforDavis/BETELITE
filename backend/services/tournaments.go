@@ -44,6 +44,7 @@ type Standing struct {
 	Points       int    `json:"points"`
 	Eliminated   bool   `json:"eliminated"`
 	Position     *int   `json:"position,omitempty"`
+	Tier         string `json:"tier"` // membership badge
 }
 
 // Standings returns the table, sorted by points, goal difference, goals scored.
@@ -52,7 +53,8 @@ func Standings(ctx context.Context, q interface {
 }, tournamentID string) ([]Standing, error) {
 	rows, err := q.Query(ctx, `
 		SELECT tp.user_id, COALESCE(u.username,''), COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''),
-		       tp.wins, tp.draws, tp.losses, tp.goals, tp.goals_against, tp.points, tp.eliminated, tp.final_position
+		       tp.wins, tp.draws, tp.losses, tp.goals, tp.goals_against, tp.points, tp.eliminated, tp.final_position,
+		       COALESCE((SELECT m.tier FROM memberships m WHERE m.user_id = tp.user_id AND m.starts_at <= NOW() AND m.ends_at > NOW() ORDER BY m.ends_at DESC LIMIT 1), 'free')
 		FROM tournament_players tp
 		JOIN tournaments t ON t.id = tp.tournament_id
 		LEFT JOIN users u ON u.id = tp.user_id
@@ -66,7 +68,7 @@ func Standings(ctx context.Context, q interface {
 	for rows.Next() {
 		var s Standing
 		if err := rows.Scan(&s.UserID, &s.Username, &s.Gamertag, &s.AvatarURL, &s.Wins, &s.Draws, &s.Losses,
-			&s.GoalsFor, &s.GoalsAgainst, &s.Points, &s.Eliminated, &s.Position); err != nil {
+			&s.GoalsFor, &s.GoalsAgainst, &s.Points, &s.Eliminated, &s.Position, &s.Tier); err != nil {
 			return nil, err
 		}
 		s.Played = s.Wins + s.Draws + s.Losses
@@ -249,6 +251,16 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 	tx.QueryRow(ctx, "SELECT COUNT(*) FILTER (WHERE round = $2), COUNT(*) FROM matches WHERE tournament_id = $1 AND status NOT IN ('confirmed','void')", tournamentID, round).
 		Scan(&openThisRound, &openTotal)
 
+	if format == "swiss" {
+		if openThisRound > 0 {
+			return tx.Commit(ctx)
+		}
+		if err := advanceSwiss(ctx, tx, tournamentID, game, name, round, hours); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+
 	if format == "league" {
 		if openTotal > 0 {
 			// Track the earliest round that still has matches to play.
@@ -359,11 +371,14 @@ func roundName(players int) string {
 // finishTournament records final positions, pays prizes and closes the tournament.
 func finishTournament(ctx context.Context, tx pgx.Tx, tournamentID string, order []string) error {
 	var entryFee, seed int64
-	var splitJSON []byte
+	var splitJSON, fixedJSON []byte
 	var format, name, currency string
-	if err := tx.QueryRow(ctx, "SELECT entry_fee, prize_pool, prize_split, format, name, currency FROM tournaments WHERE id = $1", tournamentID).
-		Scan(&entryFee, &seed, &splitJSON, &format, &name, &currency); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT entry_fee, prize_pool, prize_split, format, name, currency, prizes FROM tournaments WHERE id = $1", tournamentID).
+		Scan(&entryFee, &seed, &splitJSON, &format, &name, &currency, &fixedJSON); err != nil {
 		return err
+	}
+	if fixed := ParseFixedPrizes(fixedJSON); fixed != nil {
+		return finishWithFixedPrizes(ctx, tx, tournamentID, name, order, fixed)
 	}
 	split := DefaultSplit(format)
 	if len(splitJSON) > 0 {
@@ -430,4 +445,167 @@ func PrizeAmounts(entryFee, players, seed int64, split []float64) []int64 {
 		out[i] = int64(math.Floor(float64(seed) * pct / sum))
 	}
 	return out
+}
+
+// SwissRounds is how many rounds a Swiss tournament plays: enough for one
+// unbeaten leader (8 players → 3, 16 → 4, 32 → 5).
+func SwissRounds(players int) int {
+	r := 1
+	for 1<<r < players {
+		r++
+	}
+	return max(r, 2)
+}
+
+// advanceSwiss pairs the next Swiss round (players with similar points meet,
+// never the same opponent twice) or finishes the tournament on the table.
+func advanceSwiss(ctx context.Context, tx pgx.Tx, tournamentID, game, name string, round, hours int) error {
+	table, err := Standings(ctx, tx, tournamentID)
+	if err != nil {
+		return err
+	}
+	if round >= SwissRounds(len(table)) {
+		order := make([]string, len(table))
+		for i, s := range table {
+			order[i] = s.UserID
+		}
+		return finishTournament(ctx, tx, tournamentID, order)
+	}
+
+	met := map[[2]string]bool{}
+	rows, err := tx.Query(ctx, "SELECT home_id, COALESCE(away_id,'') FROM matches WHERE tournament_id = $1", tournamentID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var a, b string
+		if rows.Scan(&a, &b) == nil {
+			met[[2]string{a, b}], met[[2]string{b, a}] = true, true
+		}
+	}
+	rows.Close()
+
+	ids := make([]string, len(table))
+	for i, s := range table {
+		ids[i] = s.UserID
+	}
+	pairs := swissPairs(ids, met)
+	if hours <= 0 {
+		hours = 24
+	}
+	next := round + 1
+	deadline := time.Now().Add(time.Duration(hours) * time.Hour)
+	for slot, p := range pairs {
+		if _, err := CreateMatch(ctx, tx, "tournament", game, p[0], p[1], "", tournamentID, next, slot, deadline); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, "UPDATE tournaments SET current_round = $2 WHERE id = $1", tournamentID, next); err != nil {
+		return err
+	}
+	go func() {
+		for _, p := range pairs {
+			for _, uid := range p {
+				Notify(uid, "tournament_round", fmt.Sprintf("%s: round %d", name, next), "Your next match is ready. Play it and upload the result before the deadline.", "/tournaments/"+tournamentID, map[string]any{"tournamentId": tournamentID})
+			}
+		}
+	}()
+	return nil
+}
+
+// swissPairs pairs players in table order, each with the highest-placed
+// opponent they haven't met yet. It backtracks when a greedy choice would
+// leave the last players with only rematches, and allows a rematch only when
+// no other pairing exists. The player count is always even.
+func swissPairs(ids []string, met map[[2]string]bool) [][2]string {
+	var try func(left []string, allowRematch bool) [][2]string
+	try = func(left []string, allowRematch bool) [][2]string {
+		if len(left) == 0 {
+			return [][2]string{}
+		}
+		a := left[0]
+		for i := 1; i < len(left); i++ {
+			b := left[i]
+			if met[[2]string{a, b}] && !allowRematch {
+				continue
+			}
+			rest := append(append([]string{}, left[1:i]...), left[i+1:]...)
+			if sub := try(rest, allowRematch); sub != nil {
+				return append([][2]string{{a, b}}, sub...)
+			}
+		}
+		return nil
+	}
+	if p := try(ids, false); p != nil {
+		return p
+	}
+	return try(ids, true)
+}
+
+// FixedPrizes are set by an admin for each currency (minor units, 1st place
+// first). Players from Ghana and Nigeria play together and each winner is paid
+// in their own wallet currency.
+type FixedPrizes map[string][]int64
+
+// ParseFixedPrizes reads the tournaments.prizes column; nil when unset.
+func ParseFixedPrizes(b []byte) FixedPrizes {
+	if len(b) == 0 {
+		return nil
+	}
+	var p FixedPrizes
+	if json.Unmarshal(b, &p) != nil || len(p) == 0 {
+		return nil
+	}
+	return p
+}
+
+// Places is the number of paid positions.
+func (p FixedPrizes) Places() int {
+	n := 0
+	for _, list := range p {
+		n = max(n, len(list))
+	}
+	return n
+}
+
+func finishWithFixedPrizes(ctx context.Context, tx pgx.Tx, tournamentID, name string, order []string, prizes FixedPrizes) error {
+	type award struct {
+		amount   int64
+		currency string
+	}
+	awards := make([]award, len(order))
+	for i, uid := range order {
+		if _, err := tx.Exec(ctx, "UPDATE tournament_players SET final_position = $3 WHERE tournament_id = $1 AND user_id = $2", tournamentID, uid, i+1); err != nil {
+			return err
+		}
+		var cur string
+		tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&cur)
+		list := prizes[cur]
+		if i >= len(list) || list[i] <= 0 {
+			continue
+		}
+		meta := fmt.Sprintf(`{"position": %d}`, i+1)
+		if err := AdjustBalance(ctx, tx, uid, list[i], "tournament_prize", tournamentID, meta); err != nil {
+			return err
+		}
+		awards[i] = award{list[i], cur}
+	}
+	winner := ""
+	if len(order) > 0 {
+		winner = order[0]
+	}
+	if _, err := tx.Exec(ctx, "UPDATE tournaments SET status = 'finished', winner_id = NULLIF($2,''), finished_at = NOW() WHERE id = $1", tournamentID, winner); err != nil {
+		return err
+	}
+	go func() {
+		for i, uid := range order {
+			title, msg := "Tournament finished", fmt.Sprintf("%s has finished. You placed #%d.", name, i+1)
+			if a := awards[i]; a.amount > 0 {
+				title = fmt.Sprintf("You placed #%d! 🏆", i+1)
+				msg = fmt.Sprintf("%s prize from %s has been added to your wallet.", FormatMoney(a.amount, a.currency), name)
+			}
+			Notify(uid, "tournament_finished", title, msg, "/tournaments/"+tournamentID, map[string]any{"tournamentId": tournamentID})
+		}
+	}()
+	return nil
 }

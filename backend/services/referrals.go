@@ -83,7 +83,9 @@ func hasPaidMatch(ctx context.Context, uid string) bool {
 	var played bool
 	db.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM matches m LEFT JOIN tournaments t ON t.id = m.tournament_id
 		WHERE (m.home_id = $1 OR m.away_id = $1) AND m.status = 'confirmed'
-		  AND (m.kind = 'p2p' OR COALESCE(t.entry_fee,0) > 0))`, uid).Scan(&played)
+		  AND ((m.kind = 'p2p' AND EXISTS(SELECT 1 FROM escrow e WHERE e.challenge_id = m.challenge_id AND e.amount > 0))
+		       OR COALESCE(t.entry_fee,0) > 0))
+		OR EXISTS(SELECT 1 FROM memberships WHERE user_id = $1)`, uid).Scan(&played)
 	return played
 }
 
@@ -112,7 +114,7 @@ func ClaimReferral(ctx context.Context, uid, code string) (string, error) {
 		return "", userErr(409, "Invite codes can only be added in your first 7 days")
 	}
 	if hasPaidMatch(ctx, uid) {
-		return "", userErr(409, "Invite codes must be added before your first paid match")
+		return "", userErr(409, "Invite codes must be added before your first membership or paid match")
 	}
 	var inviter string
 	err = tx.QueryRow(ctx, "SELECT id FROM users WHERE referral_code = $1 AND deleted_at IS NULL", code).Scan(&inviter)
@@ -133,7 +135,7 @@ func ClaimReferral(ctx context.Context, uid, code string) (string, error) {
 	}
 	name := Username(ctx, inviter)
 	Notify(inviter, "referral_joined", "A friend joined with your code",
-		Username(ctx, uid)+" signed up with your invite. You'll get your reward after their first paid match.", "/profile", nil)
+		Username(ctx, uid)+" signed up with your invite. You'll get your reward when they buy a membership.", "/profile", nil)
 	return name, nil
 }
 
@@ -176,8 +178,8 @@ func RewardReferral(ctx context.Context, uid string) {
 	friend := Username(ctx, uid)
 	if inviterCurrency != "" {
 		Notify(inviter, "referral_reward", "Invite reward earned 🎉",
-			fmt.Sprintf("%s played their first paid match. %s has been added to your wallet.", friend, FormatMoney(ReferralInviterReward[inviterCurrency], inviterCurrency)), "/wallet", nil)
+			fmt.Sprintf("%s bought a membership or played a paid match. %s has been added to your wallet.", friend, FormatMoney(ReferralInviterReward[inviterCurrency], inviterCurrency)), "/wallet", nil)
 	}
 	Notify(uid, "referral_reward", "Welcome bonus 🎉",
-		fmt.Sprintf("You played your first paid match. Your %s invite bonus has been added to your wallet.", FormatMoney(ReferralFriendReward[currency], currency)), "/wallet", nil)
+		fmt.Sprintf("Your %s invite bonus has been added to your wallet.", FormatMoney(ReferralFriendReward[currency], currency)), "/wallet", nil)
 }
