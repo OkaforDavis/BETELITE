@@ -98,7 +98,7 @@ function nowBody(current) {
   return html`<div class="grid-2">
     <a class="card tap" href="/play" style="color:inherit">
       <div class="icon-tile brand">${ic('swords')}</div>
-      <div class="h3" style="margin-top:12px">Play 1v1</div>
+      <div class="h3" style="margin-top:12px">${store.get().stakingEnabled ? 'Play 1v1' : 'Friendly 1v1'}</div>
       <div class="small muted">${store.get().stakingEnabled ? 'Challenge a player. Winner takes 80% of the pot.' : 'Free friendly matches against real players.'}</div></a>
     <a class="card tap" href="/tournaments" style="color:inherit">
       <div class="icon-tile info">${ic('trophy')}</div>

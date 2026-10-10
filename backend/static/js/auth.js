@@ -2,9 +2,20 @@
 import { html, ic, $, busy, toast } from './ui.js';
 import { pendingInvite, setPendingInvite } from './invite.js';
 
+// The server stamps FIREBASE_AUTH_DOMAIN into index.html. Serving the sign-in
+// pages from our own domain keeps Google sign-in working in browsers that block
+// third-party storage (Safari, Chrome, Firefox, installed apps).
+const stampedAuthDomain = document.querySelector('meta[name=crest-auth-domain]')?.content || '';
+const authDomain = stampedAuthDomain && !stampedAuthDomain.startsWith('__') ? stampedAuthDomain : 'betelite-crest.firebaseapp.com';
+
+// Google blocks sign-in inside in-app browsers (WhatsApp, Instagram, Facebook, TikTok…).
+const inAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Snapchat|TikTok|musical_ly|Line\/|Twitter|LinkedInApp|; wv\)/i.test(navigator.userAgent);
+const isAndroid = /android/i.test(navigator.userAgent);
+const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
 const firebaseConfig = {
   apiKey: 'AIzaSyCBMcP7ikJCYVkNjGksvglVkVp0ZTvsz0w',
-  authDomain: 'betelite-crest.firebaseapp.com',
+  authDomain,
   projectId: 'betelite-crest',
   storageBucket: 'betelite-crest.firebasestorage.app',
   messagingSenderId: '889436668560',
@@ -38,6 +49,11 @@ function friendly(e) {
     'auth/too-many-requests': 'Too many attempts. Please wait a minute and try again.',
     'auth/network-request-failed': "You're offline. Check your connection.",
     'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
+    'auth/cancelled-popup-request': 'Google sign-in was cancelled.',
+    'auth/unauthorized-domain': "Google sign-in isn't enabled for this web address yet. Use email for now.",
+    'auth/internal-error': 'Google sign-in failed. Try again, or open CrestArena in Chrome or Safari.',
+    'auth/web-storage-unsupported': 'Your browser is blocking sign-in. Turn off private mode or open CrestArena in Chrome or Safari.',
+    'auth/account-exists-with-different-credential': 'This email already has an account. Sign in with your email and password.',
   };
   return map[e?.code] || e?.message || 'Something went wrong. Please try again.';
 }
@@ -73,6 +89,11 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
 
     <div class="or">or</div>
     <button class="btn secondary block oauth" data-google>${ic('google')} Continue with Google</button>
+    ${inAppBrowser ? html`<div class="notice warn" style="margin-top:12px">${ic('alert')}<div class="small">
+      <b>Google sign-in doesn't work inside this app.</b> Open CrestArena in ${isAndroid ? 'Chrome' : 'Safari'} to use Google, or sign in with email above.
+      <div class="row" style="gap:8px;margin-top:10px">
+        ${isAndroid ? html`<a class="btn primary sm" href="intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end">Open in Chrome</a>` : ''}
+        <button class="btn secondary sm" type="button" data-copy-link>${ic('copy')} Copy link</button></div></div></div>` : ''}
 
     <p class="legal-foot">By continuing you agree to our <a href="/legal/terms.html" target="_blank">Terms</a> and
       <a href="/legal/privacy.html" target="_blank">Privacy Policy</a>. 18+ only. Play responsibly.</p>
@@ -119,16 +140,23 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
     const typed = root.querySelector('[name=invite]')?.value;
     if (typed) setPendingInvite(typed);
     const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     await busy(e.currentTarget, async () => {
       try {
+        // Installed apps can't open popups reliably; redirect when the sign-in pages are on our domain.
+        if (isStandalone && authDomain === location.host) return await auth.signInWithRedirect(provider);
         await auth.signInWithPopup(provider);
       } catch (e2) {
-        if (e2?.code === 'auth/popup-blocked' || e2?.code === 'auth/operation-not-supported-in-this-environment') {
+        if (['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/web-storage-unsupported'].includes(e2?.code)) {
           await auth.signInWithRedirect(provider);
-        } else showErr(e2);
+        } else if (e2?.code !== 'auth/popup-closed-by-user' && e2?.code !== 'auth/cancelled-popup-request') showErr(e2);
       }
     });
   };
+  root.querySelector('[data-copy-link]')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.href); toast('Link copied. Paste it in your browser.'); }
+    catch { toast(location.href, 'info'); }
+  });
 }
 
 // Email verification (needed for admin access; recommended for withdrawals).
