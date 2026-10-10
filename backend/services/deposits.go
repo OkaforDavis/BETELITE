@@ -21,9 +21,9 @@ import (
 // on the same checkout).
 func CreditDeposit(ctx context.Context, reference string) (string, error) {
 	var uid, currency, status, purpose string
-	var amount int64
-	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status, COALESCE(purpose,'') FROM deposits WHERE reference = $1", reference).
-		Scan(&uid, &currency, &amount, &status, &purpose)
+	var amount, charged int64
+	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status, COALESCE(purpose,''), COALESCE(charged, amount) FROM deposits WHERE reference = $1", reference).
+		Scan(&uid, &currency, &amount, &status, &purpose, &charged)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", &UserError{Status: 404, Msg: "Deposit not found"}
 	}
@@ -47,8 +47,8 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 	default: // abandoned (not finished yet), ongoing, pending, processing, queued
 		return status, nil
 	}
-	if txn.Currency != currency || txn.Amount < amount {
-		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, amount, currency)
+	if txn.Currency != currency || txn.Amount < charged {
+		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, charged, currency)
 		NotifyAdmins(ctx, "Deposit needs review", "Deposit "+reference+" was paid with a different amount or currency.")
 		return "", &UserError{Status: 409, Msg: "Payment amount mismatch. Please contact support."}
 	}

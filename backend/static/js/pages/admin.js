@@ -100,7 +100,7 @@ async function withdrawals(body, redraw) {
   const { withdrawals: list } = await get('/admin/withdrawals?status=pending');
   if (!list.length) { body.innerHTML = String(html`<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); return; }
   body.innerHTML = String(html`<div class="stack">${list.map((w) => html`<div class="card">
-    <div class="row between"><div class="h2 num">${money(w.amount, w.currency)}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
+    <div class="row between"><div><div class="h2 num">${money(w.payout ?? w.amount, w.currency)}</div>${w.fee ? html`<div class="tiny faint">${money(w.amount, w.currency)} minus ${money(w.fee, w.currency)} transfer fee</div>` : ""}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
     <div class="small" style="margin-top:8px"><b>${w.accountName}</b> · ${w.bankName} · ${w.accountNumber}</div>
     <div class="small muted">${w.username} (${w.email})</div>
     <div class="grid-3" style="margin-top:12px"><button class="btn danger sm" data-reject="${w.id}">Reject</button><button class="btn secondary sm" data-manual="${w.id}">Mark paid</button><button class="btn primary sm" data-approve="${w.id}">Paystack</button></div>
@@ -108,8 +108,8 @@ async function withdrawals(body, redraw) {
   </div>`)}</div>`);
   body.querySelectorAll('[data-manual]').forEach((b) => (b.onclick = () => {
     const w = list.find((x) => x.id === b.dataset.manual);
-    sheet(String(html`${sheetHead('Mark as paid', money(w.amount, w.currency) + ' to ' + w.accountName)}
-      <div class="notice warn">${ic('alert')}<div class="small">Only do this <b>after</b> you have sent <b>${money(w.amount, w.currency)}</b> to
+    sheet(String(html`${sheetHead('Mark as paid', money(w.payout ?? w.amount, w.currency) + ' to ' + w.accountName)}
+      <div class="notice warn">${ic('alert')}<div class="small">Only do this <b>after</b> you have sent <b>${money(w.payout ?? w.amount, w.currency)}</b> to
         <b>${w.accountName}</b>, ${w.bankName} ${w.accountNumber}. The player is told the money has been sent.</div></div>
       <form id="mp" style="margin-top:14px"><label class="field"><span class="label">Bank transfer reference</span>
         <input class="input" name="note" required minlength="3" placeholder="e.g. session ID from your bank app"></label>
@@ -127,7 +127,7 @@ async function withdrawals(body, redraw) {
   }));
   body.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = async () => {
     const w = list.find((x) => x.id === b.dataset.approve);
-    if (await confirmSheet({ title: 'Send ' + money(w.amount, w.currency) + '?', message: `Paystack will transfer the money to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))
+    if (await confirmSheet({ title: 'Send ' + money(w.payout ?? w.amount, w.currency) + '?', message: `Paystack will transfer the money to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))
       busy(b, async () => { await post(`/admin/withdrawals/${w.id}/approve`); toast('Transfer started'); redraw(); });
   }));
   body.querySelectorAll('[data-reject]').forEach((b) => (b.onclick = () => {

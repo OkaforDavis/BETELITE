@@ -86,6 +86,9 @@ func TestMembershipPlansAndEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("renew: %v", err)
 	}
+	if b := balanceOf(ctx, gh); b != 1_50 {
+		t.Errorf("balance after renewal = %d, want 150 (5%% cashback on ₵30)", b)
+	}
 	if d := time.Until(renew.StartsAt); d < 4*24*time.Hour || d > 6*24*time.Hour {
 		t.Errorf("renewal should start when the current plan ends, starts in %v", d)
 	}

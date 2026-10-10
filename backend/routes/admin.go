@@ -167,7 +167,7 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	admin.Get("/withdrawals", func(c *fiber.Ctx) error {
 		status := c.Query("status", "pending")
-		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.currency,
+		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.fee, w.currency,
 			COALESCE(w.bank_name,''), w.account_number, COALESCE(w.account_name,''), w.status, COALESCE(w.note,''), w.created_at
 			FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id WHERE w.status = $1 ORDER BY w.created_at LIMIT 100`, status)
 		if err != nil {
@@ -177,10 +177,10 @@ func SetupAdminRoutes(api fiber.Router) {
 		list := []fiber.Map{}
 		for rows.Next() {
 			var id, uid, name, email, cur, bank, acct, acctName, st, note string
-			var amount int64
+			var amount, fee int64
 			var at time.Time
-			if rows.Scan(&id, &uid, &name, &email, &amount, &cur, &bank, &acct, &acctName, &st, &note, &at) == nil {
-				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "email": email, "amount": amount, "currency": cur,
+			if rows.Scan(&id, &uid, &name, &email, &amount, &fee, &cur, &bank, &acct, &acctName, &st, &note, &at) == nil {
+				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "email": email, "amount": amount, "fee": fee, "payout": amount - fee, "currency": cur,
 					"bankName": bank, "accountNumber": acct, "accountName": acctName, "status": st, "note": note, "createdAt": at})
 			}
 		}

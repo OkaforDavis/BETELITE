@@ -10,7 +10,7 @@ import (
 
 // TermsVersion is the current Terms/Privacy version users must accept.
 // Bump it when the legal documents change materially.
-const TermsVersion = "2026-10-09"
+const TermsVersion = "2026-10-10"
 
 // MinAge is the minimum age to use real-money features.
 const MinAge = 18

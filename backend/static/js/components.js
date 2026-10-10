@@ -149,3 +149,23 @@ export function bindEvidence(root) {
     sheet(String(html`${sheetHead('Screenshot')}<img src="${b.dataset.full}" alt="Match screenshot" style="width:100%;border-radius:12px">`), { label: 'Screenshot' });
   }));
 }
+
+// Payment fees passed on to the player (mirrors services/fees.go).
+// rule = { percent, flat, flatFrom, cap } from the API; amounts in minor units.
+export function gatewayFee(gross, rule) {
+  if (!rule) return 0;
+  let fee = Math.ceil((gross * Math.round(rule.percent * 100)) / 10000);
+  if (rule.flat && gross >= rule.flatFrom) fee += rule.flat;
+  if (rule.cap && fee > rule.cap) fee = rule.cap;
+  return fee;
+}
+export function grossUp(net, rule) {
+  if (net <= 0) return 0;
+  let gross = net;
+  for (let i = 0; i < 64 && gross - gatewayFee(gross, rule) < net; i++) gross += Math.max(net - (gross - gatewayFee(gross, rule)), 1);
+  return gross;
+}
+export function transferFee(amount, cur, bankType) {
+  if (cur === 'GHS') return bankType === 'mobile_money' ? 100 : 800;
+  return amount <= 500000 ? 1000 : amount <= 5000000 ? 2500 : 5000;
+}

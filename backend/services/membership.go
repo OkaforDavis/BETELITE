@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -16,11 +17,12 @@ import (
 // same fixed prizes; higher tiers get more tournament entries a month and perks.
 // Prizes never depend on membership money (that would make it a betting pool).
 type Tier struct {
-	ID      string           `json:"id"`
-	Name    string           `json:"name"`
-	Entries int              `json:"entries"` // tournaments per period
-	Prices  map[string]int64 `json:"prices"`  // minor units per currency; empty = free
-	Perks   []string         `json:"perks"`
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Entries  int              `json:"entries"`  // tournaments per period
+	Prices   map[string]int64 `json:"prices"`   // minor units per currency; empty = free
+	Cashback int              `json:"cashback"` // % of the price returned to the wallet on renewal
+	Perks    []string         `json:"perks"`
 }
 
 const FreeTier = "free"
@@ -33,13 +35,13 @@ const MembershipRenewWindow = 7 * 24 * time.Hour
 
 var Tiers = []Tier{
 	{ID: FreeTier, Name: "Free", Entries: 1, Perks: []string{
-		"1 tournament a month", "Free 1v1 matches", "Same prizes as everyone"}},
-	{ID: "pro", Name: "Pro", Entries: 2, Prices: map[string]int64{"GHS": 30_00, "NGN": 3_000_00}, Perks: []string{
-		"2 tournaments a month", "Pro badge", "Early tournament sign-up", "Streaming features when they launch"}},
-	{ID: "pro_plus", Name: "Pro Plus", Entries: 3, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_000_00}, Perks: []string{
-		"3 tournaments a month", "Pro Plus badge", "Early tournament sign-up", "Streaming features when they launch"}},
-	{ID: "elite", Name: "Elite", Entries: 5, Prices: map[string]int64{"GHS": 80_00, "NGN": 8_000_00}, Perks: []string{
-		"5 tournaments a month", "Elite badge and profile frame", "Early tournament sign-up", "Streaming features when they launch"}},
+		"1 tournament a month", "Free 1v1 matches", "Watch live streams", "Same prizes as everyone"}},
+	{ID: "pro", Name: "Pro", Entries: 2, Cashback: 5, Prices: map[string]int64{"GHS": 30_00, "NGN": 3_000_00}, Perks: []string{
+		"2 tournaments a month", "Go live and chat in streams", "Pro badge", "Early tournament sign-up", "5% cashback when you renew"}},
+	{ID: "pro_plus", Name: "Pro Plus", Entries: 3, Cashback: 7, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_000_00}, Perks: []string{
+		"3 tournaments a month", "Go live and chat in streams", "Pro Plus badge", "Early tournament sign-up", "7% cashback when you renew"}},
+	{ID: "elite", Name: "Elite", Entries: 5, Cashback: 10, Prices: map[string]int64{"GHS": 80_00, "NGN": 8_000_00}, Perks: []string{
+		"5 tournaments a month", "Go live and chat in streams", "Elite badge", "Early tournament sign-up", "10% cashback when you renew"}},
 }
 
 // TierByID returns a tier, or nil.
@@ -193,6 +195,14 @@ func BuyMembership(ctx context.Context, uid, tierID string) (*Membership, error)
 		VALUES ($1,$2,$3,$4,$5,$6,$7)`, m.ID, uid, m.Tier, m.Price, m.Currency, m.StartsAt, m.EndsAt); err != nil {
 		return nil, err
 	}
+	// Loyalty cashback: renewing a plan returns part of its price to the wallet.
+	var cashback int64
+	if current != nil && tier.Cashback > 0 {
+		cashback = price * int64(tier.Cashback) / 100
+		if err := AdjustBalance(ctx, tx, uid, cashback, "membership_cashback", m.ID); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -200,7 +210,11 @@ func BuyMembership(ctx context.Context, uid, tierID string) (*Membership, error)
 	msg := fmt.Sprintf("You can now enter %d tournaments until %s.", tier.Entries, m.EndsAt.Format("2 Jan"))
 	if current != nil {
 		msg = fmt.Sprintf("Your %s plan is renewed until %s.", tier.Name, m.EndsAt.Format("2 Jan"))
+		if cashback > 0 {
+			msg += fmt.Sprintf(" %s cashback has been added to your wallet.", FormatMoney(cashback, currency))
+		}
 	}
+	forgetTier(uid)
 	Notify(uid, "membership", tier.Name+" membership active ⭐", msg, "/membership", nil)
 	go RewardReferral(context.Background(), uid) // a first membership unlocks invite rewards
 	return m, nil
@@ -267,4 +281,36 @@ func CanBuyMembership(ctx context.Context, uid, tierID string) error {
 		return err
 	}
 	return checkPlanChange(current, tier)
+}
+
+// Paid-plan checks run on every stream chat message, so results are cached briefly.
+var (
+	tierCacheMu sync.Mutex
+	tierCache   = map[string]tierCacheEntry{}
+)
+
+type tierCacheEntry struct {
+	paid bool
+	at   time.Time
+}
+
+// HasPaidPlan reports whether the player has an active paid plan (streaming and stream chat).
+func HasPaidPlan(ctx context.Context, uid string) bool {
+	tierCacheMu.Lock()
+	e, ok := tierCache[uid]
+	tierCacheMu.Unlock()
+	if ok && time.Since(e.at) < time.Minute {
+		return e.paid
+	}
+	paid := ActiveTier(ctx, uid) != FreeTier
+	tierCacheMu.Lock()
+	tierCache[uid] = tierCacheEntry{paid, time.Now()}
+	tierCacheMu.Unlock()
+	return paid
+}
+
+func forgetTier(uid string) {
+	tierCacheMu.Lock()
+	delete(tierCache, uid)
+	tierCacheMu.Unlock()
 }

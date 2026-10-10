@@ -34,7 +34,7 @@ func SetupMembershipRoutes(api fiber.Router) {
 		for _, t := range services.Tiers {
 			tiers = append(tiers, tierView{Tier: t, Price: t.Prices[currency]})
 		}
-		return utils.SendSuccess(c, fiber.Map{"tiers": tiers, "currency": currency, "balance": balance, "usage": usage,
+		return utils.SendSuccess(c, fiber.Map{"tiers": tiers, "currency": currency, "balance": balance, "usage": usage, "feeRule": services.CollectionFees[currency], "minDeposit": minDeposit[currency],
 			"renewWindowDays": int(services.MembershipRenewWindow.Hours() / 24)})
 	})
 

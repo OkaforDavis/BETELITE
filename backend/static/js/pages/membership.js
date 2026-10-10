@@ -1,7 +1,7 @@
 import { get, post, quietPost } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, busy, toast, confirmSheet } from '../ui.js';
-import { tierBadge } from '../components.js';
+import { tierBadge, grossUp } from '../components.js';
 import { needsConsent, consentGate } from '../consent.js';
 import { refreshProfile } from '../app.js';
 
@@ -67,12 +67,14 @@ export default async function membership(view) {
     const profile = store.get().profile;
     if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
     const fromWallet = balance >= tier.price;
+    const shortfall = Math.max(tier.price - balance, data.minDeposit || 0);
+    const charge = grossUp(shortfall, data.feeRule); // the player covers Paystack's fee
     const ok = await confirmSheet({
       title: `Get ${tier.name}?`,
       message: fromWallet
         ? `${money(tier.price, currency)} will be paid from your wallet. You get ${tier.entries} tournament entries for 30 days.`
-        : `You'll pay ${money(tier.price - balance, currency)} by card, bank or mobile money${balance > 0 ? ` (your wallet covers ${money(balance, currency)})` : ''}. You get ${tier.entries} tournament entries for 30 days.`,
-      confirm: fromWallet ? `Pay ${money(tier.price, currency)}` : 'Continue to payment',
+        : `You'll pay ${money(charge, currency)} by card, bank or mobile money (${money(shortfall, currency)} + ${money(charge - shortfall, currency)} payment fee)${balance > 0 ? `; your wallet covers ${money(balance, currency)}` : ''}. You get ${tier.entries} tournament entries for 30 days.`,
+      confirm: fromWallet ? `Pay ${money(tier.price, currency)}` : `Pay ${money(charge, currency)}`,
     });
     if (!ok) return;
     busy(btn, async () => {

@@ -60,6 +60,13 @@ func main() {
 		return id.UID, nil
 	}
 	ws.DisplayName = func(uid string) string { return services.Username(context.Background(), uid) }
+	ws.CanChat = func(uid, room string) bool {
+		if !strings.HasPrefix(room, "stream:") {
+			return true // match rooms: opponents can always talk
+		}
+		ctx := context.Background()
+		return services.HasPaidPlan(ctx, uid) || services.IsAdmin(ctx, uid)
+	}
 
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {

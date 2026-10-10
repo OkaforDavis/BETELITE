@@ -275,6 +275,11 @@ var migrations = []string{
 	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prizes JSONB;
 	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS members_only_until TIMESTAMPTZ;
 	ALTER TABLE deposits ADD COLUMN IF NOT EXISTS purpose TEXT;`,
+
+	// 8: payment fees passed on to players: what the checkout charged (amount +
+	// Paystack fee) and the transfer fee taken from a withdrawal.
+	`ALTER TABLE deposits ADD COLUMN IF NOT EXISTS charged BIGINT;
+	ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS fee BIGINT NOT NULL DEFAULT 0;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

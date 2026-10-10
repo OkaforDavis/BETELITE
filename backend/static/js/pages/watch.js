@@ -1,6 +1,6 @@
 import { get, post, del } from '../api.js';
 import { store, gameName } from '../store.js';
-import { html, ic, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, toastError, esc } from '../ui.js';
+import { html, ic, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, toastError, esc, confirmSheet } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { gameChips } from '../components.js';
 import { navigate } from '../router.js';
@@ -36,7 +36,13 @@ async function list(view) {
   return () => offs.forEach((f) => f());
 }
 
-function goLive() {
+const isMember = () => { const p = store.get().profile; return p.isAdmin || (p.tier && p.tier !== 'free'); };
+
+async function goLive() {
+  if (!isMember()) {
+    if (await confirmSheet({ title: 'Go live with a plan', message: 'Streaming your matches is a membership perk. Any plan (from Pro) lets you go live and chat in streams.', confirm: 'See plans' })) navigate('/membership');
+    return;
+  }
   let game = store.get().profile.gameProfiles[0]?.game || '';
   sheet(String(html`${sheetHead('Go live', 'Stream your match to the CrestArena community')}
     <form id="gl"><label class="field"><span class="label">Title</span><input class="input" name="title" maxlength="60" placeholder="e.g. Weekend Cup semi-final" required></label>
@@ -73,9 +79,10 @@ async function room(view, id) {
       <button class="btn secondary sm" id="unmute" hidden>${ic('zap')} Tap for sound</button>
       <button class="btn danger sm" id="end" hidden>End stream</button></div>
     <div class="card" style="margin-top:16px;padding:0"><div class="chat" id="chat" aria-live="polite"></div>
-      <form id="say" class="row" style="padding:10px;border-top:1px solid var(--line)">
+      ${isMember() ? html`<form id="say" class="row" style="padding:10px;border-top:1px solid var(--line)">
         <input class="input grow" name="m" maxlength="300" placeholder="Say something nice…" autocomplete="off" aria-label="Chat message">
-        <button class="icon-btn" aria-label="Send">${ic('send')}</button></form></div>
+        <button class="icon-btn" aria-label="Send">${ic('send')}</button></form>`
+      : html`<a class="row small" href="/membership" style="gap:8px;padding:12px;border-top:1px solid var(--line);color:inherit">${ic('sparkles')}<span class="grow">Chat is for members. <b class="brand-text">Get a plan</b> to join in.</span>${ic('chevronRight')}</a>`}</div>
   </div>`);
 
   const video = view.querySelector('#video');
@@ -125,15 +132,17 @@ async function room(view, id) {
     chat.append(el);
     chat.scrollTop = chat.scrollHeight;
   });
-  view.querySelector('#say').onsubmit = (e) => {
+  const say = view.querySelector('#say');
+  if (say) say.onsubmit = (e) => {
     e.preventDefault();
     const input = e.target.m;
     if (!input.value.trim()) return;
     rt.send('chat_message', { room: roomName, message: input.value });
     input.value = '';
   };
+  const offDenied = rt.on('chat_denied', (d) => { if (d.room === roomName) toast(d.reason, 'info'); });
 
-  return () => { off(); rt.leaveRoom(roomName); lk?.disconnect(); };
+  return () => { off(); offDenied(); rt.leaveRoom(roomName); lk?.disconnect(); };
 }
 
 function loadScript(src) {

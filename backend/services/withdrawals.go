@@ -48,9 +48,9 @@ func RefundWithdrawal(ctx context.Context, id, reason, fromStatus string) error 
 // ApproveWithdrawal sends a pending withdrawal through Paystack.
 func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
 	var uid, currency, bankCode, account, name, bankType, status string
-	var amount int64
-	err := db.Pool.QueryRow(ctx, `SELECT user_id, currency, bank_code, account_number, COALESCE(account_name,''), COALESCE(note,''), status, amount
-		FROM withdrawals WHERE id = $1`, id).Scan(&uid, &currency, &bankCode, &account, &name, &bankType, &status, &amount)
+	var amount, fee int64
+	err := db.Pool.QueryRow(ctx, `SELECT user_id, currency, bank_code, account_number, COALESCE(account_name,''), COALESCE(note,''), status, amount, fee
+		FROM withdrawals WHERE id = $1`, id).Scan(&uid, &currency, &bankCode, &account, &name, &bankType, &status, &amount, &fee)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userErr(404, "Withdrawal not found")
 	}
@@ -65,7 +65,7 @@ func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
 	if tag.RowsAffected() == 0 {
 		return userErr(409, "This withdrawal is already being processed")
 	}
-	recipient, transfer, err := PaystackPayout(ctx, currency, bankType, name, account, bankCode, amount, id, "CrestArena withdrawal")
+	recipient, transfer, err := PaystackPayout(ctx, currency, bankType, name, account, bankCode, amount-fee, id, "CrestArena withdrawal")
 	if err != nil {
 		// Put it back so the admin can retry or reject.
 		db.Pool.Exec(ctx, "UPDATE withdrawals SET status = 'pending', updated_at = NOW() WHERE id = $1 AND status = 'processing'", id)
@@ -90,7 +90,7 @@ func MarkWithdrawalPaid(ctx context.Context, id, adminID, note string) error {
 	var uid, currency string
 	var amount int64
 	err := db.Pool.QueryRow(ctx, `UPDATE withdrawals SET status = 'paid', reviewed_by = $2, note = $3, updated_at = NOW()
-		WHERE id = $1 AND status IN ('pending','processing') RETURNING user_id, amount, currency`, id, adminID, "Paid manually: "+note).
+		WHERE id = $1 AND status IN ('pending','processing') RETURNING user_id, amount - fee, currency`, id, adminID, "Paid manually: "+note).
 		Scan(&uid, &amount, &currency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userErr(409, "This withdrawal is already completed or was rejected")

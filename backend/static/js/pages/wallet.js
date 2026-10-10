@@ -2,6 +2,7 @@ import { get, post, quietPost } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, sym, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton } from '../ui.js';
 import { needsConsent, consentGate } from '../consent.js';
+import { grossUp, transferFee } from '../components.js';
 import { refreshProfile } from '../app.js';
 
 const TX = {
@@ -19,6 +20,7 @@ const TX = {
   referral: ['Invite reward', 'users', 'brand'],
   referral_bonus: ['Welcome bonus', 'sparkles', 'brand'],
   membership: ['Membership', 'sparkles', ''],
+  membership_cashback: ['Membership cashback', 'coins', 'brand'],
   admin_adjustment: ['Balance adjustment', 'settings', ''],
 };
 const WD_STATUS = { pending: ['Awaiting approval', 'warn'], processing: ['Sending', 'info'], paid: ['Paid', 'brand'], rejected: ['Rejected', 'danger'], failed: ['Failed, refunded', 'danger'] };
@@ -89,12 +91,25 @@ export default async function wallet(view, { query }) {
         <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="amount" inputmode="numeric" pattern="[0-9]*" value="${prefill || QUICK[cur][1]}" aria-label="Amount"></div>
         <div class="chips" style="margin-top:10px">${QUICK[cur].map((q) => html`<button type="button" class="chip" data-q="${q}">${money(q * 100, cur)}</button>`)}</div>
         <p class="hint">Min ${money(w.limits.minDeposit, cur)} · Max ${money(w.limits.maxDeposit, cur)}</p>
+        <div class="card flat" id="dep-sum" style="margin-top:12px"></div>
         <div class="sheet-actions"><button class="btn primary block" type="submit">${ic('shield')} Pay securely</button></div>
       </form>`), {
       label: 'Deposit',
       onMount(root, close) {
         const input = root.querySelector('[name=amount]');
-        root.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => (input.value = b.dataset.q)));
+        const sum = root.querySelector('#dep-sum');
+        // Paystack's fee is added on top so the full amount reaches the wallet.
+        const update = () => {
+          const amount = (parseInt(input.value.replace(/\D/g, ''), 10) || 0) * 100;
+          const total = grossUp(amount, w.feeRule);
+          sum.innerHTML = String(html`<div class="row between small"><span class="muted">Added to wallet</span><b class="num">${money(amount, cur)}</b></div>
+            <div class="row between small" style="margin-top:6px"><span class="muted">Payment fee</span><span class="num">${money(total - amount, cur)}</span></div>
+            <div class="divider" style="margin:10px 0"></div>
+            <div class="row between"><span>You pay</span><b class="h3 num">${money(total, cur)}</b></div>`);
+        };
+        input.oninput = update;
+        root.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; update(); }));
+        update();
         root.querySelector('#dep-form').onsubmit = (e) => {
           e.preventDefault();
           const amount = (parseInt(input.value.replace(/\D/g, ''), 10) || 0) * 100;
@@ -162,6 +177,7 @@ export default async function wallet(view, { query }) {
           <input class="input num" name="account" inputmode="numeric" pattern="[0-9]*" maxlength="20" required autocomplete="off"></label>
         <label class="field" id="name-field"><span class="label">Account name</span>
           <input class="input" name="accountName" ${cur === 'NGN' ? 'readonly placeholder="Filled in automatically"' : 'required'}></label>
+        <div class="card flat" id="wd-sum" style="margin-top:14px" hidden></div>
         <div class="notice" style="margin-top:14px">${ic('info')}<div class="small">The money is held from your balance now. Withdrawals are reviewed and usually paid within 24 hours. The account name must match your own name.</div></div>
         <div class="sheet-actions"><button class="btn primary block" type="submit">Request withdrawal</button></div>
       </form>`), {
@@ -169,7 +185,7 @@ export default async function wallet(view, { query }) {
       async onMount(root, close) {
         const f = root.querySelector('#wd-form');
         const select = f.bank;
-        root.querySelector('[data-max]').onclick = () => (f.amount.value = Math.floor(w.balance / 100));
+        root.querySelector('[data-max]').onclick = () => { f.amount.value = Math.floor(w.balance / 100); showFee(); };
         let banks = [];
         try {
           ({ banks } = await get('/wallet/banks'));
@@ -190,8 +206,20 @@ export default async function wallet(view, { query }) {
             f.accountName.value = accountName;
           } catch (e) { f.accountName.value = ''; toast(e.message, 'err'); }
         };
+        const wdSum = root.querySelector('#wd-sum');
+        // Paystack's transfer fee is taken from the amount sent.
+        function showFee() {
+          const amount = (parseInt(f.amount.value.replace(/\D/g, ''), 10) || 0) * 100;
+          const bank = banks[select.value];
+          wdSum.hidden = !amount;
+          if (!amount) return;
+          const fee = transferFee(amount, cur, bank?.type);
+          wdSum.innerHTML = String(html`<div class="row between small"><span class="muted">Transfer fee</span><span class="num">${money(fee, cur)}</span></div>
+            <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(Math.max(amount - fee, 0), cur)}</b></div>`);
+        }
+        f.amount.oninput = showFee;
         f.account.oninput = tryResolve;
-        select.onchange = tryResolve;
+        select.onchange = () => { tryResolve(); showFee(); };
 
         f.onsubmit = (e) => {
           e.preventDefault();
