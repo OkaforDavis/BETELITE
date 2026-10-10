@@ -18,7 +18,7 @@ export default async function play(view, { query }) {
 
   view.innerHTML = String(html`<div class="page">
     <div class="row between">
-      <div><div class="h1">Play 1v1</div><div class="muted small" style="margin-top:4px">${store.get().stakingEnabled ? `Stake, play, upload the result. Winner takes ${WIN_PCT}%.` : 'Free 1v1 matches. Challenge a player, play, upload the result.'}</div></div>
+      <div><div class="h1">${store.get().stakingEnabled ? 'Play 1v1' : 'Friendly 1v1'}</div><div class="muted small" style="margin-top:4px">${store.get().stakingEnabled ? `Stake, play, upload the result. Winner takes ${WIN_PCT}%.` : 'Free 1v1 matches. Challenge a player, play, upload the result.'}</div></div>
     </div>
     <button class="btn primary block" style="margin-top:16px" id="new">${ic('plus')} Post a challenge</button>
     <div class="seg" style="margin-top:20px" role="tablist">
@@ -123,7 +123,7 @@ export default async function play(view, { query }) {
     });
   }
 
-$1; a failed refresh keeps the current list.
+  // Live lobby updates refresh quietly; a failed refresh keeps the current list.
   const refreshOpen = () => tab === 'open' && drawOpen().catch(() => {});
   const offA = rt.on('lobby_new_challenge', refreshOpen);
   const offB = rt.on('lobby_challenge_removed', refreshOpen);

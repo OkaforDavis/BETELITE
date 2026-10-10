@@ -34,7 +34,8 @@ type Config struct {
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	LiveKitURL                 string
-	StakingEnabled             bool // real-money 1v1 stakes and paid tournament entries; off until licensed
+	StakingEnabled             bool   // real-money 1v1 stakes and paid tournament entries; off until licensed
+	FirebaseAuthDomain         string // host that serves /__/auth (the app itself once set up), else <project>.firebaseapp.com
 }
 
 var Cfg Config
@@ -76,6 +77,7 @@ func Load() {
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
 		StakingEnabled:             getEnv("STAKING_ENABLED", "") == "true",
+		FirebaseAuthDomain:         getEnv("FIREBASE_AUTH_DOMAIN", ""),
 	}
 }
 

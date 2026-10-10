@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/proxy"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/websocket/v2"
 
@@ -154,7 +155,7 @@ func setupStatic(app *fiber.App) {
 			log.Printf("[WARN] static/%s missing: %v", f, err)
 			continue
 		}
-		versioned[f] = strings.ReplaceAll(string(b), "__APP_VERSION__", config.Cfg.AppVersion)
+		versioned[f] = strings.NewReplacer("__APP_VERSION__", config.Cfg.AppVersion, "__AUTH_DOMAIN__", config.Cfg.FirebaseAuthDomain).Replace(string(b))
 	}
 	serve := func(name, ctype string) fiber.Handler {
 		return func(c *fiber.Ctx) error {
@@ -167,6 +168,13 @@ func setupStatic(app *fiber.App) {
 		c.Set("Service-Worker-Allowed", "/")
 		return serve("sw.js", "js")(c)
 	})
+	// Firebase sign-in helper pages served from our own domain, so Google
+	// sign-in keeps working in browsers that block third-party storage
+	// (set FIREBASE_AUTH_DOMAIN to this host once Google Cloud allows it).
+	authHost := "https://" + firebaseProject() + ".firebaseapp.com"
+	app.All("/__/auth/*", func(c *fiber.Ctx) error { return proxy.Do(c, authHost+c.OriginalURL()) })
+	app.All("/__/firebase/*", func(c *fiber.Ctx) error { return proxy.Do(c, authHost+c.OriginalURL()) })
+
 	app.Get("/", serve("index.html", "html"))
 	app.Get("/index.html", serve("index.html", "html"))
 
@@ -188,4 +196,12 @@ func setupStatic(app *fiber.App) {
 		}
 		return serve("index.html", "html")(c)
 	})
+}
+
+// firebaseProject is the Firebase project behind sign-in.
+func firebaseProject() string {
+	if p := config.Cfg.FirebaseProjectID; p != "" {
+		return p
+	}
+	return "betelite-crest"
 }
