@@ -54,7 +54,8 @@ func SetupPaymentRoutes(api fiber.Router) {
 		db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount),0) FROM escrow WHERE status IN ('waiting','held') AND (creator_id = $1 OR acceptor_id = $1)`, uid).Scan(&held)
 		return utils.SendSuccess(c, fiber.Map{
 			"balance": balance, "inPlay": held, "currency": currency,
-			"limits": fiber.Map{"minDeposit": minDeposit[currency], "maxDeposit": maxDeposit[currency], "minWithdrawal": minWithdrawal[currency]},
+			"limits":  fiber.Map{"minDeposit": minDeposit[currency], "maxDeposit": maxDeposit[currency], "minWithdrawal": minWithdrawal[currency]},
+			"feeRule": services.CollectionFees[currency],
 		})
 	})
 
@@ -80,22 +81,11 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, fmt.Sprintf("Deposits must be between %s and %s",
 				services.FormatMoney(minDeposit[currency], currency), services.FormatMoney(maxDeposit[currency], currency)))
 		}
-		ref := "dep_" + utils.GenerateBaseID()
-		if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency) VALUES ($1,$2,$3,$4)", ref, uid, req.Amount, currency); err != nil {
-			return fail(c, err)
-		}
-		authURL, accessCode, err := services.PaystackInit(ctx, email, req.Amount, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+		checkout, err := startDeposit(c, uid, email, req.Amount, currency, "")
 		if err != nil {
 			return fail(c, err)
 		}
-		publicKey := config.Cfg.PaystackPublicKey
-		if currency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
-			publicKey = config.Cfg.PaystackPublicKeyGH
-		}
-		return utils.SendSuccess(c, fiber.Map{
-			"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
-			"email": email, "amount": req.Amount, "currency": currency,
-		})
+		return utils.SendSuccess(c, checkout)
 	})
 
 	// Called by the app after checkout; safe to call repeatedly.
@@ -181,6 +171,12 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Enter the account holder's name")
 		}
 
+		// Paystack's transfer fee comes out of the amount sent.
+		fee := services.TransferFee(req.Amount, currency, req.BankType)
+		if req.Amount <= fee {
+			return utils.SendError(c, 400, "The amount must be more than the transfer fee of "+services.FormatMoney(fee, currency))
+		}
+
 		id := "wd_" + utils.GenerateBaseID()
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
@@ -193,17 +189,17 @@ func SetupPaymentRoutes(api fiber.Router) {
 			}
 			return fail(c, err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType)
+		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee)
 		if err != nil {
 			return fail(c, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return fail(c, err)
 		}
-		services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("%s to %s (%s) is waiting for approval.",
-			services.FormatMoney(req.Amount, currency), req.AccountName, req.BankName))
-		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id})
+		services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
+			services.FormatMoney(req.Amount-fee, currency), req.AccountName, req.BankName))
+		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "payout": req.Amount - fee})
 	})
 
 	wallet.Get("/withdrawals", func(c *fiber.Ctx) error {
@@ -271,7 +267,7 @@ func paystackWebhook(c *fiber.Ctx) error {
 	case "transfer.success":
 		var uid, cur string
 		var amount int64
-		err := db.Pool.QueryRow(ctx, "UPDATE withdrawals SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'processing' RETURNING user_id, amount, currency",
+		err := db.Pool.QueryRow(ctx, "UPDATE withdrawals SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'processing' RETURNING user_id, amount - fee, currency",
 			ev.Data.Reference).Scan(&uid, &amount, &cur)
 		if err == nil {
 			services.Notify(uid, "withdrawal", "Withdrawal sent", services.FormatMoney(amount, cur)+" has been sent to your bank account.", "/wallet", nil)
@@ -291,4 +287,29 @@ func appURL(c *fiber.Ctx) string {
 		return strings.TrimRight(config.Cfg.AppURL, "/")
 	}
 	return c.BaseURL()
+}
+
+// startDeposit records a pending deposit and opens a Paystack checkout. A
+// purpose such as "membership:pro" is acted on once the payment is confirmed.
+func startDeposit(c *fiber.Ctx, uid, email string, amount int64, currency, purpose string) (fiber.Map, error) {
+	ctx := c.Context()
+	ref := "dep_" + utils.GenerateBaseID()
+	// The player covers Paystack's fee: the wallet gets amount, the checkout charges more.
+	charged := services.GrossUp(amount, currency)
+	if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency, purpose, charged) VALUES ($1,$2,$3,$4,NULLIF($5,''),$6)",
+		ref, uid, amount, currency, purpose, charged); err != nil {
+		return nil, err
+	}
+	authURL, accessCode, err := services.PaystackInit(ctx, email, charged, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+	if err != nil {
+		return nil, err
+	}
+	publicKey := config.Cfg.PaystackPublicKey
+	if currency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
+		publicKey = config.Cfg.PaystackPublicKeyGH
+	}
+	return fiber.Map{
+		"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
+		"email": email, "amount": amount, "fee": charged - amount, "charged": charged, "currency": currency,
+	}, nil
 }

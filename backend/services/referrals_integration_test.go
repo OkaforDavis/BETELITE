@@ -68,7 +68,15 @@ func TestReferralRewardsAfterFirstPaidMatch(t *testing.T) {
 	if bal(inviter) != 0 {
 		t.Fatal("a free match must not unlock rewards")
 	}
-	db.Pool.Exec(ctx, `INSERT INTO matches (id, kind, game, home_id, away_id, status) VALUES ($1,'p2p','dls',$2,$3,'confirmed')`, p+"-paid", friend, rival)
+	// A free friendly 1v1 doesn't count either.
+	db.Pool.Exec(ctx, "INSERT INTO escrow (challenge_id, creator_id, acceptor_id, amount, pool, status) VALUES ($1,$2,$3,0,0,'paid_out')", p+"-c0", friend, rival)
+	db.Pool.Exec(ctx, `INSERT INTO matches (id, kind, game, home_id, away_id, challenge_id, status) VALUES ($1,'p2p','dls',$2,$3,$4,'confirmed')`, p+"-friendly", friend, rival, p+"-c0")
+	RewardReferral(ctx, friend)
+	if bal(inviter) != 0 {
+		t.Fatal("a free 1v1 must not unlock rewards")
+	}
+	db.Pool.Exec(ctx, "INSERT INTO escrow (challenge_id, creator_id, acceptor_id, amount, pool, status) VALUES ($1,$2,$3,500_00,1000_00,'paid_out')", p+"-c1", friend, rival)
+	db.Pool.Exec(ctx, `INSERT INTO matches (id, kind, game, home_id, away_id, challenge_id, status) VALUES ($1,'p2p','dls',$2,$3,$4,'confirmed')`, p+"-paid", friend, rival, p+"-c1")
 	RewardReferral(ctx, friend)
 	RewardReferral(ctx, friend) // must not pay twice
 	if bal(inviter) != 200_00 || bal(friend) != 100_00 {

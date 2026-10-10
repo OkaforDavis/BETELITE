@@ -5,6 +5,7 @@ const state = {
   games: [],        // supported games
   unread: 0,        // unread notifications
   current: null,    // the match I should act on now
+  stakingEnabled: false, // real-money stakes (off until licensed)
   online: navigator.onLine,
 };
 const subs = new Set();

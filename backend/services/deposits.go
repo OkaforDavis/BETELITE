@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,10 +20,10 @@ import (
 // then a later success is still credited (customers can retry a declined card
 // on the same checkout).
 func CreditDeposit(ctx context.Context, reference string) (string, error) {
-	var uid, currency, status string
-	var amount int64
-	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status FROM deposits WHERE reference = $1", reference).
-		Scan(&uid, &currency, &amount, &status)
+	var uid, currency, status, purpose string
+	var amount, charged int64
+	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status, COALESCE(purpose,''), COALESCE(charged, amount) FROM deposits WHERE reference = $1", reference).
+		Scan(&uid, &currency, &amount, &status, &purpose, &charged)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", &UserError{Status: 404, Msg: "Deposit not found"}
 	}
@@ -46,8 +47,8 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 	default: // abandoned (not finished yet), ongoing, pending, processing, queued
 		return status, nil
 	}
-	if txn.Currency != currency || txn.Amount < amount {
-		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, amount, currency)
+	if txn.Currency != currency || txn.Amount < charged {
+		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, charged, currency)
 		NotifyAdmins(ctx, "Deposit needs review", "Deposit "+reference+" was paid with a different amount or currency.")
 		return "", &UserError{Status: 409, Msg: "Payment amount mismatch. Please contact support."}
 	}
@@ -71,6 +72,14 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 		return "", err
 	}
 	log.Printf("[PAYMENTS] credited deposit %s (%d %s) to %s", reference, amount, currency, uid)
+	if tier, ok := strings.CutPrefix(purpose, "membership:"); ok {
+		// A checkout started from the membership page buys the plan right away.
+		if _, err := BuyMembership(ctx, uid, tier); err != nil {
+			log.Printf("[PAYMENTS] membership after deposit %s: %v", reference, err)
+			Notify(uid, "deposit", "Payment received", FormatMoney(amount, currency)+" is in your wallet. We couldn't start the plan automatically; open Membership to try again.", "/membership", nil)
+		}
+		return "paid", nil
+	}
 	Notify(uid, "deposit", "Deposit received", FormatMoney(amount, currency)+" has been added to your wallet.", "/wallet", nil)
 	return "paid", nil
 }

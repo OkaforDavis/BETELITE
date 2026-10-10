@@ -26,6 +26,7 @@ route('/profile', () => import('./pages/profile.js'), { tab: 'profile', skeleton
 route('/notifications', () => import('./pages/notifications.js'), { skeleton: sk.notifications });
 route('/watch', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
 route('/watch/:id', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
+route('/membership', () => import('./pages/membership.js'), { tab: 'tournaments', skeleton: sk.wallet });
 route('/admin', () => import('./pages/admin.js'), { skeleton: sk.admin });
 route('/join/:code', () => import('./pages/home.js'), { tab: 'home', skeleton: sk.home });
 
@@ -131,7 +132,7 @@ async function handleDepositReturn() {
   history.replaceState({}, '', '/wallet');
   try {
     const { status } = await post('/wallet/deposit/verify', { reference: ref });
-    if (status === 'paid') toast('Your wallet has been topped up.', 'ok', 'Deposit received');
+    if (status === 'paid') toast('Your payment went through.', 'ok', 'Payment received');
     else if (status === 'pending') toast("We're confirming your payment. Your balance updates automatically.", 'info');
     else toast('The payment was not completed.', 'err');
     refreshProfile();
@@ -154,8 +155,8 @@ async function onUser(user) {
   root.innerHTML = String(sk.shell());
   const wake = setTimeout(() => { const w = root.querySelector('.sk-wake'); if (w) w.hidden = false; }, 6000);
   try {
-    const [{ games }] = await Promise.all([get('/games'), refreshProfile()]);
-    store.set({ games });
+    const [{ games }, { settings }] = await Promise.all([get('/games'), get('/settings'), refreshProfile()]);
+    store.set({ games, stakingEnabled: !!settings?.stakingEnabled });
   } catch (e) {
     root.innerHTML = String(html`<div class="auth center"><div class="h2">Can't reach CrestArena</div>
       <p class="muted" style="margin:8px 0 20px">${e.message}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`);

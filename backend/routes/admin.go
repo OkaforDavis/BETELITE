@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
@@ -165,7 +167,7 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	admin.Get("/withdrawals", func(c *fiber.Ctx) error {
 		status := c.Query("status", "pending")
-		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.currency,
+		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.fee, w.currency,
 			COALESCE(w.bank_name,''), w.account_number, COALESCE(w.account_name,''), w.status, COALESCE(w.note,''), w.created_at
 			FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id WHERE w.status = $1 ORDER BY w.created_at LIMIT 100`, status)
 		if err != nil {
@@ -175,10 +177,10 @@ func SetupAdminRoutes(api fiber.Router) {
 		list := []fiber.Map{}
 		for rows.Next() {
 			var id, uid, name, email, cur, bank, acct, acctName, st, note string
-			var amount int64
+			var amount, fee int64
 			var at time.Time
-			if rows.Scan(&id, &uid, &name, &email, &amount, &cur, &bank, &acct, &acctName, &st, &note, &at) == nil {
-				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "email": email, "amount": amount, "currency": cur,
+			if rows.Scan(&id, &uid, &name, &email, &amount, &fee, &cur, &bank, &acct, &acctName, &st, &note, &at) == nil {
+				list = append(list, fiber.Map{"id": id, "userId": uid, "username": name, "email": email, "amount": amount, "fee": fee, "payout": amount - fee, "currency": cur,
 					"bankName": bank, "accountNumber": acct, "accountName": acctName, "status": st, "note": note, "createdAt": at})
 			}
 		}
@@ -226,16 +228,17 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	admin.Post("/tournaments", func(c *fiber.Ctx) error {
 		var req struct {
-			Name       string    `json:"name"`
-			Game       string    `json:"game"`
-			Format     string    `json:"format"` // knockout | league
-			Icon       string    `json:"icon"`
-			EntryFee   int64     `json:"entryFee"`
-			Currency   string    `json:"currency"`
-			MaxPlayers int       `json:"maxPlayers"`
-			PrizePool  int64     `json:"prizePool"` // seed for free tournaments
-			PrizeSplit []float64 `json:"prizeSplit"`
-			RoundHours int       `json:"roundHours"`
+			Name       string               `json:"name"`
+			Game       string               `json:"game"`
+			Format     string               `json:"format"` // knockout | league | swiss
+			Icon       string               `json:"icon"`
+			EntryFee   int64                `json:"entryFee"` // only when staking is enabled
+			Currency   string               `json:"currency"` // entry fee currency
+			MaxPlayers int                  `json:"maxPlayers"`
+			Prizes     services.FixedPrizes `json:"prizes"`     // fixed prizes per currency, minor units
+			PrizeSplit []float64            `json:"prizeSplit"` // paid-entry tournaments only
+			RoundHours int                  `json:"roundHours"`
+			EarlyHours int                  `json:"earlyHours"` // members-only sign-up window
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -244,7 +247,9 @@ func SetupAdminRoutes(api fiber.Router) {
 		if req.Name == "" || services.GameByID(req.Game) == nil {
 			return utils.SendError(c, 400, "Name and a supported game are required")
 		}
-		if req.Format != "league" {
+		switch req.Format {
+		case "league", "swiss":
+		default:
 			req.Format = "knockout"
 		}
 		if req.Currency != "GHS" {
@@ -256,45 +261,81 @@ func SetupAdminRoutes(api fiber.Router) {
 		if req.Format == "league" && req.MaxPlayers > 20 {
 			return utils.SendError(c, 400, "Leagues are limited to 20 players (everyone plays everyone)")
 		}
+		if req.Format == "swiss" && (req.MaxPlayers < 4 || req.MaxPlayers%2 == 1) {
+			return utils.SendError(c, 400, "Swiss tournaments need an even number of players (4 or more)")
+		}
 		if req.RoundHours <= 0 {
 			req.RoundHours = 24
 		}
-		if req.EntryFee < 0 || req.PrizePool < 0 {
+		if req.EarlyHours < 0 || req.EarlyHours > 72 {
+			return utils.SendError(c, 400, "Early sign-up must be between 0 and 72 hours")
+		}
+		if req.EntryFee < 0 {
 			return utils.SendError(c, 400, "Amounts can't be negative")
 		}
-		if len(req.PrizeSplit) == 0 {
-			req.PrizeSplit = services.DefaultSplit(req.Format)
-			if len(req.PrizeSplit) > req.MaxPlayers {
-				req.PrizeSplit = req.PrizeSplit[:req.MaxPlayers]
-			}
+		if !config.Cfg.StakingEnabled {
+			req.EntryFee = 0
 		}
-		var total float64
-		for _, p := range req.PrizeSplit {
-			if p < 0 {
-				return utils.SendError(c, 400, "Prize percentages can't be negative")
+
+		var prizesJSON, splitJSON any
+		if req.EntryFee == 0 {
+			// Prize tournament: fixed prizes in both currencies, paid by us.
+			places := req.Prizes.Places()
+			if places == 0 || len(req.Prizes["GHS"]) != places || len(req.Prizes["NGN"]) != places {
+				return utils.SendError(c, 400, "Set the prizes in both cedis and naira, one amount per paid place")
 			}
-			total += p
+			for _, list := range req.Prizes {
+				for _, p := range list {
+					if p <= 0 {
+						return utils.SendError(c, 400, "Every paid place needs a prize above zero")
+					}
+				}
+			}
+			if places > req.MaxPlayers {
+				return utils.SendError(c, 400, "More paid places than players")
+			}
+			if req.Format == "knockout" && places > 2 {
+				return utils.SendError(c, 400, "Knockouts can pay 1st and 2nd only. Use Swiss or League to pay a top 3.")
+			}
+			b, _ := json.Marshal(map[string][]int64{"GHS": req.Prizes["GHS"], "NGN": req.Prizes["NGN"]})
+			prizesJSON = string(b)
+		} else {
+			if len(req.PrizeSplit) == 0 {
+				req.PrizeSplit = services.DefaultSplit(req.Format)
+				if len(req.PrizeSplit) > req.MaxPlayers {
+					req.PrizeSplit = req.PrizeSplit[:req.MaxPlayers]
+				}
+			}
+			var total float64
+			for _, p := range req.PrizeSplit {
+				if p < 0 {
+					return utils.SendError(c, 400, "Prize percentages can't be negative")
+				}
+				total += p
+			}
+			if total > 100 || len(req.PrizeSplit) > req.MaxPlayers {
+				return utils.SendError(c, 400, "Prize split must add up to 100% or less and not exceed the number of players")
+			}
+			b, _ := json.Marshal(req.PrizeSplit)
+			splitJSON = string(b)
 		}
-		if total > 100 || len(req.PrizeSplit) > req.MaxPlayers {
-			return utils.SendError(c, 400, "Prize split must add up to 100% or less and not exceed the number of players")
+
+		var membersUntil any
+		if req.EarlyHours > 0 {
+			membersUntil = time.Now().Add(time.Duration(req.EarlyHours) * time.Hour)
 		}
 		ctx := c.Context()
-		if req.EntryFee == 0 {
-			var count int
-			db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tournaments WHERE entry_fee = 0 AND created_at >= $1", startOfWeek()).Scan(&count)
-			if count > 0 {
-				return utils.SendError(c, 429, "Only one free tournament can be posted per week")
-			}
-		}
-		split, _ := json.Marshal(req.PrizeSplit)
 		id := utils.GenerateTournamentID()
-		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, round_hours, created_by, status)
-			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,'open')`,
-			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, req.PrizePool, string(split), req.RoundHours, middleware.GetUID(c))
+		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours, members_only_until, created_by, status)
+			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,0,$9::jsonb,$10::jsonb,$11,$12,$13,'open')`,
+			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, splitJSON, prizesJSON, req.RoundHours, membersUntil, middleware.GetUID(c))
 		if err != nil {
 			return fail(c, err)
 		}
-		log.Printf("[ADMIN] tournament %s created: %s %s fee=%d players=%d split=%v", id, req.Format, req.Game, req.EntryFee, req.MaxPlayers, req.PrizeSplit)
+		log.Printf("[ADMIN] tournament %s created: %s %s fee=%d players=%d prizes=%v", id, req.Format, req.Game, req.EntryFee, req.MaxPlayers, req.Prizes)
+		if req.EntryFee == 0 && req.EarlyHours > 0 {
+			go announceEarlySignup(id, req.Name)
+		}
 		return utils.SendSuccess(c, fiber.Map{"tournamentId": id})
 	})
 
@@ -407,4 +448,24 @@ func startOfWeek() time.Time {
 		wd = 7
 	}
 	return time.Date(now.Year(), now.Month(), now.Day()-(wd-1), 0, 0, 0, 0, time.UTC)
+}
+
+// announceEarlySignup tells current members a tournament is open to them first.
+func announceEarlySignup(tid, name string) {
+	ctx := context.Background()
+	rows, err := db.Pool.Query(ctx, "SELECT DISTINCT user_id FROM memberships WHERE starts_at <= NOW() AND ends_at > NOW()")
+	if err != nil {
+		return
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+	for _, id := range ids {
+		services.Notify(id, "tournament_new", "Early sign-up: "+name, "Members can join before everyone else. Grab your spot.", "/tournaments/"+tid, map[string]any{"tournamentId": tid})
+	}
 }

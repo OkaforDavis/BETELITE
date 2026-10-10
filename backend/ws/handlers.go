@@ -20,6 +20,10 @@ var VerifyToken func(token string) (string, error)
 // DisplayName resolves a UID to the name shown in chat; set at startup.
 var DisplayName func(uid string) string
 
+// CanChat decides whether a player may send chat messages in a room; set at
+// startup (stream chat is a membership perk). Nil allows everyone.
+var CanChat func(uid, room string) bool
+
 func HandleMessage(hub *Hub, client *Client, msg WSMessage) {
 	switch msg.Event {
 	case "identify":
@@ -101,6 +105,10 @@ func HandleMessage(hub *Hub, client *Client, msg WSMessage) {
 			text = string([]rune(text)[:300])
 		}
 		if msg.Event == "chat_message" && text == "" {
+			return
+		}
+		if msg.Event == "chat_message" && CanChat != nil && !CanChat(client.UID, room) {
+			client.sendEvent("chat_denied", map[string]string{"room": room, "reason": "Chatting in live streams is for members. Get a plan to join the chat."})
 			return
 		}
 		emoji := data.Emoji

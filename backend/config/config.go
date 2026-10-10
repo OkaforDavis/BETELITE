@@ -34,6 +34,7 @@ type Config struct {
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	LiveKitURL                 string
+	StakingEnabled             bool // real-money 1v1 stakes and paid tournament entries; off until licensed
 }
 
 var Cfg Config
@@ -74,6 +75,7 @@ func Load() {
 		LiveKitAPIKey:              getEnv("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
+		StakingEnabled:             getEnv("STAKING_ENABLED", "") == "true",
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
 
+	"betelite-go/config"
 	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
@@ -79,15 +80,21 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if game == nil {
 			return utils.SendError(c, 400, "Choose a supported game")
 		}
-		if err := services.RequireMoneyAccess(ctx, uid); err != nil {
-			return fail(c, err)
+		// Without a gaming licence, 1v1s are free friendly matches (no stakes).
+		if !config.Cfg.StakingEnabled {
+			req.Amount = 0
+		}
+		if req.Amount > 0 {
+			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+				return fail(c, err)
+			}
 		}
 		if err := services.RequireGameProfile(ctx, db.Pool, uid, game.ID); err != nil {
 			return fail(c, err)
 		}
 		var currency string
 		db.Pool.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&currency)
-		if req.Amount < minStake[currency] || req.Amount > maxStake[currency] {
+		if req.Amount > 0 && (req.Amount < minStake[currency] || req.Amount > maxStake[currency]) {
 			return utils.SendError(c, 400, fmt.Sprintf("Stake must be between %s and %s",
 				services.FormatMoney(minStake[currency], currency), services.FormatMoney(maxStake[currency], currency)))
 		}
@@ -103,11 +110,13 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
-		if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", id); err != nil {
-			if errors.Is(err, services.ErrInsufficientFunds) {
-				return utils.SendError(c, 400, "Insufficient balance. Deposit to post this challenge.")
+		if req.Amount > 0 {
+			if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", id); err != nil {
+				if errors.Is(err, services.ErrInsufficientFunds) {
+					return utils.SendError(c, 400, "Insufficient balance. Deposit to post this challenge.")
+				}
+				return fail(c, err)
 			}
-			return fail(c, err)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency)
 			VALUES ($1,$2,$3,$3,'waiting',$4,$5)`, id, uid, req.Amount, game.ID, currency); err != nil {
@@ -131,9 +140,6 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		uid := middleware.GetUID(c)
 		ctx := c.Context()
-		if err := services.RequireMoneyAccess(ctx, uid); err != nil {
-			return fail(c, err)
-		}
 
 		tx, err := db.Pool.Begin(ctx)
 		if err != nil {
@@ -157,19 +163,29 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if services.GameByID(game) == nil {
 			return utils.SendError(c, 400, "This challenge is for an unsupported game")
 		}
-		var myCurrency string
-		tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&myCurrency)
-		if myCurrency != currency {
-			return utils.SendError(c, 400, "This challenge is in "+currency+"; your wallet is in "+myCurrency)
+		if amount > 0 {
+			if !config.Cfg.StakingEnabled {
+				return utils.SendError(c, 409, "Staked challenges are paused. Post a free challenge instead.")
+			}
+			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+				return fail(c, err)
+			}
+			var myCurrency string
+			tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&myCurrency)
+			if myCurrency != currency {
+				return utils.SendError(c, 400, "This challenge is in "+currency+"; your wallet is in "+myCurrency)
+			}
 		}
 		if err := services.RequireGameProfile(ctx, tx, uid, game); err != nil {
 			return fail(c, err)
 		}
-		if err := services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID); err != nil {
-			if errors.Is(err, services.ErrInsufficientFunds) {
-				return utils.SendError(c, 400, "Insufficient balance to match this stake")
+		if amount > 0 {
+			if err := services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID); err != nil {
+				if errors.Is(err, services.ErrInsufficientFunds) {
+					return utils.SendError(c, 400, "Insufficient balance to match this stake")
+				}
+				return fail(c, err)
 			}
-			return fail(c, err)
 		}
 		matchID, err := services.CreateMatch(ctx, tx, "p2p", game, creator, uid, req.ChallengeID, "", 0, 0, time.Now().Add(services.P2PPlayWindow))
 		if err != nil {
@@ -215,8 +231,10 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if status != "waiting" {
 			return utils.SendError(c, 409, "This challenge has already been accepted")
 		}
-		if err := services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID); err != nil {
-			return fail(c, err)
+		if amount > 0 {
+			if err := services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID); err != nil {
+				return fail(c, err)
+			}
 		}
 		if _, err := tx.Exec(ctx, "UPDATE escrow SET status = 'cancelled' WHERE challenge_id = $1", req.ChallengeID); err != nil {
 			return fail(c, err)

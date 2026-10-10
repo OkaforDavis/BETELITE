@@ -52,6 +52,10 @@ func SetupStreamRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		c.BodyParser(&req)
 		uid := middleware.GetUID(c)
+		// Going live is a membership perk.
+		if !services.HasPaidPlan(c.Context(), uid) && !middleware.IsAdminCtx(c) {
+			return utils.SendError(c, 403, "Going live is for members. Get a plan to stream your matches.")
+		}
 		title := strings.TrimSpace(req.Title)
 		if title == "" || len(title) > 60 {
 			title = "Live match"

@@ -43,7 +43,7 @@ export async function applyPendingInvite() {
     if (!info.canClaim || info.code === code) { clearInvite(); return; }
     const { referredBy } = await post('/referrals/claim', { code });
     clearInvite();
-    toast(`Play your first paid match to get your ${money(info.friendReward, info.currency)} welcome bonus.`, 'ok', `You joined with ${referredBy}'s invite`);
+    toast(`Buy your first membership to get your ${money(info.friendReward, info.currency)} welcome bonus.`, 'ok', `You joined with ${referredBy}'s invite`);
   } catch (e) {
     clearInvite();
     if (e.status === 404) toast("That invite link isn't valid any more, but you're all set to play.", 'info');

@@ -60,6 +60,13 @@ func main() {
 		return id.UID, nil
 	}
 	ws.DisplayName = func(uid string) string { return services.Username(context.Background(), uid) }
+	ws.CanChat = func(uid, room string) bool {
+		if !strings.HasPrefix(room, "stream:") {
+			return true // match rooms: opponents can always talk
+		}
+		ctx := context.Background()
+		return services.HasPaidPlan(ctx, uid) || services.IsAdmin(ctx, uid)
+	}
 
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
@@ -85,10 +92,11 @@ func main() {
 	})
 	api.Get("/settings", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "settings": fiber.Map{
-			"paystackKey":   config.Cfg.PaystackPublicKey,
-			"paystackKeyGH": config.Cfg.PaystackPublicKeyGH,
-			"vapidKey":      config.Cfg.VAPIDPublicKey,
-			"termsVersion":  services.TermsVersion,
+			"paystackKey":    config.Cfg.PaystackPublicKey,
+			"paystackKeyGH":  config.Cfg.PaystackPublicKeyGH,
+			"vapidKey":       config.Cfg.VAPIDPublicKey,
+			"termsVersion":   services.TermsVersion,
+			"stakingEnabled": config.Cfg.StakingEnabled,
 		}})
 	})
 
@@ -97,6 +105,7 @@ func main() {
 	routes.SetupMatchRoutes(api)
 	routes.SetupLobbyRoutes(api, hub)
 	routes.SetupTournamentRoutes(api)
+	routes.SetupMembershipRoutes(api)
 	routes.SetupStreamRoutes(api, hub)
 	routes.SetupNotificationRoutes(api)
 	routes.SetupReferralRoutes(api)

@@ -3,6 +3,7 @@ import { store } from '../store.js';
 import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError } from '../ui.js';
 import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
+import { tierBadge, TIER_NAMES } from '../components.js';
 import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification } from '../auth.js';
 import { refreshProfile } from '../app.js';
@@ -24,7 +25,7 @@ export default async function profilePage(view, { query }) {
     view.innerHTML = String(html`<div class="page">
       <div class="row" style="gap:16px">
         <button class="avatar-edit" id="photo" aria-label="Change profile photo">${avatar(p.username, p.avatarUrl, 'lg me')}<span class="cam">${ic('camera')}</span></button>
-        <div class="grow"><div class="h2 ellipsis">${p.username}</div><div class="small muted ellipsis">${p.email}</div>
+        <div class="grow"><div class="row" style="gap:8px"><div class="h2 ellipsis">${p.username}</div>${tierBadge(p.tier)}</div><div class="small muted ellipsis">${p.email}</div>
           <div class="tiny faint" style="margin-top:2px">Member since ${new Date(p.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</div></div>
         <button class="btn secondary sm" id="edit">Edit</button>
       </div>
@@ -74,7 +75,7 @@ export default async function profilePage(view, { query }) {
       ${ref.code ? html`<section class="section">
         <div class="section-head"><h2 class="h2">Invite friends</h2></div>
         <div class="card">
-          <p class="small muted">Share your link. When a friend joins and plays their first paid match, you get
+          <p class="small muted">Share your link. When a friend joins and buys their first membership, you get
             <b class="brand-text">${money(ref.inviterReward, ref.currency)}</b> and they get <b class="brand-text">${money(ref.friendReward, ref.currency)}</b>.</p>
           <div class="row" style="margin-top:14px;gap:8px">
             <input class="input grow" readonly value="${inviteLink(ref.code)}" aria-label="Your invite link" style="font-size:14px">
@@ -91,7 +92,7 @@ export default async function profilePage(view, { query }) {
         ${ref.referredBy ? html`<p class="small muted" style="margin-top:10px">You were invited by <b>${ref.referredBy}</b>.</p>` : ''}
         ${ref.canClaim ? html`<form class="card flat" id="claim" style="margin-top:12px">
           <div class="h3">Invited by a friend?</div>
-          <p class="small muted" style="margin-top:2px">Add their code in your first 7 days, before your first paid match.</p>
+          <p class="small muted" style="margin-top:2px">Add their code in your first 7 days, before your first membership.</p>
           <div class="row" style="margin-top:10px;gap:8px">
             <input class="input grow" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="Invite code" required>
             <button class="btn secondary">Apply</button></div></form>` : ''}
@@ -103,6 +104,7 @@ export default async function profilePage(view, { query }) {
           ${canInstall() ? html`<button class="list-row" id="install"><div class="icon-tile brand">${ic('phone')}</div>
             <div class="grow"><div class="h3">Install CrestArena</div><div class="small muted">${isIOS ? 'Add to your iPhone Home Screen' : 'Full-screen app with notifications'}</div></div>${ic('chevronRight', 'chev')}</button>` : ''}
           ${p.isAdmin ? html`<a class="list-row" href="/admin" style="color:inherit"><div class="icon-tile warn">${ic('shield')}</div><div class="grow h3">Admin dashboard</div>${ic('chevronRight', 'chev')}</a>` : ''}
+          <a class="list-row" href="/membership" style="color:inherit"><div class="icon-tile brand">${ic('sparkles')}</div><div class="grow"><div class="h3">Membership</div><div class="small muted">${TIER_NAMES[p.tier] || 'Free'} plan · tournament entries</div></div>${ic('chevronRight', 'chev')}</a>
           <a class="list-row" href="/watch" style="color:inherit"><div class="icon-tile">${ic('radio')}</div><div class="grow h3">Live streams</div>${ic('chevronRight', 'chev')}</a>
           <button class="list-row" id="update"><div class="icon-tile">${ic('refresh')}</div>
             <div class="grow"><div class="h3">Check for updates</div><div class="small muted">Version ${APP_VERSION}</div></div></button>
@@ -172,7 +174,7 @@ export default async function profilePage(view, { query }) {
       busy(e.target.querySelector('button'), async () => {
         const { referredBy } = await api('POST', '/referrals/claim', { code: new FormData(e.target).get('code') });
         Object.assign(ref, { referredBy, canClaim: false });
-        toast(`You'll get ${money(ref.friendReward, ref.currency)} after your first paid match.`, 'ok', `Invited by ${referredBy}`);
+        toast(`You'll get ${money(ref.friendReward, ref.currency)} after you buy your first membership.`, 'ok', `Invited by ${referredBy}`);
         draw();
       });
     });

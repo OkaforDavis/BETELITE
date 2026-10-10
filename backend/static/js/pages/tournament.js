@@ -1,7 +1,7 @@
 import { get, post } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet } from '../ui.js';
-import { matchRow, hasGameProfile } from '../components.js';
+import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
 import { navigate } from '../router.js';
@@ -25,30 +25,35 @@ export default async function tournamentPage(view, { id }) {
     const uid = store.get().profile.id;
     const myMatch = matches.find((m) => (m.homeId === uid || m.awayId === uid) && ['ready', 'submitted', 'disputed', 'review'].includes(m.status));
     const pct = Math.round((t.playerCount / t.maxPlayers) * 100);
-    const second = t.format === 'league' ? 'table' : 'bracket';
+    const second = t.format === 'knockout' ? 'bracket' : 'table';
+    const prizes = tournamentPrizes(t);
+    const membersUntil = t.membersOnlyUntil && new Date(t.membersOnlyUntil) > new Date() ? new Date(t.membersOnlyUntil) : null;
+    const roundLabel = t.totalRounds ? `Round ${t.currentRound} of ${t.totalRounds}` : `Round ${t.currentRound}`;
 
     view.innerHTML = String(html`<div class="page">
       <a href="/tournaments" class="row small muted" style="gap:4px;margin-bottom:12px">${ic('chevronLeft')}Tournaments</a>
       <div class="card pad-lg">
         <div class="row" style="gap:8px">
-          <span class="badge ${t.format === 'league' ? 'info' : ''}">${t.format === 'league' ? 'League' : 'Knockout'}</span>
+          ${formatBadge(t)}
           <span class="badge">${t.gameName}</span>
-          ${t.status === 'active' ? html`<span class="badge live info">Round ${t.currentRound}</span>` : ''}
+          ${t.status === 'active' ? html`<span class="badge live info">${roundLabel}</span>` : ''}
           ${t.status === 'finished' ? html`<span class="badge">Finished</span>` : ''}
         </div>
         <div class="h1" style="margin-top:12px">${t.name}</div>
         <div class="grid-3" style="margin-top:18px">
-          <div class="stat"><div class="v num">${t.entryFee ? money(t.entryFee, t.currency) : 'Free'}</div><div class="k">Entry</div></div>
-          <div class="stat"><div class="v num brand-text">${money(t.prizes[0] || 0, t.currency)}</div><div class="k">1st prize</div></div>
+          <div class="stat"><div class="v num">${t.entryFee ? money(t.entryFee, t.currency) : '1 entry'}</div><div class="k">Entry</div></div>
+          <div class="stat"><div class="v num brand-text">${money(prizes.list[0] || 0, prizes.cur)}</div><div class="k">1st prize</div></div>
           <div class="stat"><div class="v num">${t.playerCount}/${t.maxPlayers}</div><div class="k">Players</div></div>
         </div>
         ${t.status === 'open' ? html`
           <div class="progress" style="margin-top:16px"><span style="width:${pct}%"></span></div>
           <div class="small muted" style="margin-top:8px">${t.maxPlayers - t.playerCount} spots left · starts automatically when full</div>
+          ${membersUntil && !t.joined ? html`<div class="notice brand" style="margin-top:12px">${ic('sparkles')}<div class="small"><b>Members' early sign-up</b> until ${membersUntil.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Then it opens to everyone.</div></div>` : ''}
           <div style="margin-top:16px">${t.joined
             ? html`<div class="notice brand">${ic('checkCircle')}<div><b>You're registered</b><div class="small">We'll notify you when it starts.</div></div></div>
                 <button class="btn ghost block" id="leave" style="margin-top:8px">Leave tournament${t.entryFee ? ' (refund)' : ''}</button>`
-            : html`<button class="btn primary block" id="join">${ic('trophy')} Join${t.entryFee ? ' for ' + money(t.entryFee, t.currency) : ' for free'}</button>`}</div>` : ''}
+            : html`<button class="btn primary block" id="join">${ic('trophy')} Join${t.entryFee ? ' for ' + money(t.entryFee, t.currency) : ' (uses 1 entry)'}</button>
+                ${t.entryFee ? '' : html`<a class="small muted row" href="/membership" style="gap:4px;margin-top:10px;justify-content:center">${ic('sparkles')}Entries and plans</a>`}`}</div>` : ''}
       </div>
 
       ${myMatch ? html`<a class="notice brand" href="/match/${myMatch.id}" style="margin-top:16px;color:inherit">${ic('gamepad')}<div class="grow"><b>Your Round ${myMatch.round} match is ready</b>
@@ -83,7 +88,7 @@ export default async function tournamentPage(view, { id }) {
 
   async function join(t, btn) {
     const profile = store.get().profile;
-    if (t.entryFee && needsConsent(profile)) return consentGate(profile, () => refreshProfile());
+    if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
     if (!hasGameProfile(t.game)) return gameIdSheet(t.game, () => join(t, btn));
     if (t.entryFee && profile.balance < t.entryFee) {
       toast('Top up your wallet to pay the entry fee.', 'info');
@@ -91,7 +96,17 @@ export default async function tournamentPage(view, { id }) {
     }
     if (t.entryFee && !(await confirmSheet({ title: `Join ${t.name}?`, message: `${money(t.entryFee, t.currency)} will be taken from your wallet. Refundable until the tournament starts.`, confirm: 'Pay & join' }))) return;
     busy(btn, async () => {
-      const { started } = await post(`/tournaments/${t.id}/join`);
+      let started;
+      try {
+        ({ started } = await post(`/tournaments/${t.id}/join`));
+      } catch (e) {
+        // Out of entries, or members-only early sign-up: offer the plans.
+        if (e.status === 403 && /entries|Members/.test(e.message)) {
+          if (await confirmSheet({ title: 'Membership needed', message: e.message, confirm: 'See plans' })) navigate('/membership');
+          return;
+        }
+        throw e;
+      }
       toast(started ? 'The tournament is full and has started. Check your first match!' : "You're in! We'll notify you when it starts.");
       refreshProfile(); refreshCurrent(); load();
     });
@@ -101,22 +116,33 @@ export default async function tournamentPage(view, { id }) {
 }
 
 function overview(t) {
-  const places = t.prizes.map((p, i) => [i + 1, p, t.prizeSplit[i]]).filter(([, p]) => p > 0);
+  const prizes = tournamentPrizes(t);
+  const fixed = !!t.fixedPrizes;
+  const places = prizes.list.map((p, i) => [i + 1, p, t.prizeSplit?.[i]]).filter(([, p]) => p > 0);
+  const other = fixed && Object.keys(t.fixedPrizes).find((c) => c !== prizes.cur);
+  const rules = {
+    league: html`<li class="ok">${ic('check')}<span>Everyone plays everyone once. Win = 3 pts, draw = 1.</span></li>
+                 <li class="ok">${ic('check')}<span>Ties are split by goal difference, then goals scored.</span></li>`,
+    swiss: html`<li class="ok">${ic('check')}<span>${t.totalRounds} rounds. Each round you play one match against a player on similar points, never the same opponent twice.</span></li>
+                <li class="ok">${ic('check')}<span>Win = 3 pts, draw = 1. Nobody is knocked out; the top of the table wins.</span></li>
+                <li class="ok">${ic('check')}<span>Ties are split by goal difference, then goals scored.</span></li>`,
+    knockout: html`<li class="ok">${ic('check')}<span>Lose once and you're out. Draws go to penalties.</span></li>
+                   <li class="ok">${ic('check')}<span>Upload the screen that shows the penalty shoot-out if there is one.</span></li>`,
+  };
   return html`
     <div class="card"><div class="h3">Prizes</div>
       ${places.length ? html`<div class="list" style="margin-top:12px">${places.map(([pos, p, pct]) => html`
         <div class="list-row"><div class="icon-tile ${pos === 1 ? 'brand' : ''}">${ic(pos === 1 ? 'crown' : 'trophy')}</div>
-        <div class="grow">${ordinal(pos)} place</div><div style="text-align:right"><b class="num">${money(p, t.currency)}</b><div class="tiny faint">${pct}% of pool</div></div></div>`)}</div>`
+        <div class="grow">${ordinal(pos)} place</div><div style="text-align:right"><b class="num">${money(p, prizes.cur)}</b>
+        ${other ? html`<div class="tiny faint">${money(t.fixedPrizes[other][pos - 1], other)}</div>` : pct ? html`<div class="tiny faint">${pct}% of pool</div>` : ''}</div></div>`)}</div>`
       : html`<p class="muted small" style="margin-top:8px">No cash prizes for this tournament.</p>`}
-      <p class="tiny faint" style="margin-top:10px">Prize amounts shown for a full tournament${t.entryFee ? ', as a share of total entry fees' : ''}.</p>
+      <p class="tiny faint" style="margin-top:10px">${fixed
+        ? 'Fixed prizes, the same for every player. Winners are paid in their own currency.'
+        : `Prize amounts shown for a full tournament${t.entryFee ? ', as a share of total entry fees' : ''}.`}</p>
     </div>
     <div class="card" style="margin-top:12px"><div class="h3">How it works</div>
       <ul class="checklist" style="margin-top:12px">
-        ${t.format === 'league'
-          ? html`<li class="ok">${ic('check')}<span>Everyone plays everyone once. Win = 3 pts, draw = 1.</span></li>
-                 <li class="ok">${ic('check')}<span>Ties are split by goal difference, then goals scored.</span></li>`
-          : html`<li class="ok">${ic('check')}<span>Lose once and you're out. Draws go to penalties.</span></li>
-                 <li class="ok">${ic('check')}<span>Upload the screen that shows the penalty shoot-out if there is one.</span></li>`}
+        ${rules[t.format] || rules.knockout}
         <li class="ok">${ic('check')}<span>Each round has ${t.roundHours} hours. Play your match and upload the full-time screen.</span></li>
         <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute. Disputes are decided by an admin.</span></li>
         <li class="ok">${ic('check')}<span>Prizes are paid to your wallet automatically when the tournament ends.</span></li>
@@ -125,11 +151,11 @@ function overview(t) {
 
 function table(t, rows, uid) {
   if (!rows?.length) return html`<div class="card flat">${empty('list', 'No players yet', 'The table appears once players join.')}</div>`;
-  const paid = t.prizes.filter((p) => p > 0).length;
+  const paid = tournamentPrizes(t).list.filter((p) => p > 0).length;
   return html`<div class="card" style="padding:6px 4px;overflow-x:auto"><table class="table">
     <thead><tr><th>#</th><th>Player</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead>
     <tbody>${rows.map((r, i) => html`<tr class="${r.userId === uid ? 'me' : ''} ${i < paid ? 'prize' : ''}">
-      <td class="pos">${i + 1}</td><td><div class="row" style="gap:8px">${avatar(r.username, r.avatarUrl, "sm")}<div style="min-width:0"><div class="ellipsis" style="max-width:120px">${r.userId === uid ? "You" : r.username}</div><div class="tiny faint">${r.gamertag}</div></div></div></td>
+      <td class="pos">${i + 1}</td><td><div class="row" style="gap:8px">${avatar(r.username, r.avatarUrl, "sm")}<div style="min-width:0"><div class="row" style="gap:6px"><span class="ellipsis" style="max-width:120px">${r.userId === uid ? "You" : r.username}</span>${tierBadge(r.tier)}</div><div class="tiny faint">${r.gamertag}</div></div></div></td>
       <td>${r.played}</td><td>${r.wins}</td><td>${r.draws}</td><td>${r.losses}</td><td>${r.goalsFor - r.goalsAgainst}</td><td class="pts">${r.points}</td></tr>`)}</tbody>
   </table></div><p class="tiny faint" style="margin-top:8px">Green positions win prizes.</p>`;
 }

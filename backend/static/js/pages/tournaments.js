@@ -1,5 +1,5 @@
 import { get } from '../api.js';
-import { html, skeleton, empty } from '../ui.js';
+import { html, ic, skeleton, empty } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { tournamentCard, gameChips } from '../components.js';
 
@@ -8,7 +8,8 @@ export default async function tournaments(view) {
   let tab = 'open';
   view.innerHTML = String(html`<div class="page">
     <div class="h1">Tournaments</div>
-    <div class="muted small" style="margin-top:4px">Knockouts: winner takes 70% of entry fees. Leagues: top 4 get paid.</div>
+    <div class="muted small" style="margin-top:4px">Fixed prizes, no entry fees. Each tournament uses one of your monthly entries.</div>
+    <a class="notice brand" href="/membership" style="margin-top:14px;color:inherit">${ic('sparkles')}<div class="grow small"><b>Want more tournaments?</b> Members get up to 5 entries a month and early sign-up.</div>${ic('chevronRight')}</a>
     <div class="seg" style="margin-top:18px" role="tablist">
       <button role="tab" data-tab="open">Open</button><button role="tab" data-tab="active">In progress</button><button role="tab" data-tab="mine">Mine</button>
     </div>
