@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /wallet
+Disallow: /profile
+Disallow: /match/
+Disallow: /notifications
+
+Sitemap: https://crestarena.com/sitemap.xml
