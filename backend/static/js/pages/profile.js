@@ -125,6 +125,7 @@ export default async function profilePage(view, { query }) {
 
       <button class="btn secondary block" id="logout" style="margin-top:24px">${ic('logout')} Sign out</button>
       <p class="center tiny faint" style="margin-top:16px">CrestArena ${APP_VERSION} · 18+ · Play responsibly</p>
+      <p class="center" style="margin-top:8px"><a class="made-by" href="https://webcrest.app" target="_blank" rel="noopener">Designed by <span class="wc"><span class="wc-w">W</span><span class="wc-rest">ebCrest</span></span></a></p>
     </div>`);
 
     view.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {

@@ -97,6 +97,7 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
 
     <p class="legal-foot">By continuing you agree to our <a href="/legal/terms.html" target="_blank">Terms</a> and
       <a href="/legal/privacy.html" target="_blank">Privacy Policy</a>. 18+ only. Play responsibly.</p>
+    <p class="center" style="margin-top:14px"><a class="made-by" href="https://webcrest.app" target="_blank" rel="noopener">Designed by <span class="wc"><span class="wc-w">W</span><span class="wc-rest">ebCrest</span></span></a></p>
   </main>`);
 
   root.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => renderAuth(root, b.dataset.mode)));
