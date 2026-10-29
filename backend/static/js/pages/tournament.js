@@ -47,8 +47,8 @@ export default async function tournamentPage(view, { id }) {
         </div>
         ${t.status === 'open' ? html`
           <div class="progress" style="margin-top:16px"><span style="width:${pct}%"></span></div>
-          <div class="small muted" style="margin-top:8px">${t.maxPlayers - t.playerCount} spots left · starts automatically when full</div>
-          ${membersUntil && !t.joined ? html`<div class="notice brand" style="margin-top:12px">${ic('sparkles')}<div class="small"><b>Members' early sign-up</b> until ${membersUntil.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Then it opens to everyone.</div></div>` : ''}
+          <div class="small muted" style="margin-top:8px">${t.maxPlayers - t.playerCount} spots left${t.freeSeats != null ? html` · free spots ${Math.max(t.freeSeats - t.freeTaken, 0)} of ${t.freeSeats}` : ''} · starts automatically when full</div>
+          ${membersUntil && !t.joined ? html`<div class="notice brand" style="margin-top:12px">${ic('sparkles')}<div class="small"><b>${t.earlyTier === 'elite' ? 'Elite' : 'Members'}' early sign-up</b> until ${membersUntil.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Then it opens to everyone.</div></div>` : ''}
           <div style="margin-top:16px">${t.joined
             ? html`<div class="notice brand">${ic('checkCircle')}<div><b>You're registered</b><div class="small">We'll notify you when it starts.</div></div></div>
                 <button class="btn ghost block" id="leave" style="margin-top:8px">Leave tournament${t.entryFee ? ' (refund)' : ''}</button>`

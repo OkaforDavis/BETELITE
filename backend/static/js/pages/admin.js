@@ -4,7 +4,7 @@ import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, bu
 import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
-const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['users', 'Users'], ['ocr', 'OCR test']];
+const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
 
 export default async function admin(view, { query }) {
   if (!store.get().profile?.isAdmin) {
@@ -22,7 +22,7 @@ export default async function admin(view, { query }) {
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     body.innerHTML = String(sk.adminRows());
-    try { await ({ overview, review, withdrawals, tournaments, users, ocr })[tab](body, draw); }
+    try { await ({ overview, review, withdrawals, tournaments, support, money: moneyTab, users, ocr })[tab](body, draw); }
     catch (e) { body.innerHTML = String(empty('alert', 'Could not load', e.message)); }
   }
   await draw();
@@ -159,12 +159,14 @@ async function tournaments(body, redraw) {
     let game = store.get().games[0].id;
     let format = 'knockout';
     const staking = store.get().stakingEnabled;
-    // Suggested fixed prizes (major units), from the launch plan.
+    // Suggested fixed prizes (major units) at about ₵1 = ₦115. Each paid seat is
+    // worth about ₦1,800 (₵15); these keep prizes near half of that with 75% paid seats.
     const PRESETS = {
-      knockout: { 8: [[60], [6000]], 16: [[100], [10000]], 32: [[150], [15000]] },
-      swiss: { 8: [[35, 15, 10], [3500, 1500, 1000]], 16: [[60, 25, 15], [6000, 2500, 1500]], 32: [[80, 40, 30], [8000, 4000, 3000]] },
-      league: { 8: [[35, 15, 10], [3500, 1500, 1000]], 16: [[60, 25, 15], [6000, 2500, 1500]] },
+      knockout: { 8: [[50], [5800]], 16: [[100], [11500]], 32: [[150], [17300]], 64: [[300], [34500]] },
+      swiss: { 8: [[30, 12, 8], [3500, 1400, 900]], 16: [[60, 25, 15], [7000, 2900, 1700]], 32: [[100, 50, 30], [11500, 5800, 3500]], 64: [[150, 90, 60], [17300, 10400, 6900]] },
+      league: { 8: [[30, 12, 8], [3500, 1400, 900]], 16: [[60, 25, 15], [7000, 2900, 1700]] },
     };
+    const NAMES = { 'swiss-32': 'Top Player', 'swiss-64': 'End-of-Month Platter', 'knockout-64': 'End-of-Month Platter' };
     sheet(String(html`${sheetHead('Create tournament', 'Fixed prizes in cedis and naira, paid by CrestArena')}
       <form id="ct">
         <label class="field"><span class="label">Name</span><input class="input" name="name" required maxlength="60" placeholder="e.g. Friday Night Cup"></label>
@@ -178,7 +180,11 @@ async function tournaments(body, redraw) {
         <div class="grid-2" style="margin-top:14px">
           <label class="field"><span class="label">Prizes ₵ (1st, 2nd, …)</span><input class="input" name="ghs" required></label>
           <label class="field" style="margin-top:0"><span class="label">Prizes ₦ (1st, 2nd, …)</span><input class="input" name="ngn" required></label></div>
-        <label class="field"><span class="label">Members-only early sign-up (hours, 0 = none)</span><input class="input num" name="early" inputmode="numeric" value="12"></label>
+        <div class="grid-2" style="margin-top:14px">
+          <label class="field"><span class="label">Early sign-up (hours, 0 = none)</span><input class="input num" name="early" inputmode="numeric" value="12"></label>
+          <label class="field" style="margin-top:0"><span class="label">Early sign-up for</span><select class="select" name="earlyTier"><option value="pro">All members</option><option value="elite">Elite only</option></select></label></div>
+        <label class="field"><span class="label">Free-plan seats (max)</span><input class="input num" name="freeSeats" inputmode="numeric"></label>
+        <p class="hint">Default 25% of seats. Free players still get in, but most seats go to members so the prizes stay affordable.</p>
         ${staking ? html`<label class="field"><span class="label">Entry fee (₦, 0 = prize tournament)</span><input class="input num" name="fee" inputmode="numeric" value="0"></label>` : ''}
         <p class="hint">Every player uses one monthly entry. Prizes are the same for everyone and don't depend on how many members paid.</p>
         <div class="sheet-actions"><button class="btn primary block" type="submit">Create</button></div></form>`), {
@@ -187,13 +193,17 @@ async function tournaments(body, redraw) {
         const hint = root.querySelector('#fmt-hint');
         const HINTS = {
           knockout: 'Lose once and you are out. Pays 1st (and optionally 2nd).',
-          swiss: 'Everyone plays every round (8 players: 3 rounds, 16: 4, 32: 5) against players on similar points. Top 3 by points win.',
+          swiss: 'Everyone plays every round (8 players: 3 rounds, 16: 4, 32: 5, 64: 6) against players on similar points. Top 3 by points win.',
           league: 'Everyone plays everyone once. Best for 8 players or fewer (up to 20).',
         };
         const preset = () => {
           const p = PRESETS[format]?.[f.max.value];
           if (p) { f.ghs.value = p[0].join(', '); f.ngn.value = p[1].join(', '); }
           hint.textContent = HINTS[format];
+          f.freeSeats.value = Math.max(1, Math.floor(+f.max.value / 4));
+          const suggested = NAMES[format + '-' + f.max.value];
+          if (suggested && !f.name.value) f.name.value = suggested;
+          if (+f.max.value === 64) f.earlyTier.value = 'elite';
         };
         const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); }));
         bindG();
@@ -215,6 +225,7 @@ async function tournaments(body, redraw) {
           busy(f.querySelector('[type=submit]'), async () => {
             await post('/admin/tournaments', {
               name: f.name.value, game, format, maxPlayers: num('max'), roundHours: num('hours'), earlyHours: num('early'),
+              earlyTier: f.earlyTier.value, freeSeats: num('freeSeats'),
               entryFee: Math.round(num('fee') * 100), prizes: { GHS: ghs, NGN: ngn },
             });
             close(); toast('Tournament created'); redraw();
@@ -280,6 +291,81 @@ async function ocr(body) {
       const r = await upload('/admin/ocr-test', fd);
       body.querySelector('#out').innerHTML = String(html`<div class="notice ${r.verdict === 'accepted' ? 'brand' : 'danger'}">${ic(r.verdict === 'accepted' ? 'checkCircle' : 'xCircle')}<div><b>${r.verdict}</b></div></div>
         <pre style="white-space:pre-wrap;font-size:13px;color:var(--text-2);margin-top:12px">${JSON.stringify(r.ocr, null, 2)}</pre>`);
+    });
+  };
+}
+
+// Complaints from players: read, reply, close.
+async function support(body, redraw) {
+  let status = 'open';
+  const draw = async () => {
+    const { tickets, categories } = await get('/admin/support?status=' + status);
+    body.innerHTML = String(html`<div class="seg" role="tablist">${[['open', 'Open'], ['answered', 'Answered'], ['closed', 'Closed']].map(([k, l]) => html`<button data-st="${k}" class="${k === status ? 'active' : ''}">${l}</button>`)}</div>
+      <div class="stack" style="margin-top:14px">${tickets.length ? tickets.map((t) => html`<div class="card">
+        <div class="row between"><span class="badge">${categories[t.category] || t.category}</span><span class="small faint">${timeAgo(t.createdAt)}</span></div>
+        <div class="h3" style="margin-top:10px">${t.subject}</div>
+        <div class="small muted">${t.username} · ${t.email}${t.refId ? ' · ref ' + t.refId : ''}</div>
+        <p style="margin-top:10px;white-space:pre-wrap">${t.message}</p>
+        ${t.adminReply ? html`<div class="notice" style="margin-top:10px">${ic('send')}<div class="small"><b>Your reply:</b> ${t.adminReply}</div></div>` : ''}
+        <div class="row" style="gap:8px;margin-top:12px"><button class="btn primary sm" data-reply="${t.id}">${ic('send')} Reply</button></div>
+      </div>`) : html`<div class="card flat">${empty('checkCircle', 'Nothing here', 'No ' + status + ' messages.')}</div>`}</div>`);
+    body.querySelectorAll('[data-st]').forEach((b) => (b.onclick = () => { status = b.dataset.st; draw(); }));
+    body.querySelectorAll('[data-reply]').forEach((b) => (b.onclick = () => reply(tickets.find((t) => t.id === b.dataset.reply))));
+  };
+  function reply(t) {
+    sheet(String(html`${sheetHead('Reply to ' + t.username, t.subject)}
+      <form id="rp"><textarea class="input" name="reply" rows="5" required placeholder="Your reply (the player gets a notification)"></textarea>
+        <label class="row" style="gap:8px;margin-top:12px"><input type="checkbox" name="close" checked> Mark as resolved</label>
+        <div class="sheet-actions"><button class="btn primary block">Send reply</button></div></form>`), {
+      onMount(root, close) {
+        root.querySelector('#rp').onsubmit = (e) => {
+          e.preventDefault();
+          const f = e.target;
+          busy(f.querySelector('button'), async () => {
+            await post('/admin/support/' + t.id + '/reply', { reply: f.reply.value, close: f.close.checked });
+            close(); toast('Reply sent'); draw();
+          });
+        };
+      },
+    });
+  }
+  await draw();
+}
+
+// Money per currency: what players are owed vs what came in/out, the rate,
+// active providers, and moving a player's wallet after a complaint.
+async function moneyTab(body) {
+  const d = await get('/admin/money');
+  const fmt = money;
+  body.innerHTML = String(html`<div class="small muted">Rate: ₵1 = ₦${(d.ngnPerGhs || 0).toFixed(2)} · exchange margin ${d.marginPct}% · providers NGN: ${(d.providers.NGN || []).join(' → ') || 'none'}, GHS: ${(d.providers.GHS || []).join(' → ') || 'none'}</div>
+    <div class="stack" style="margin-top:14px">${d.currencies.map((r) => html`<div class="card">
+      <div class="h3">${r.currency}</div>
+      <div class="list" style="margin-top:10px">
+        <div class="list-row"><div class="grow muted">Owed: player wallets</div><b class="num">${fmt(r.wallets, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Owed: withdrawals waiting</div><b class="num">${fmt(r.pendingPayouts, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">In (30 days): memberships</div><b class="num brand-text">${fmt(r.memberships30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): prizes</div><b class="num">${fmt(r.prizes30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): cashback</div><b class="num">${fmt(r.cashback30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): withdrawals sent</div><b class="num">${fmt(r.paidOut30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Top-ups paid in the other currency</div><b class="num">${fmt(r.crossCurrency30, r.currency)}</b></div>
+      </div>
+      <p class="tiny faint" style="margin-top:8px">Keep at least "owed" in this currency across your Paystack/Flutterwave balances and bank.</p>
+    </div>`)}</div>
+    <form class="card" id="mv" style="margin-top:14px">
+      <div class="h3">Move a player's wallet</div>
+      <p class="small muted">After a complaint (e.g. they moved country). Converts the balance at today's rate less the margin; skips the 30/90-day rules.</p>
+      <label class="field"><span class="label">User ID</span><input class="input" name="uid" required placeholder="From the Users tab"></label>
+      <label class="field"><span class="label">New currency</span><select class="select" name="cur"><option>NGN</option><option>GHS</option></select></label>
+      <button class="btn secondary block" style="margin-top:12px">Move wallet</button>
+    </form>`);
+  body.querySelector('#mv').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    if (!(await confirmSheet({ title: 'Move this wallet?', message: `Convert ${f.uid.value}'s balance to ${f.cur.value}.`, confirm: 'Move wallet' }))) return;
+    busy(f.querySelector('button'), async () => {
+      const r = await post(`/admin/users/${encodeURIComponent(f.uid.value.trim())}/currency`, { currency: f.cur.value });
+      toast(`Done. New balance ${money(r.balance, f.cur.value)}`);
+      f.reset();
     });
   };
 }

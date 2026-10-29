@@ -19,13 +19,26 @@ import (
 type Tier struct {
 	ID       string           `json:"id"`
 	Name     string           `json:"name"`
-	Entries  int              `json:"entries"`  // tournaments per period
+	Rank     int              `json:"rank"`     // 0 free … 3 elite; used for early sign-up
+	Entries  int              `json:"entries"`  // tournaments per period, including the free monthly one
 	Prices   map[string]int64 `json:"prices"`   // minor units per currency; empty = free
 	Cashback int              `json:"cashback"` // % of the price returned to the wallet on renewal
 	Perks    []string         `json:"perks"`
 }
 
 const FreeTier = "free"
+
+// FreeEntries is the free tournament every player gets each period; paid
+// plans add their entries on top of it.
+const FreeEntries = 1
+
+// TierRank orders tiers for early sign-up ("pro" = any paid plan, "elite" = Elite only).
+func TierRank(id string) int {
+	if t := TierByID(id); t != nil {
+		return t.Rank
+	}
+	return 0
+}
 
 // MembershipPeriod is how long one paid plan lasts.
 const MembershipPeriod = 30 * 24 * time.Hour
@@ -34,14 +47,14 @@ const MembershipPeriod = 30 * 24 * time.Hour
 const MembershipRenewWindow = 7 * 24 * time.Hour
 
 var Tiers = []Tier{
-	{ID: FreeTier, Name: "Free", Entries: 1, Perks: []string{
-		"1 tournament a month", "Free 1v1 matches", "Watch live streams", "Same prizes as everyone"}},
-	{ID: "pro", Name: "Pro", Entries: 2, Cashback: 5, Prices: map[string]int64{"GHS": 30_00, "NGN": 3_000_00}, Perks: []string{
-		"2 tournaments a month", "Go live and chat in streams", "Pro badge", "Early tournament sign-up", "5% cashback when you renew"}},
-	{ID: "pro_plus", Name: "Pro Plus", Entries: 3, Cashback: 7, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_000_00}, Perks: []string{
-		"3 tournaments a month", "Go live and chat in streams", "Pro Plus badge", "Early tournament sign-up", "7% cashback when you renew"}},
-	{ID: "elite", Name: "Elite", Entries: 5, Cashback: 10, Prices: map[string]int64{"GHS": 80_00, "NGN": 8_000_00}, Perks: []string{
-		"5 tournaments a month", "Go live and chat in streams", "Elite badge", "Early tournament sign-up", "10% cashback when you renew"}},
+	{ID: FreeTier, Name: "Free", Rank: 0, Entries: FreeEntries, Perks: []string{
+		"1 free tournament a month", "Free 1v1 matches", "Watch live streams", "Same prizes as everyone"}},
+	{ID: "pro", Name: "Pro", Rank: 1, Entries: FreeEntries + 2, Cashback: 5, Prices: map[string]int64{"GHS": 30_00, "NGN": 3_600_00}, Perks: []string{
+		"2 tournaments + your free one", "Go live and chat in streams", "Pro badge", "Early tournament sign-up", "5% cashback when you renew"}},
+	{ID: "pro_plus", Name: "Pro Plus", Rank: 2, Entries: FreeEntries + 3, Cashback: 7, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_800_00}, Perks: []string{
+		"3 tournaments + your free one", "Go live and chat in streams", "Pro Plus badge", "Early tournament sign-up", "7% cashback when you renew"}},
+	{ID: "elite", Name: "Elite", Rank: 3, Entries: FreeEntries + 5, Cashback: 10, Prices: map[string]int64{"GHS": 80_00, "NGN": 9_200_00}, Perks: []string{
+		"5 tournaments + your free one", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
 }
 
 // TierByID returns a tier, or nil.

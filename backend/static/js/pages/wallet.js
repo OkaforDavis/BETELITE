@@ -1,8 +1,8 @@
-import { get, post, quietPost } from '../api.js';
+import { get, post, quietPost, quietGet } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, sym, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton } from '../ui.js';
 import { needsConsent, consentGate } from '../consent.js';
-import { grossUp, transferFee } from '../components.js';
+import { grossUp, transferFee, payCurrency, openCheckout } from '../components.js';
 import { refreshProfile } from '../app.js';
 
 const TX = {
@@ -21,6 +21,7 @@ const TX = {
   referral_bonus: ['Welcome bonus', 'sparkles', 'brand'],
   membership: ['Membership', 'sparkles', ''],
   membership_cashback: ['Membership cashback', 'coins', 'brand'],
+  currency_switch: ['Wallet moved to new country', 'refresh', 'info'],
   admin_adjustment: ['Balance adjustment', 'settings', ''],
 };
 const WD_STATUS = { pending: ['Awaiting approval', 'warn'], processing: ['Sending', 'info'], paid: ['Paid', 'brand'], rejected: ['Rejected', 'danger'], failed: ['Failed, refunded', 'danger'] };
@@ -86,8 +87,13 @@ export default async function wallet(view, { query }) {
   function deposit(prefill) {
     if (!gate()) return;
     const cur = w.currency;
-    sheet(String(html`${sheetHead('Deposit', 'Card, bank transfer or USSD via Paystack')}
+    const payCurs = (w.payCurrencies || []).filter((c) => ['NGN', 'GHS'].includes(c));
+    let payCur = payCurrency() || cur;
+    if (!payCurs.includes(payCur)) payCur = cur;
+    const CUR_NAME = { NGN: 'Naira (₦)', GHS: 'Cedis (₵)' };
+    sheet(String(html`${sheetHead('Deposit', 'Card, bank transfer, USSD or mobile money')}
       <form id="dep-form">
+        ${payCurs.length > 1 ? html`<span class="label">Pay in</span><div class="seg" id="paycur" style="margin-bottom:14px">${payCurs.map((c) => html`<button type="button" data-pc="${c}" class="${c === payCur ? 'active' : ''}">${CUR_NAME[c] || c}</button>`)}</div>` : ''}
         <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="amount" inputmode="numeric" pattern="[0-9]*" value="${prefill || QUICK[cur][1]}" aria-label="Amount"></div>
         <div class="chips" style="margin-top:10px">${QUICK[cur].map((q) => html`<button type="button" class="chip" data-q="${q}">${money(q * 100, cur)}</button>`)}</div>
         <p class="hint">Min ${money(w.limits.minDeposit, cur)} · Max ${money(w.limits.maxDeposit, cur)}</p>
@@ -98,15 +104,40 @@ export default async function wallet(view, { query }) {
       onMount(root, close) {
         const input = root.querySelector('[name=amount]');
         const sum = root.querySelector('#dep-sum');
-        // Paystack's fee is added on top so the full amount reaches the wallet.
+        // The exchange rate (when paying in another currency) and the payment
+        // provider's fee are added on top, so the full amount reaches the wallet.
+        let seq = 0;
+        let timer = null;
+        const summary = (amount, fee, total, pc, q) => html`<div class="row between small"><span class="muted">Added to wallet</span><b class="num">${money(amount, cur)}</b></div>
+          ${q ? html`<div class="row between small" style="margin-top:6px"><span class="muted">Converted (incl. 3% exchange margin)</span><span class="num">${money(q.payAmount, pc)}</span></div>` : ''}
+          <div class="row between small" style="margin-top:6px"><span class="muted">Payment fee</span><span class="num">${money(fee, pc)}</span></div>
+          <div class="divider" style="margin:10px 0"></div>
+          <div class="row between"><span>You pay</span><b class="h3 num">${money(total, pc)}</b></div>`;
         const update = () => {
+          clearTimeout(timer);
           const amount = (parseInt(input.value.replace(/\D/g, ''), 10) || 0) * 100;
-          const total = grossUp(amount, w.feeRule);
-          sum.innerHTML = String(html`<div class="row between small"><span class="muted">Added to wallet</span><b class="num">${money(amount, cur)}</b></div>
-            <div class="row between small" style="margin-top:6px"><span class="muted">Payment fee</span><span class="num">${money(total - amount, cur)}</span></div>
-            <div class="divider" style="margin:10px 0"></div>
-            <div class="row between"><span>You pay</span><b class="h3 num">${money(total, cur)}</b></div>`);
+          if (!amount) { sum.innerHTML = ''; return; }
+          if (payCur === cur) {
+            const total = grossUp(amount, w.feeRule);
+            sum.innerHTML = String(summary(amount, total - amount, total, cur));
+            return;
+          }
+          sum.innerHTML = '<div class="small muted">Working out today’s rate…</div>';
+          const mine = ++seq;
+          timer = setTimeout(async () => {
+            try {
+              const q = await quietGet(`/wallet/quote?amount=${amount}&payCurrency=${payCur}`);
+              if (mine === seq) sum.innerHTML = String(summary(amount, q.fee, q.charged, payCur, q));
+            } catch (e) {
+              if (mine === seq) sum.innerHTML = String(html`<div class="small danger-text">${e.message}</div>`);
+            }
+          }, 350);
         };
+        root.querySelectorAll('[data-pc]').forEach((b) => (b.onclick = () => {
+          payCur = b.dataset.pc;
+          root.querySelectorAll('[data-pc]').forEach((x) => x.classList.toggle('active', x === b));
+          update();
+        }));
         input.oninput = update;
         root.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; update(); }));
         update();
@@ -115,27 +146,14 @@ export default async function wallet(view, { query }) {
           const amount = (parseInt(input.value.replace(/\D/g, ''), 10) || 0) * 100;
           if (amount < w.limits.minDeposit || amount > w.limits.maxDeposit) return toast(`Enter between ${money(w.limits.minDeposit, cur)} and ${money(w.limits.maxDeposit, cur)}`, 'err');
           busy(e.target.querySelector('[type=submit]'), async () => {
-            const d = await post('/wallet/deposit', { amount });
+            const d = await post('/wallet/deposit', { amount, payCurrency: payCur });
             close();
-            await openCheckout(d);
+            if (d.provider === 'paystack') waitForCredit(d.reference, true);
+            await openCheckout(d, (ref) => waitForCredit(ref));
           });
         };
       },
     });
-  }
-
-  async function openCheckout(d) {
-    try {
-      await loadScript('https://js.paystack.co/v2/inline.js');
-      const popup = new window.PaystackPop();
-      popup.resumeTransaction(d.accessCode, {
-        onSuccess: () => waitForCredit(d.reference),
-        onCancel: () => toast('Payment cancelled', 'info'),
-      });
-      waitForCredit(d.reference, true);
-    } catch {
-      location.href = d.authorizationUrl; // hosted page fallback; returns to /?deposit=ref
-    }
   }
 
   // Poll until Paystack confirms (the webhook may credit first; both are safe).
@@ -187,8 +205,9 @@ export default async function wallet(view, { query }) {
         const select = f.bank;
         root.querySelector('[data-max]').onclick = () => { f.amount.value = Math.floor(w.balance / 100); showFee(); };
         let banks = [];
+        let payoutProvider = w.payoutProvider || 'paystack';
         try {
-          ({ banks } = await get('/wallet/banks'));
+          ({ banks, provider: payoutProvider } = await get('/wallet/banks'));
           select.innerHTML = '<option value="">Choose…</option>' + banks.map((b, i) => `<option value="${i}">${b.name.replace(/</g, '&lt;')}</option>`).join('');
         } catch (e) { select.innerHTML = '<option value="">Could not load banks</option>'; toast(e.message, 'err'); }
 
@@ -213,7 +232,7 @@ export default async function wallet(view, { query }) {
           const bank = banks[select.value];
           wdSum.hidden = !amount;
           if (!amount) return;
-          const fee = transferFee(amount, cur, bank?.type);
+          const fee = transferFee(amount, cur, bank?.type, payoutProvider);
           wdSum.innerHTML = String(html`<div class="row between small"><span class="muted">Transfer fee</span><span class="num">${money(fee, cur)}</span></div>
             <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(Math.max(amount - fee, 0), cur)}</b></div>`);
         }
@@ -244,15 +263,4 @@ export default async function wallet(view, { query }) {
 
   await load();
   if (query.deposit) deposit(query.deposit);
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.append(s);
-  });
 }

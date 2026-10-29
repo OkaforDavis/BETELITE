@@ -46,6 +46,18 @@ services:
         sync: false
       - key: PAYSTACK_SECRET_KEY_GH
         sync: false
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_PUBLIC_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_HASH
+        sync: false
+      - key: FLUTTERWAVE_GHS
+        value: "false"
+      - key: PAYMENT_PROVIDERS
+        value: flutterwave,paystack
+      - key: FX_MARGIN_PCT
+        value: "3"
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET

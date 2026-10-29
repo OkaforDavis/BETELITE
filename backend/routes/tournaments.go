@@ -35,6 +35,9 @@ type tournamentView struct {
 	Prizes           []int64              `json:"prizes"`                     // projected at full capacity
 	FixedPrizes      services.FixedPrizes `json:"fixedPrizes,omitempty"`      // per currency, 1st place first
 	MembersOnlyUntil *time.Time           `json:"membersOnlyUntil,omitempty"` // early sign-up for members
+	EarlyTier        string               `json:"earlyTier"`                  // "pro" = any plan, "elite" = Elite only
+	FreeSeats        *int                 `json:"freeSeats,omitempty"`        // max seats for free-plan players
+	FreeTaken        int                  `json:"freeTaken"`
 	TotalRounds      int                  `json:"totalRounds,omitempty"`
 	Joined           bool                 `json:"joined"`
 	WinnerID         string               `json:"winnerId,omitempty"`
@@ -45,14 +48,16 @@ type tournamentView struct {
 const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon,''), t.entry_fee, t.currency, t.max_players,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id), t.status, t.current_round, t.round_hours,
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
-	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until FROM tournaments t`
+	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
+	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry) FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
 	var split, fixed []byte
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
-		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil); err != nil {
+		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken); err != nil {
 		return nil, err
 	}
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
@@ -130,8 +135,10 @@ func SetupTournamentRoutes(api fiber.Router) {
 		var maxPlayers int
 		var status, game, currency, name string
 		var membersUntil *time.Time
-		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until FROM tournaments WHERE id = $1 FOR UPDATE", tid).
-			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil)
+		var earlyTier string
+		var freeSeats *int
+		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until, early_tier, free_seats FROM tournaments WHERE id = $1 FOR UPDATE", tid).
+			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil, &earlyTier, &freeSeats)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return utils.SendError(c, 404, "Tournament not found")
 		}
@@ -144,15 +151,17 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err := services.RequireGameProfile(ctx, tx, uid, game); err != nil {
 			return fail(c, err)
 		}
-		var count int
+		var count, freeTaken int
 		var joined bool
-		tx.QueryRow(ctx, "SELECT COUNT(*), COALESCE(BOOL_OR(user_id = $2), false) FROM tournament_players WHERE tournament_id = $1", tid, uid).Scan(&count, &joined)
+		tx.QueryRow(ctx, "SELECT COUNT(*), COUNT(*) FILTER (WHERE free_entry), COALESCE(BOOL_OR(user_id = $2), false) FROM tournament_players WHERE tournament_id = $1", tid, uid).
+			Scan(&count, &freeTaken, &joined)
 		if joined {
 			return utils.SendError(c, 409, "You're already registered")
 		}
 		if count >= maxPlayers {
 			return utils.SendError(c, 409, "This tournament is full")
 		}
+		isFree := false
 		if fee == 0 {
 			// Prize tournaments: 18+ and terms, the members' early sign-up
 			// window, and the monthly entries the player's plan allows.
@@ -166,8 +175,16 @@ func SetupTournamentRoutes(api fiber.Router) {
 			if err != nil {
 				return fail(c, err)
 			}
-			if membersUntil != nil && time.Now().Before(*membersUntil) && usage.Tier == services.FreeTier {
-				return utils.SendError(c, 403, "Members get early sign-up for this tournament. It opens to everyone "+membersUntil.Format("2 Jan, 15:04")+" (GMT).")
+			if membersUntil != nil && time.Now().Before(*membersUntil) && services.TierRank(usage.Tier) < services.TierRank(earlyTier) {
+				who := "Members get"
+				if earlyTier == "elite" {
+					who = "Elite members get"
+				}
+				return utils.SendError(c, 403, who+" early sign-up for this tournament. It opens to everyone "+membersUntil.Format("2 Jan, 15:04")+" (GMT).")
+			}
+			isFree = usage.Tier == services.FreeTier
+			if isFree && freeSeats != nil && freeTaken >= *freeSeats {
+				return utils.SendError(c, 403, "The free spots in this tournament are taken. Members can still join while seats are open.")
 			}
 			if usage.Left <= 0 {
 				return utils.SendError(c, 403, fmt.Sprintf("You've used all %d tournament entries for this period. Upgrade your membership or wait until %s.",
@@ -192,7 +209,7 @@ func SetupTournamentRoutes(api fiber.Router) {
 				return fail(c, err)
 			}
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO tournament_players (tournament_id, user_id) VALUES ($1,$2)", tid, uid); err != nil {
+		if _, err := tx.Exec(ctx, "INSERT INTO tournament_players (tournament_id, user_id, free_entry) VALUES ($1,$2,$3)", tid, uid, isFree); err != nil {
 			return fail(c, err)
 		}
 		started := count+1 == maxPlayers

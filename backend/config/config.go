@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -34,8 +35,15 @@ type Config struct {
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	LiveKitURL                 string
-	StakingEnabled             bool   // real-money 1v1 stakes and paid tournament entries; off until licensed
-	FirebaseAuthDomain         string // host that serves /__/auth (the app itself once set up), else <project>.firebaseapp.com
+	StakingEnabled             bool // real-money 1v1 stakes and paid tournament entries; off until licensed
+	FlutterwaveSecretKey       string
+	FlutterwavePublicKey       string
+	FlutterwaveWebhookHash     string   // "secret hash" set in the Flutterwave dashboard
+	FlutterwaveGHS             bool     // Flutterwave may collect and pay out GHS (once Flutterwave enables it)
+	PaymentProviders           []string // tried in order, e.g. flutterwave,paystack
+	FXMarginPct                float64  // margin on cross-currency payments and home-country switches
+	FXNGNPerGHS                float64  // optional fixed rate; 0 = fetch the market rate
+	FirebaseAuthDomain         string   // host that serves /__/auth (the app itself once set up), else <project>.firebaseapp.com
 }
 
 var Cfg Config
@@ -78,6 +86,13 @@ func Load() {
 		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
 		StakingEnabled:             getEnv("STAKING_ENABLED", "") == "true",
 		FirebaseAuthDomain:         getEnv("FIREBASE_AUTH_DOMAIN", ""),
+		FlutterwaveSecretKey:       getEnv("FLUTTERWAVE_SECRET_KEY", ""),
+		FlutterwavePublicKey:       getEnv("FLUTTERWAVE_PUBLIC_KEY", ""),
+		FlutterwaveWebhookHash:     getEnv("FLUTTERWAVE_WEBHOOK_HASH", ""),
+		FlutterwaveGHS:             getEnv("FLUTTERWAVE_GHS", "") == "true",
+		PaymentProviders:           splitList(getEnv("PAYMENT_PROVIDERS", "flutterwave,paystack")),
+		FXMarginPct:                parseFloat(getEnv("FX_MARGIN_PCT", "3"), 3),
+		FXNGNPerGHS:                parseFloat(getEnv("FX_NGN_PER_GHS", "0"), 0),
 	}
 }
 
@@ -134,4 +149,12 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+func parseFloat(v string, fallback float64) float64 {
+	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil {
+		return fallback
+	}
+	return f
 }

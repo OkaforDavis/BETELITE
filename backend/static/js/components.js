@@ -165,7 +165,45 @@ export function grossUp(net, rule) {
   for (let i = 0; i < 64 && gross - gatewayFee(gross, rule) < net; i++) gross += Math.max(net - (gross - gatewayFee(gross, rule)), 1);
   return gross;
 }
-export function transferFee(amount, cur, bankType) {
+export function transferFee(amount, cur, bankType, provider = 'paystack') {
+  if (provider === 'flutterwave') {
+    if (cur === 'GHS') return Math.max(Math.floor(amount * 15 / 1000), 100);
+    return amount <= 500000 ? 1075 : amount <= 5000000 ? 2688 : 5375;
+  }
   if (cur === 'GHS') return bankType === 'mobile_money' ? 100 : 800;
   return amount <= 500000 ? 1000 : amount <= 5000000 ? 2500 : 5000;
+}
+
+// The currency this player pays in: this visit's choice, then their saved
+// preference (Profile → Payment currency), else their wallet currency.
+export function payCurrency() {
+  const { profile, payCurrencies } = store.get();
+  let pick = null;
+  try { pick = sessionStorage.getItem('crestarena.payCurrency') || localStorage.getItem('crestarena.payCurrencyPref'); } catch { /* private mode */ }
+  if (pick && pick !== 'auto' && payCurrencies?.includes(pick)) return pick;
+  return profile?.currency;
+}
+
+// Opens a checkout returned by the API: Paystack's in-app popup when
+// available, otherwise the provider's secure payment page (Flutterwave).
+export async function openCheckout(d, onPaid) {
+  if (d.provider === 'paystack' && d.accessCode) {
+    try {
+      await loadScriptOnce('https://js.paystack.co/v2/inline.js');
+      new window.PaystackPop().resumeTransaction(d.accessCode, { onSuccess: () => onPaid?.(d.reference), onCancel: () => {} });
+      return;
+    } catch { /* fall back to the hosted page */ }
+  }
+  location.href = d.authorizationUrl; // returns to /?deposit=ref
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.append(s);
+  });
 }

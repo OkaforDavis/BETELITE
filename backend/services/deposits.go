@@ -20,10 +20,11 @@ import (
 // then a later success is still credited (customers can retry a declined card
 // on the same checkout).
 func CreditDeposit(ctx context.Context, reference string) (string, error) {
-	var uid, currency, status, purpose string
+	var uid, currency, status, purpose, provider, payCurrency string
 	var amount, charged int64
-	err := db.Pool.QueryRow(ctx, "SELECT user_id, currency, amount, status, COALESCE(purpose,''), COALESCE(charged, amount) FROM deposits WHERE reference = $1", reference).
-		Scan(&uid, &currency, &amount, &status, &purpose, &charged)
+	err := db.Pool.QueryRow(ctx, `SELECT user_id, currency, amount, status, COALESCE(purpose,''), COALESCE(charged, amount),
+		provider, COALESCE(pay_currency, currency) FROM deposits WHERE reference = $1`, reference).
+		Scan(&uid, &currency, &amount, &status, &purpose, &charged, &provider, &payCurrency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", &UserError{Status: 404, Msg: "Deposit not found"}
 	}
@@ -34,7 +35,14 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 		return "paid", nil
 	}
 
-	txn, err := PaystackVerify(ctx, currency, reference)
+	// "charged" is in the currency the player paid in (it may differ from the
+	// wallet currency for cross-currency top-ups); "amount" is what the wallet gets.
+	var txn *PaystackTxn
+	if provider == ProviderFlutterwave {
+		txn, err = FlutterwaveVerify(ctx, reference)
+	} else {
+		txn, err = PaystackVerify(ctx, payCurrency, reference)
+	}
 	db.Pool.Exec(ctx, "UPDATE deposits SET checked_at = NOW(), gateway_status = $2 WHERE reference = $1", reference, txnStatus(txn, err))
 	if err != nil {
 		return "", err
@@ -47,8 +55,8 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 	default: // abandoned (not finished yet), ongoing, pending, processing, queued
 		return status, nil
 	}
-	if txn.Currency != currency || txn.Amount < charged {
-		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, charged, currency)
+	if txn.Currency != payCurrency || txn.Amount < charged {
+		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, charged, payCurrency)
 		NotifyAdmins(ctx, "Deposit needs review", "Deposit "+reference+" was paid with a different amount or currency.")
 		return "", &UserError{Status: 409, Msg: "Payment amount mismatch. Please contact support."}
 	}
