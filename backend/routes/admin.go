@@ -21,6 +21,7 @@ import (
 func SetupAdminRoutes(api fiber.Router) {
 	admin := api.Group("/admin", middleware.AuthRequired(), middleware.AdminRequired(), dbRequired)
 	setupAdminSupport(admin)
+	setupAdminMoney(admin)
 
 	admin.Get("/stats", func(c *fiber.Ctx) error {
 		ctx := c.Context()

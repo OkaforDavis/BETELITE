@@ -34,7 +34,7 @@
     <tr><td>Account</td><td>Email address, display name, account ID. If you use Google sign-in, the name Google provides. Your password is handled by Google Firebase; we never see it.</td><td>You / Google</td></tr>
     <tr><td>Profile photo (optional)</td><td>A photo you choose to upload. We shrink it and remove hidden data such as the location where it was taken. Other players can see it.</td><td>You</td></tr>
     <tr><td>Age</td><td>Date of birth, used only to confirm you are 18 or older.</td><td>You</td></tr>
-    <tr><td>Location</td><td>Your country and wallet currency (Nigeria or Ghana). An approximate country from your IP address may be used to suggest a currency.</td><td>You / your device</td></tr>
+    <tr><td>Location</td><td>Your country and wallet currency (Nigeria or Ghana). Your approximate country from your IP address is used to set your currency, offer payment in the local currency when you travel, and record which country (and since when) you use CrestArena from, so you can move your wallet if you relocate.</td><td>You / your device</td></tr>
     <tr><td>Game IDs</td><td>Your in-game names and optional in-game ID numbers for supported games.</td><td>You</td></tr>
     <tr><td>Match results</td><td>Result screenshots you upload. We send the image to our AI providers (Google, or Anthropic as a backup) to read the score. We keep the screenshot, with hidden data such as location removed, <strong>for 30 days after the match is final</strong> so both players and our admins can check it in a dispute; then it is deleted automatically. We also keep what was read from it (names, scores, game mode), a fingerprint (hash) of the image to stop it being reused, and any in-game match ID shown. Screenshots you attach to a dispute are kept the same way.</td><td>You</td></tr>
     <tr><td>Wallet and payments</td><td>Balance, transaction history, deposit references and amounts. For withdrawals: bank name, account number and account holder name. Card details are entered directly with Paystack; we never receive them.</td><td>You / Paystack</td></tr>
@@ -62,10 +62,11 @@
     <tr><td>Google Firebase</td><td>Sign-in and account security</td><td>Email, name, account ID, sign-in data</td></tr>
     <tr><td>Google Gemini API</td><td>Reading scores from result screenshots</td><td>The screenshot and the two players' in-game names</td></tr>
     <tr><td>Anthropic (Claude API)</td><td>Backup reader for result screenshots when Google is unavailable</td><td>The screenshot and the two players' in-game names</td></tr>
+    <tr><td>Flutterwave</td><td>Deposits, plan payments and withdrawals (card, bank transfer, USSD, mobile money)</td><td>Name, email, amount, bank or mobile-money details for payouts</td></tr>
     <tr><td>Paystack</td><td>Deposits and withdrawals</td><td>Email, amount, bank details for payouts</td></tr>
     <tr><td>Render</td><td>Hosting our servers and database</td><td>All account and platform data (stored on their servers)</td></tr>
     <tr><td>LiveKit</td><td>Live video streams</td><td>Stream video, audio and your display name</td></tr>
-    <tr><td>ip-api.com</td><td>Suggesting a currency from your approximate location</td><td>IP address</td></tr>
+    <tr><td>ip-api.com / Cloudflare</td><td>Finding your approximate country to set your currency, offer local-currency payment when you travel, and allow moving your wallet if you relocate</td><td>IP address</td></tr>
     <tr><td>Google Fonts</td><td>Displaying the app's fonts</td><td>IP address (when fonts load)</td></tr>
   </table>
   <p>Other players see your display name, profile photo, in-game names, match results and tournament standings. We may disclose data if the law requires it, to protect players or the platform from fraud, or as part of a sale or merger (with notice to you).</p>
@@ -94,7 +95,7 @@
   <p>We respond to requests within 30 days. We may need to confirm your identity first.</p>
 
   <h2 id="security">8. Security</h2>
-  <p>All traffic is encrypted (HTTPS). Passwords are managed by Google Firebase. Card details stay with Paystack. Access to personal data is limited to staff who need it. Money movements are recorded in a ledger and checked for consistency. No system is perfectly secure; if a breach affects you, we will tell you and the regulator as the law requires.</p>
+  <p>All traffic is encrypted (HTTPS). Passwords are managed by Google Firebase. Card details stay with Paystack or Flutterwave. Access to personal data is limited to staff who need it. Money movements are recorded in a ledger and checked for consistency. No system is perfectly secure; if a breach affects you, we will tell you and the regulator as the law requires.</p>
 
   <h2 id="age">9. Age restriction</h2>
   <p>CrestArena is only for people aged <strong>18 or older</strong>. We ask for your date of birth and block anyone under 18. If we learn that a child has an account, we will close it and delete their data.</p>

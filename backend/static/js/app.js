@@ -36,8 +36,8 @@ let shellMounted = false;
 
 // ── Data refreshers (used by pages and realtime events) ─────────────
 export async function refreshProfile() {
-  const { profile } = await get('/me');
-  store.set({ profile });
+  const { profile, location, homeSwitch } = await get('/me');
+  store.set({ profile, location: location || null, homeSwitch: homeSwitch || null });
   return profile;
 }
 export async function refreshCurrent() {
@@ -126,6 +126,24 @@ function wireRealtime() {
   });
 }
 
+// Away from home (e.g. a Ghana player in Nigeria): offer to pay in the local
+// currency for this visit. Asked once per session; the choice can be changed in
+// Profile → Payment currency.
+async function travelPrompt() {
+  const { profile, location } = store.get();
+  const local = location?.currency;
+  if (!location?.country || !local || local === profile.currency || !['NGN', 'GHS'].includes(local)) return;
+  try { if (sessionStorage.getItem('crestarena.travelAsked')) return; sessionStorage.setItem('crestarena.travelAsked', '1'); } catch { return; }
+  const names = { NGN: ['Nigeria', 'naira'], GHS: ['Ghana', 'cedis'] };
+  const { confirmSheet } = await import('./ui.js');
+  const yes = await confirmSheet({
+    title: `You're in ${names[local][0]}`,
+    message: `Pay in ${names[local][1]} while you're here? Your wallet stays in ${profile.currency}; payments are converted at today's rate (3% exchange margin). You can change this any time in Profile → Payment currency.`,
+    confirm: `Pay in ${names[local][1]}`,
+  });
+  if (yes) { try { sessionStorage.setItem('crestarena.payCurrency', local); } catch { /* private mode */ } }
+}
+
 // Paystack returns here after the hosted checkout (?deposit=ref).
 async function handleDepositReturn() {
   const ref = new URLSearchParams(location.search).get('deposit');
@@ -158,6 +176,7 @@ async function onUser(user) {
   try {
     const [{ games }, { settings }] = await Promise.all([get('/games'), get('/settings'), refreshProfile()]);
     store.set({ games, stakingEnabled: !!settings?.stakingEnabled });
+    quietGet('/payments/geo').then((g) => store.set({ payCurrencies: g.payCurrencies || [] })).catch(() => {});
   } catch (e) {
     root.innerHTML = String(html`<div class="auth center"><div class="h2">Can't reach CrestArena</div>
       <p class="muted" style="margin:8px 0 20px">${e.message}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`);
@@ -171,6 +190,7 @@ async function onUser(user) {
   refreshCurrent();
   refreshUnread();
   handleDepositReturn();
+  travelPrompt();
   syncPushSubscription();
   applyPendingInvite();
   if (new URLSearchParams(location.search).get('open') === 'current' && store.get().current) navigate('/match/' + store.get().current.id);

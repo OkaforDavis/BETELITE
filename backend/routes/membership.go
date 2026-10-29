@@ -34,7 +34,7 @@ func SetupMembershipRoutes(api fiber.Router) {
 		for _, t := range services.Tiers {
 			tiers = append(tiers, tierView{Tier: t, Price: t.Prices[currency]})
 		}
-		return utils.SendSuccess(c, fiber.Map{"tiers": tiers, "currency": currency, "balance": balance, "usage": usage, "feeRule": services.CollectionFees[currency], "minDeposit": minDeposit[currency],
+		return utils.SendSuccess(c, fiber.Map{"tiers": tiers, "currency": currency, "balance": balance, "usage": usage, "feeRule": feeRuleFor(currency), "minDeposit": minDeposit[currency], "payCurrencies": services.PayCurrencies(),
 			"renewWindowDays": int(services.MembershipRenewWindow.Hours() / 24)})
 	})
 
@@ -42,7 +42,8 @@ func SetupMembershipRoutes(api fiber.Router) {
 	// otherwise a checkout for the difference starts the plan once paid.
 	mem.Post("/buy", func(c *fiber.Ctx) error {
 		var req struct {
-			Tier string `json:"tier"`
+			Tier        string `json:"tier"`
+			PayCurrency string `json:"payCurrency"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -78,7 +79,7 @@ func SetupMembershipRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		amount := max(price-balance, minDeposit[currency])
-		checkout, err := startDeposit(c, uid, email, amount, currency, "membership:"+tier.ID)
+		checkout, err := startDeposit(c, uid, email, amount, currency, req.PayCurrency, "membership:"+tier.ID)
 		if err != nil {
 			return fail(c, err)
 		}

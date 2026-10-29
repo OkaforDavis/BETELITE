@@ -47,10 +47,10 @@ func RefundWithdrawal(ctx context.Context, id, reason, fromStatus string) error 
 
 // ApproveWithdrawal sends a pending withdrawal through Paystack.
 func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
-	var uid, currency, bankCode, account, name, bankType, status string
+	var uid, currency, bankCode, account, name, bankType, status, provider string
 	var amount, fee int64
-	err := db.Pool.QueryRow(ctx, `SELECT user_id, currency, bank_code, account_number, COALESCE(account_name,''), COALESCE(note,''), status, amount, fee
-		FROM withdrawals WHERE id = $1`, id).Scan(&uid, &currency, &bankCode, &account, &name, &bankType, &status, &amount, &fee)
+	err := db.Pool.QueryRow(ctx, `SELECT user_id, currency, bank_code, account_number, COALESCE(account_name,''), COALESCE(note,''), status, amount, fee, provider
+		FROM withdrawals WHERE id = $1`, id).Scan(&uid, &currency, &bankCode, &account, &name, &bankType, &status, &amount, &fee, &provider)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userErr(404, "Withdrawal not found")
 	}
@@ -65,14 +65,19 @@ func ApproveWithdrawal(ctx context.Context, id, adminID string) error {
 	if tag.RowsAffected() == 0 {
 		return userErr(409, "This withdrawal is already being processed")
 	}
-	recipient, transfer, err := PaystackPayout(ctx, currency, bankType, name, account, bankCode, amount-fee, id, "CrestArena withdrawal")
+	var recipient, transfer string
+	if provider == ProviderFlutterwave {
+		transfer, err = FlutterwavePayout(ctx, currency, name, account, bankCode, amount-fee, id, "CrestArena withdrawal")
+	} else {
+		recipient, transfer, err = PaystackPayout(ctx, currency, bankType, name, account, bankCode, amount-fee, id, "CrestArena withdrawal")
+	}
 	if err != nil {
 		// Put it back so the admin can retry or reject.
 		db.Pool.Exec(ctx, "UPDATE withdrawals SET status = 'pending', updated_at = NOW() WHERE id = $1 AND status = 'processing'", id)
 		if strings.Contains(err.Error(), "starter business") {
 			return userErr(502, "Paystack payouts are not enabled on your account yet (Starter business). Pay the player by bank transfer, then use \"Mark as paid\".")
 		}
-		return userErr(502, "Paystack could not start the transfer: %v", err)
+		return userErr(502, "%s could not start the transfer: %v", capitalize(provider), err)
 	}
 	_, err = db.Pool.Exec(ctx, "UPDATE withdrawals SET recipient_code = $2, transfer_code = $3, updated_at = NOW() WHERE id = $1", id, recipient, transfer)
 	return err

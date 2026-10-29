@@ -34,12 +34,13 @@ var accountNumberRe = regexp.MustCompile(`^[0-9]{6,20}$`)
 func SetupPaymentRoutes(api fiber.Router) {
 	// Public: geo hint for picking a currency at sign-up.
 	api.Get("/payments/geo", func(c *fiber.Ctx) error {
-		geo, _ := services.DetectCurrency(c.IP())
-		return utils.SendSuccess(c, fiber.Map{"currency": geo.Currency, "country": geo.CountryCode})
+		country, currency := requestCountry(c)
+		return utils.SendSuccess(c, fiber.Map{"currency": currency, "country": country, "payCurrencies": services.PayCurrencies()})
 	})
 
-	// Paystack webhook (HMAC-signed).
+	// Paystack webhook (HMAC-signed) and Flutterwave webhook (secret hash).
 	api.Post("/payments/webhook", paystackWebhook)
+	api.Post("/payments/flutterwave/webhook", flutterwaveWebhook)
 
 	wallet := api.Group("/wallet", middleware.AuthRequired(), dbRequired)
 
@@ -52,17 +53,38 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount),0) FROM escrow WHERE status IN ('waiting','held') AND (creator_id = $1 OR acceptor_id = $1)`, uid).Scan(&held)
+		feeRule := services.CollectionFees[currency]
+		if list := services.ProvidersFor(currency); len(list) > 0 {
+			feeRule = services.FeeRuleFor(list[0], currency)
+		}
+		_, detected := requestCountry(c)
 		return utils.SendSuccess(c, fiber.Map{
 			"balance": balance, "inPlay": held, "currency": currency,
-			"limits":  fiber.Map{"minDeposit": minDeposit[currency], "maxDeposit": maxDeposit[currency], "minWithdrawal": minWithdrawal[currency]},
-			"feeRule": services.CollectionFees[currency],
+			"limits":           fiber.Map{"minDeposit": minDeposit[currency], "maxDeposit": maxDeposit[currency], "minWithdrawal": minWithdrawal[currency]},
+			"feeRule":          feeRule,
+			"payCurrencies":    services.PayCurrencies(),
+			"detectedCurrency": detected,
+			"payoutProvider":   services.PayoutProvider(currency),
 		})
+	})
+
+	// Preview a top-up: what the player pays (in payCurrency) for amount to reach
+	// the wallet, including the exchange margin and the provider's fee.
+	wallet.Get("/quote", func(c *fiber.Ctx) error {
+		var currency string
+		db.Pool.QueryRow(c.Context(), "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", middleware.GetUID(c)).Scan(&currency)
+		q, err := depositQuote(c, int64(c.QueryInt("amount")), currency, c.Query("payCurrency"))
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, q)
 	})
 
 	// Start a deposit. The wallet is credited only after Paystack confirms it.
 	wallet.Post("/deposit", func(c *fiber.Ctx) error {
 		var req struct {
-			Amount int64 `json:"amount"`
+			Amount      int64  `json:"amount"`
+			PayCurrency string `json:"payCurrency"` // optional: pay in another currency (e.g. naira into a cedi wallet)
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -81,7 +103,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, fmt.Sprintf("Deposits must be between %s and %s",
 				services.FormatMoney(minDeposit[currency], currency), services.FormatMoney(maxDeposit[currency], currency)))
 		}
-		checkout, err := startDeposit(c, uid, email, req.Amount, currency, "")
+		checkout, err := startDeposit(c, uid, email, req.Amount, currency, req.PayCurrency, "")
 		if err != nil {
 			return fail(c, err)
 		}
@@ -111,11 +133,18 @@ func SetupPaymentRoutes(api fiber.Router) {
 	wallet.Get("/banks", func(c *fiber.Ctx) error {
 		var currency string
 		db.Pool.QueryRow(c.Context(), "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", middleware.GetUID(c)).Scan(&currency)
-		banks, err := services.PaystackBanks(c.Context(), currency)
+		provider := services.PayoutProvider(currency)
+		var banks []services.Bank
+		var err error
+		if provider == services.ProviderFlutterwave {
+			banks, err = services.FlutterwaveBanks(c.Context(), currency)
+		} else {
+			banks, err = services.PaystackBanks(c.Context(), currency)
+		}
 		if err != nil {
 			return fail(c, err)
 		}
-		return utils.SendSuccess(c, fiber.Map{"banks": banks})
+		return utils.SendSuccess(c, fiber.Map{"banks": banks, "provider": provider})
 	})
 
 	// Look up the account holder's name before withdrawing (Nigeria).
@@ -127,7 +156,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 		if err := c.BodyParser(&req); err != nil || !accountNumberRe.MatchString(req.AccountNumber) || req.BankCode == "" {
 			return utils.SendError(c, 400, "Enter a valid account number and bank")
 		}
-		name, err := services.PaystackResolve(c.Context(), req.AccountNumber, req.BankCode)
+		name, err := resolveAccount(c, services.PayoutProvider("NGN"), req.AccountNumber, req.BankCode)
 		if err != nil {
 			return utils.SendError(c, 400, "We couldn't find that account. Check the number and bank.")
 		}
@@ -160,8 +189,9 @@ func SetupPaymentRoutes(api fiber.Router) {
 		if req.Amount < minWithdrawal[currency] {
 			return utils.SendError(c, 400, "The minimum withdrawal is "+services.FormatMoney(minWithdrawal[currency], currency))
 		}
+		provider := services.PayoutProvider(currency)
 		if currency == "NGN" {
-			name, err := services.PaystackResolve(ctx, req.AccountNumber, req.BankCode)
+			name, err := resolveAccount(c, provider, req.AccountNumber, req.BankCode)
 			if err != nil {
 				return utils.SendError(c, 400, "We couldn't verify that bank account")
 			}
@@ -171,8 +201,8 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Enter the account holder's name")
 		}
 
-		// Paystack's transfer fee comes out of the amount sent.
-		fee := services.TransferFee(req.Amount, currency, req.BankType)
+		// The provider's transfer fee comes out of the amount sent.
+		fee := services.TransferFeeFor(provider, req.Amount, currency, req.BankType)
 		if req.Amount <= fee {
 			return utils.SendError(c, 400, "The amount must be more than the transfer fee of "+services.FormatMoney(fee, currency))
 		}
@@ -189,8 +219,8 @@ func SetupPaymentRoutes(api fiber.Router) {
 			}
 			return fail(c, err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee)
+		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee, provider)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee, provider)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -289,27 +319,157 @@ func appURL(c *fiber.Ctx) string {
 	return c.BaseURL()
 }
 
-// startDeposit records a pending deposit and opens a Paystack checkout. A
-// purpose such as "membership:pro" is acted on once the payment is confirmed.
-func startDeposit(c *fiber.Ctx, uid, email string, amount int64, currency, purpose string) (fiber.Map, error) {
+// startDeposit records a pending deposit and opens a checkout with the first
+// working provider (Flutterwave, then Paystack). amount is what the wallet gets,
+// in the wallet currency; the player may pay in another currency (payCurrency)
+// at the day's rate plus the FX margin, and always covers the provider's fee.
+// A purpose such as "membership:pro" is acted on once the payment is confirmed.
+func startDeposit(c *fiber.Ctx, uid, email string, amount int64, currency, payCurrency, purpose string) (fiber.Map, error) {
 	ctx := c.Context()
-	ref := "dep_" + utils.GenerateBaseID()
-	// The player covers Paystack's fee: the wallet gets amount, the checkout charges more.
-	charged := services.GrossUp(amount, currency)
-	if _, err := db.Pool.Exec(ctx, "INSERT INTO deposits (reference, user_id, amount, currency, purpose, charged) VALUES ($1,$2,$3,$4,NULLIF($5,''),$6)",
-		ref, uid, amount, currency, purpose, charged); err != nil {
-		return nil, err
+	if payCurrency == "" {
+		payCurrency = currency
 	}
-	authURL, accessCode, err := services.PaystackInit(ctx, email, charged, currency, ref, uid, appURL(c)+"/?deposit="+ref)
+	providers := services.ProvidersFor(payCurrency)
+	if len(providers) == 0 {
+		return nil, &services.UserError{Status: 400, Msg: "Payments in " + payCurrency + " aren't available yet"}
+	}
+	payAmount, rate, err := services.PayAmount(ctx, amount, currency, payCurrency)
 	if err != nil {
 		return nil, err
 	}
-	publicKey := config.Cfg.PaystackPublicKey
-	if currency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
-		publicKey = config.Cfg.PaystackPublicKeyGH
+	name := services.Username(ctx, uid)
+	var lastErr error
+	for _, provider := range providers {
+		ref := "dep_" + utils.GenerateBaseID()
+		charged := services.GrossUpFor(provider, payAmount, payCurrency)
+		if _, err := db.Pool.Exec(ctx, `INSERT INTO deposits (reference, user_id, amount, currency, purpose, charged, provider, pay_currency)
+			VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,NULLIF($8,$4))`, ref, uid, amount, currency, purpose, charged, provider, payCurrency); err != nil {
+			return nil, err
+		}
+		redirect := appURL(c) + "/?deposit=" + ref
+		out := fiber.Map{
+			"provider": provider, "reference": ref, "email": email,
+			"amount": amount, "currency": currency, "payCurrency": payCurrency, "payAmount": payAmount,
+			"fee": charged - payAmount, "charged": charged, "rate": rate,
+		}
+		if provider == services.ProviderFlutterwave {
+			link, err := services.FlutterwaveInit(ctx, email, name, charged, payCurrency, ref, uid, redirect)
+			if err == nil {
+				out["authorizationUrl"] = link
+				return out, nil
+			}
+			lastErr = err
+		} else {
+			authURL, accessCode, err := services.PaystackInit(ctx, email, charged, payCurrency, ref, uid, redirect)
+			if err == nil {
+				publicKey := config.Cfg.PaystackPublicKey
+				if payCurrency == "GHS" && config.Cfg.PaystackPublicKeyGH != "" {
+					publicKey = config.Cfg.PaystackPublicKeyGH
+				}
+				out["authorizationUrl"], out["accessCode"], out["publicKey"] = authURL, accessCode, publicKey
+				return out, nil
+			}
+			lastErr = err
+		}
+		// This provider failed to open a checkout: drop the attempt and try the next one.
+		log.Printf("[PAYMENTS] %s checkout failed for %s: %v", provider, ref, lastErr)
+		db.Pool.Exec(ctx, "UPDATE deposits SET status = 'failed', gateway_status = 'init_failed' WHERE reference = $1", ref)
 	}
-	return fiber.Map{
-		"reference": ref, "authorizationUrl": authURL, "accessCode": accessCode, "publicKey": publicKey,
-		"email": email, "amount": amount, "fee": charged - amount, "charged": charged, "currency": currency,
-	}, nil
+	return nil, lastErr
+}
+
+// depositQuote previews a payment: what the player pays (in payCurrency) for
+// amount to reach the wallet, with the provider's fee and the rate used.
+func depositQuote(c *fiber.Ctx, amount int64, currency, payCurrency string) (fiber.Map, error) {
+	if payCurrency == "" {
+		payCurrency = currency
+	}
+	providers := services.ProvidersFor(payCurrency)
+	if len(providers) == 0 {
+		return nil, &services.UserError{Status: 400, Msg: "Payments in " + payCurrency + " aren't available yet"}
+	}
+	payAmount, rate, err := services.PayAmount(c.Context(), amount, currency, payCurrency)
+	if err != nil {
+		return nil, err
+	}
+	charged := services.GrossUpFor(providers[0], payAmount, payCurrency)
+	return fiber.Map{"amount": amount, "currency": currency, "payCurrency": payCurrency, "payAmount": payAmount,
+		"fee": charged - payAmount, "charged": charged, "rate": rate, "provider": providers[0]}, nil
+}
+
+// resolveAccount looks up a Nigerian account holder's name with the payout provider.
+func resolveAccount(c *fiber.Ctx, provider, accountNumber, bankCode string) (string, error) {
+	if provider == services.ProviderFlutterwave {
+		return services.FlutterwaveResolve(c.Context(), accountNumber, bankCode)
+	}
+	return services.PaystackResolve(c.Context(), accountNumber, bankCode)
+}
+
+// requestCountry finds where a request comes from: Cloudflare's CF-IPCountry
+// header when the site is proxied through Cloudflare, else an IP lookup.
+func requestCountry(c *fiber.Ctx) (string, string) {
+	country := strings.ToUpper(strings.TrimSpace(c.Get("CF-IPCountry")))
+	if country == "" || country == "XX" || country == "T1" {
+		geo, _ := services.DetectCurrency(c.IP())
+		return geo.CountryCode, geo.Currency
+	}
+	return country, services.CurrencyForCountry(country)
+}
+
+// flutterwaveWebhook handles Flutterwave events. Flutterwave sends the secret
+// hash set in its dashboard in the verif-hash header.
+func flutterwaveWebhook(c *fiber.Ctx) error {
+	hash := config.Cfg.FlutterwaveWebhookHash
+	if hash == "" || !hmac.Equal([]byte(c.Get("verif-hash")), []byte(hash)) {
+		return c.SendStatus(401)
+	}
+	var ev struct {
+		Event string `json:"event"`
+		Data  struct {
+			TxRef           string `json:"tx_ref"`
+			Reference       string `json:"reference"`
+			Status          string `json:"status"`
+			CompleteMessage string `json:"complete_message"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(c.Body(), &ev); err != nil {
+		return c.SendStatus(400)
+	}
+	if db.Pool == nil {
+		return c.SendStatus(503)
+	}
+	ctx := context.Background()
+	switch ev.Event {
+	case "charge.completed":
+		// Always re-check with Flutterwave; never trust the webhook body for money.
+		if _, err := services.CreditDeposit(ctx, ev.Data.TxRef); err != nil {
+			log.Printf("[PAYMENTS] flutterwave webhook credit %s: %v", ev.Data.TxRef, err)
+			return c.SendStatus(500)
+		}
+	case "transfer.completed":
+		switch strings.ToUpper(ev.Data.Status) {
+		case "SUCCESSFUL":
+			var uid, cur string
+			var amount int64
+			err := db.Pool.QueryRow(ctx, "UPDATE withdrawals SET status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'processing' RETURNING user_id, amount - fee, currency",
+				ev.Data.Reference).Scan(&uid, &amount, &cur)
+			if err == nil {
+				services.Notify(uid, "withdrawal", "Withdrawal sent", services.FormatMoney(amount, cur)+" has been sent to your account.", "/wallet", nil)
+			}
+		case "FAILED":
+			if err := services.RefundWithdrawal(ctx, ev.Data.Reference, "Transfer failed: "+ev.Data.CompleteMessage, "processing"); err != nil {
+				log.Printf("[PAYMENTS] refund withdrawal %s: %v", ev.Data.Reference, err)
+				return c.SendStatus(500)
+			}
+		}
+	}
+	return c.SendStatus(200)
+}
+
+// feeRuleFor is the collection fee of the first provider for a currency.
+func feeRuleFor(currency string) services.FeeRule {
+	if list := services.ProvidersFor(currency); len(list) > 0 {
+		return services.FeeRuleFor(list[0], currency)
+	}
+	return services.CollectionFees[currency]
 }

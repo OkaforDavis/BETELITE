@@ -1,7 +1,7 @@
 import { get, post, quietPost } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, busy, toast, confirmSheet } from '../ui.js';
-import { tierBadge, grossUp } from '../components.js';
+import { tierBadge, grossUp, payCurrency, openCheckout } from '../components.js';
 import { needsConsent, consentGate } from '../consent.js';
 import { refreshProfile } from '../app.js';
 
@@ -68,38 +68,36 @@ export default async function membership(view) {
     if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
     const fromWallet = balance >= tier.price;
     const shortfall = Math.max(tier.price - balance, data.minDeposit || 0);
-    const charge = grossUp(shortfall, data.feeRule); // the player covers Paystack's fee
+    // Pay in this visit's currency (e.g. naira for a Ghana wallet); the server quotes
+    // the exchange (incl. 3% margin) and the provider's fee, which the player covers.
+    const pc = payCurrency() || currency;
+    let charge = grossUp(shortfall, data.feeRule);
+    let payCur = currency;
+    if (!fromWallet && pc !== currency) {
+      try {
+        const q = await get('/wallet/quote?amount=' + shortfall + '&payCurrency=' + pc);
+        charge = q.charged;
+        payCur = pc;
+      } catch { /* fall back to the wallet currency */ }
+    }
     const ok = await confirmSheet({
       title: `Get ${tier.name}?`,
       message: fromWallet
         ? `${money(tier.price, currency)} will be paid from your wallet. You get ${tier.entries} tournament entries for 30 days.`
-        : `You'll pay ${money(charge, currency)} by card, bank or mobile money (${money(shortfall, currency)} + ${money(charge - shortfall, currency)} payment fee)${balance > 0 ? `; your wallet covers ${money(balance, currency)}` : ''}. You get ${tier.entries} tournament entries for 30 days.`,
-      confirm: fromWallet ? `Pay ${money(tier.price, currency)}` : `Pay ${money(charge, currency)}`,
+        : `You'll pay ${money(charge, payCur)} by card, bank or mobile money${payCur !== currency ? ` (converted from ${money(shortfall, currency)} at today's rate, incl. fees)` : ` (${money(shortfall, currency)} + ${money(charge - shortfall, currency)} payment fee)`}${balance > 0 ? `; your wallet covers ${money(balance, currency)}` : ''}. You get ${tier.entries} tournament entries for 30 days.`,
+      confirm: fromWallet ? `Pay ${money(tier.price, currency)}` : `Pay ${money(charge, payCur)}`,
     });
     if (!ok) return;
     busy(btn, async () => {
-      const r = await post('/membership/buy', { tier: tier.id });
+      const r = await post('/membership/buy', { tier: tier.id, payCurrency: payCur });
       if (r.membership) {
         toast(`You can now enter ${tier.entries} tournaments.`, 'ok', `${tier.name} is active`);
         refreshProfile();
         load();
         return;
       }
-      await openCheckout(r.checkout);
+      await openCheckout(r.checkout, (ref) => waitForPlan(ref));
     });
-  }
-
-  async function openCheckout(d) {
-    try {
-      await loadScript('https://js.paystack.co/v2/inline.js');
-      const popup = new window.PaystackPop();
-      popup.resumeTransaction(d.accessCode, {
-        onSuccess: () => waitForPlan(d.reference),
-        onCancel: () => toast('Payment cancelled', 'info'),
-      });
-    } catch {
-      location.href = d.authorizationUrl; // hosted page; returns to /?deposit=ref
-    }
   }
 
   // The plan starts as soon as Paystack confirms the payment.
@@ -125,13 +123,3 @@ export default async function membership(view) {
   await load();
 }
 
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.append(s);
-  });
-}

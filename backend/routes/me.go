@@ -57,7 +57,28 @@ func SetupMeRoutes(api fiber.Router) {
 		} else if strings.EqualFold(middleware.GetEmail(c), config.Cfg.AdminEmail) {
 			p.AdminPending = true
 		}
-		return utils.SendSuccess(c, fiber.Map{"profile": p, "termsVersion": services.TermsVersion})
+		// Where the player is now (for the "pay in local currency" prompt) and
+		// whether they can move their wallet to that country.
+		country, localCurrency := requestCountry(c)
+		services.RecordSeenCountry(c.Context(), p.ID, country)
+		return utils.SendSuccess(c, fiber.Map{"profile": p, "termsVersion": services.TermsVersion,
+			"location":   fiber.Map{"country": country, "currency": localCurrency},
+			"homeSwitch": services.HomeSwitchStatus(c.Context(), p.ID)})
+	})
+
+	// Move the wallet to the country the player now lives in.
+	me.Post("/home-currency", func(c *fiber.Ctx) error {
+		var req struct {
+			Currency string `json:"currency"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		balance, err := services.SwitchHomeCurrency(c.Context(), middleware.GetUID(c), req.Currency, false)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"balance": balance, "currency": req.Currency})
 	})
 
 	// Update display name. (Photos go through PUT /me/avatar.) Currency can only change before any money moved.

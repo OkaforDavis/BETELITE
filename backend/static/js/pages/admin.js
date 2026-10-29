@@ -4,7 +4,7 @@ import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, bu
 import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
-const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['support', 'Support'], ['users', 'Users'], ['ocr', 'OCR test']];
+const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
 
 export default async function admin(view, { query }) {
   if (!store.get().profile?.isAdmin) {
@@ -22,7 +22,7 @@ export default async function admin(view, { query }) {
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     body.innerHTML = String(sk.adminRows());
-    try { await ({ overview, review, withdrawals, tournaments, support, users, ocr })[tab](body, draw); }
+    try { await ({ overview, review, withdrawals, tournaments, support, money: moneyTab, users, ocr })[tab](body, draw); }
     catch (e) { body.innerHTML = String(empty('alert', 'Could not load', e.message)); }
   }
   await draw();
@@ -330,4 +330,42 @@ async function support(body, redraw) {
     });
   }
   await draw();
+}
+
+// Money per currency: what players are owed vs what came in/out, the rate,
+// active providers, and moving a player's wallet after a complaint.
+async function moneyTab(body) {
+  const d = await get('/admin/money');
+  const fmt = money;
+  body.innerHTML = String(html`<div class="small muted">Rate: ₵1 = ₦${(d.ngnPerGhs || 0).toFixed(2)} · exchange margin ${d.marginPct}% · providers NGN: ${(d.providers.NGN || []).join(' → ') || 'none'}, GHS: ${(d.providers.GHS || []).join(' → ') || 'none'}</div>
+    <div class="stack" style="margin-top:14px">${d.currencies.map((r) => html`<div class="card">
+      <div class="h3">${r.currency}</div>
+      <div class="list" style="margin-top:10px">
+        <div class="list-row"><div class="grow muted">Owed: player wallets</div><b class="num">${fmt(r.wallets, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Owed: withdrawals waiting</div><b class="num">${fmt(r.pendingPayouts, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">In (30 days): memberships</div><b class="num brand-text">${fmt(r.memberships30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): prizes</div><b class="num">${fmt(r.prizes30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): cashback</div><b class="num">${fmt(r.cashback30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Out (30 days): withdrawals sent</div><b class="num">${fmt(r.paidOut30d, r.currency)}</b></div>
+        <div class="list-row"><div class="grow muted">Top-ups paid in the other currency</div><b class="num">${fmt(r.crossCurrency30, r.currency)}</b></div>
+      </div>
+      <p class="tiny faint" style="margin-top:8px">Keep at least "owed" in this currency across your Paystack/Flutterwave balances and bank.</p>
+    </div>`)}</div>
+    <form class="card" id="mv" style="margin-top:14px">
+      <div class="h3">Move a player's wallet</div>
+      <p class="small muted">After a complaint (e.g. they moved country). Converts the balance at today's rate less the margin; skips the 30/90-day rules.</p>
+      <label class="field"><span class="label">User ID</span><input class="input" name="uid" required placeholder="From the Users tab"></label>
+      <label class="field"><span class="label">New currency</span><select class="select" name="cur"><option>NGN</option><option>GHS</option></select></label>
+      <button class="btn secondary block" style="margin-top:12px">Move wallet</button>
+    </form>`);
+  body.querySelector('#mv').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    if (!(await confirmSheet({ title: 'Move this wallet?', message: `Convert ${f.uid.value}'s balance to ${f.cur.value}.`, confirm: 'Move wallet' }))) return;
+    busy(f.querySelector('button'), async () => {
+      const r = await post(`/admin/users/${encodeURIComponent(f.uid.value.trim())}/currency`, { currency: f.cur.value });
+      toast(`Done. New balance ${money(r.balance, f.cur.value)}`);
+      f.reset();
+    });
+  };
 }

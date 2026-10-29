@@ -38,7 +38,10 @@ func TestDepositCrediting(t *testing.T) {
 		ref := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 		mu.Lock()
 		states := script[ref]
-		status := states[0]
+		status := "abandoned" // deposits from other tests or earlier runs: still unpaid
+		if len(states) > 0 {
+			status = states[0]
+		}
 		if len(states) > 1 {
 			script[ref] = states[1:]
 		}
