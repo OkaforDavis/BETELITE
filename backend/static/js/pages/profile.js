@@ -104,6 +104,7 @@ export default async function profilePage(view, { query }) {
           ${canInstall() ? html`<button class="list-row" id="install"><div class="icon-tile brand">${ic('phone')}</div>
             <div class="grow"><div class="h3">Install CrestArena</div><div class="small muted">${isIOS ? 'Add to your iPhone Home Screen' : 'Full-screen app with notifications'}</div></div>${ic('chevronRight', 'chev')}</button>` : ''}
           ${p.isAdmin ? html`<a class="list-row" href="/admin" style="color:inherit"><div class="icon-tile warn">${ic('shield')}</div><div class="grow h3">Admin dashboard</div>${ic('chevronRight', 'chev')}</a>` : ''}
+          <a class="list-row" href="/support" style="color:inherit"><div class="icon-tile">${ic('flag')}</div><div class="grow"><div class="h3">Help &amp; complaints</div><div class="small muted">Message an admin about a match, payment or player</div></div>${ic('chevronRight', 'chev')}</a>
           <a class="list-row" href="/membership" style="color:inherit"><div class="icon-tile brand">${ic('sparkles')}</div><div class="grow"><div class="h3">Membership</div><div class="small muted">${TIER_NAMES[p.tier] || 'Free'} plan · tournament entries</div></div>${ic('chevronRight', 'chev')}</a>
           <a class="list-row" href="/watch" style="color:inherit"><div class="icon-tile">${ic('radio')}</div><div class="grow h3">Live streams</div>${ic('chevronRight', 'chev')}</a>
           <button class="list-row" id="update"><div class="icon-tile">${ic('refresh')}</div>

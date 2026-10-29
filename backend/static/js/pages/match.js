@@ -58,6 +58,7 @@ export default async function matchPage(view, { id }) {
             <button class="row small" data-copy="${m.id}" style="gap:6px">${m.id.slice(-8).toUpperCase()} ${ic('copy')}</button></div>
           ${m.inGameMatchId ? html`<div class="list-row"><div class="icon-tile">${ic('gamepad')}</div><div class="grow muted">In-game match ID</div><span class="small">${m.inGameMatchId}</span></div>` : ''}
           <div class="list-row"><div class="icon-tile">${ic('clock')}</div><div class="grow muted">Created</div><span class="small">${new Date(m.createdAt).toLocaleString()}</span></div>
+          ${mine ? html`<a class="list-row" href="/support?category=match&ref=${m.id}" style="color:inherit"><div class="icon-tile">${ic('flag')}</div><div class="grow">Report a problem with this match</div>${ic('chevronRight', 'chev')}</a>` : ''}
         </div>
       </section>
     </div>`);

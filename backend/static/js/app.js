@@ -27,6 +27,7 @@ route('/notifications', () => import('./pages/notifications.js'), { skeleton: sk
 route('/watch', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
 route('/watch/:id', () => import('./pages/watch.js'), { tab: 'home', skeleton: sk.watch });
 route('/membership', () => import('./pages/membership.js'), { tab: 'tournaments', skeleton: sk.wallet });
+route('/support', () => import('./pages/support.js'), { tab: 'profile', skeleton: sk.notifications });
 route('/admin', () => import('./pages/admin.js'), { skeleton: sk.admin });
 route('/join/:code', () => import('./pages/home.js'), { tab: 'home', skeleton: sk.home });
 

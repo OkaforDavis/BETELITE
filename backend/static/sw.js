@@ -9,7 +9,7 @@ const SHELL = [
   '/js/realtime.js', '/js/pwa.js', '/js/auth.js', '/js/consent.js', '/js/components.js', '/js/gameid.js', '/js/invite.js', '/js/skeletons.js', '/js/progress.js', '/js/pull.js',
   '/js/pages/home.js', '/js/pages/play.js', '/js/pages/match.js', '/js/pages/tournaments.js',
   '/js/pages/tournament.js', '/js/pages/wallet.js', '/js/pages/profile.js', '/js/pages/notifications.js',
-  '/js/pages/watch.js', '/js/pages/admin.js', '/js/pages/membership.js',
+  '/js/pages/watch.js', '/js/pages/admin.js', '/js/pages/membership.js', '/js/pages/support.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/mark.png', '/icons/badge-96.png', '/icons/wordmark.png', '/icons/apple-touch-icon.png',
   '/manifest.json',
   '/legal/terms.html', '/legal/privacy.html', '/legal/cookies.html', '/legal/responsible-gaming.html',

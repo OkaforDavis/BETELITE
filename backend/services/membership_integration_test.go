@@ -75,7 +75,7 @@ func TestMembershipPlansAndEntries(t *testing.T) {
 		t.Error("renewing more than 7 days early must fail")
 	}
 	usage, _ = EntryUsage(ctx, db.Pool, gh)
-	if usage.Tier != "pro" || usage.Allowed != 2 || usage.Left != 2 {
+	if usage.Tier != "pro" || usage.Allowed != 3 || usage.Left != 3 {
 		t.Fatalf("pro usage: %+v", usage)
 	}
 
@@ -102,7 +102,7 @@ func TestMembershipPlansAndEntries(t *testing.T) {
 	db.Pool.Exec(ctx, "INSERT INTO tournaments (id, name, game, entry_fee) VALUES ($1,'T','dls',0)", tid)
 	db.Pool.Exec(ctx, "INSERT INTO tournament_players (tournament_id, user_id) VALUES ($1,$2)", tid, gh)
 	usage, _ = EntryUsage(ctx, db.Pool, gh)
-	if usage.Used != 1 || usage.Left != 1 {
+	if usage.Used != 1 || usage.Left != 2 {
 		t.Fatalf("after one join: %+v", usage)
 	}
 	db.Pool.Exec(ctx, "UPDATE tournaments SET status = 'cancelled' WHERE id = $1", tid)
@@ -111,8 +111,8 @@ func TestMembershipPlansAndEntries(t *testing.T) {
 	}
 
 	// Naira prices for a Nigerian wallet.
-	db.Pool.Exec(ctx, "UPDATE users SET balance = 8_000_00 WHERE id = $1", ng)
-	if m, err := BuyMembership(ctx, ng, "elite"); err != nil || m.Price != 8_000_00 || balanceOf(ctx, ng) != 0 {
+	db.Pool.Exec(ctx, "UPDATE users SET balance = 9_200_00 WHERE id = $1", ng)
+	if m, err := BuyMembership(ctx, ng, "elite"); err != nil || m.Price != 9_200_00 || balanceOf(ctx, ng) != 0 {
 		t.Fatalf("elite in NGN: %+v %v", m, err)
 	}
 }
@@ -244,7 +244,7 @@ func TestMembershipUnlocksReferralReward(t *testing.T) {
 	ctx := testDB(t)
 	u := makeUsers(ctx, fmt.Sprintf("mr%d", os.Getpid()), 2)
 	inviter, friend := u[0], u[1] // GHS inviter, NGN friend
-	db.Pool.Exec(ctx, "UPDATE users SET referred_by = $2, balance = 3_000_00 WHERE id = $1", friend, inviter)
+	db.Pool.Exec(ctx, "UPDATE users SET referred_by = $2, balance = 3_600_00 WHERE id = $1", friend, inviter)
 	if _, err := BuyMembership(ctx, friend, "pro"); err != nil {
 		t.Fatal(err)
 	}

@@ -41,6 +41,7 @@ func TestJoinRulesAndFreeChallenges(t *testing.T) {
 	hub := ws.NewHub()
 	go hub.Run()
 	SetupLobbyRoutes(api, hub)
+	SetupSupportRoutes(api)
 
 	p := fmt.Sprintf("j%d", os.Getpid())
 	call := func(user, method, path string, body any) (int, map[string]any) {
@@ -100,24 +101,54 @@ func TestJoinRulesAndFreeChallenges(t *testing.T) {
 		t.Fatalf("free player during early sign-up: %d %v", code, out)
 	}
 
-	// Pro paid from the wallet: 2 entries, early sign-up.
-	db.Pool.Exec(ctx, "UPDATE users SET balance = 3_000_00 WHERE id = $1", uid("pro"))
+	// Elite-only early sign-up keeps out other plans until it opens.
+	eliteEarly := newTournament("elite", true)
+	db.Pool.Exec(ctx, "UPDATE tournaments SET early_tier = 'elite' WHERE id = $1", eliteEarly)
+
+	// Pro paid from the wallet: 2 entries plus the free one, early sign-up.
+	db.Pool.Exec(ctx, "UPDATE users SET balance = 3_600_00 WHERE id = $1", uid("pro"))
 	code, out := call("pro", "POST", "/api/membership/buy", map[string]string{"tier": "pro"})
 	if code != 200 || out["membership"] == nil {
 		t.Fatalf("buy pro from wallet: %d %v", code, out)
 	}
-	for _, tid := range []string{early, newTournament("t3", false)} {
+	if code, out := call("pro", "POST", "/api/tournaments/"+eliteEarly+"/join", nil); code != 403 || !strings.Contains(fmt.Sprint(out["error"]), "Elite") {
+		t.Fatalf("pro player during Elite early sign-up: %d %v", code, out)
+	}
+	for _, tid := range []string{early, newTournament("t3", false), newTournament("t3b", false)} {
 		if code, out := call("pro", "POST", "/api/tournaments/"+tid+"/join", nil); code != 200 {
 			t.Fatalf("pro join %s: %d %v", tid, code, out)
 		}
 	}
 	if code, _ := call("pro", "POST", "/api/tournaments/"+newTournament("t4", false)+"/join", nil); code != 403 {
-		t.Fatalf("pro third join should be refused, got %d", code)
+		t.Fatalf("pro fourth join should be refused, got %d", code)
 	}
 	code, out = call("pro", "GET", "/api/membership", nil)
 	usage := out["usage"].(map[string]any)
-	if code != 200 || usage["tier"] != "pro" || usage["used"].(float64) != 2 || usage["left"].(float64) != 0 {
+	if code != 200 || usage["tier"] != "pro" || usage["used"].(float64) != 3 || usage["left"].(float64) != 0 {
 		t.Fatalf("membership view: %d %v", code, out)
+	}
+
+	// Free-seat cap: with 1 free seat taken, another free player is refused.
+	capped := newTournament("capped", false)
+	db.Pool.Exec(ctx, "UPDATE tournaments SET free_seats = 1 WHERE id = $1", capped)
+	ready("free2", "NGN")
+	ready("free3", "GHS")
+	if code, out := call("free2", "POST", "/api/tournaments/"+capped+"/join", nil); code != 200 {
+		t.Fatalf("first free seat: %d %v", code, out)
+	}
+	if code, out := call("free3", "POST", "/api/tournaments/"+capped+"/join", nil); code != 403 || !strings.Contains(fmt.Sprint(out["error"]), "free spots") {
+		t.Fatalf("second free seat should be refused: %d %v", code, out)
+	}
+
+	// Complaints: a player sends one, the list shows it.
+	if code, out := call("free", "POST", "/api/support", map[string]string{"category": "match", "subject": "Wrong score", "message": "My opponent uploaded a fake screenshot."}); code != 200 {
+		t.Fatalf("send complaint: %d %v", code, out)
+	}
+	if code, out := call("free", "GET", "/api/support", nil); code != 200 || len(out["tickets"].([]any)) != 1 {
+		t.Fatalf("list complaints: %d %v", code, out)
+	}
+	if code, _ := call("free", "POST", "/api/support", map[string]string{"category": "nope", "subject": "x", "message": "short"}); code != 400 {
+		t.Fatalf("invalid complaint should be rejected, got %d", code)
 	}
 
 	// Staking off: challenges are free whatever amount is sent, and nobody is charged.

@@ -280,6 +280,27 @@ var migrations = []string{
 	// Paystack fee) and the transfer fee taken from a withdrawal.
 	`ALTER TABLE deposits ADD COLUMN IF NOT EXISTS charged BIGINT;
 	ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS fee BIGINT NOT NULL DEFAULT 0;`,
+
+	// 9: free-seat cap and which plan gets early sign-up per tournament;
+	// whether each entry was a paid-plan seat; support tickets (complaints to admin).
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS free_seats INT;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS early_tier TEXT NOT NULL DEFAULT 'pro';
+	ALTER TABLE tournament_players ADD COLUMN IF NOT EXISTS free_entry BOOLEAN NOT NULL DEFAULT FALSE;
+	CREATE TABLE IF NOT EXISTS support_tickets (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		category TEXT NOT NULL,
+		subject TEXT NOT NULL,
+		message TEXT NOT NULL,
+		ref_id TEXT,
+		status TEXT NOT NULL DEFAULT 'open',
+		admin_reply TEXT,
+		replied_by TEXT,
+		replied_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS support_tickets_user_idx ON support_tickets(user_id, created_at DESC);
+	CREATE INDEX IF NOT EXISTS support_tickets_status_idx ON support_tickets(status, created_at);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

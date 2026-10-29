@@ -107,6 +107,7 @@ func main() {
 	routes.SetupLobbyRoutes(api, hub)
 	routes.SetupTournamentRoutes(api)
 	routes.SetupMembershipRoutes(api)
+	routes.SetupSupportRoutes(api)
 	routes.SetupStreamRoutes(api, hub)
 	routes.SetupNotificationRoutes(api)
 	routes.SetupReferralRoutes(api)

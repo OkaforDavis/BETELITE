@@ -20,6 +20,7 @@ import (
 
 func SetupAdminRoutes(api fiber.Router) {
 	admin := api.Group("/admin", middleware.AuthRequired(), middleware.AdminRequired(), dbRequired)
+	setupAdminSupport(admin)
 
 	admin.Get("/stats", func(c *fiber.Ctx) error {
 		ctx := c.Context()
@@ -239,6 +240,8 @@ func SetupAdminRoutes(api fiber.Router) {
 			PrizeSplit []float64            `json:"prizeSplit"` // paid-entry tournaments only
 			RoundHours int                  `json:"roundHours"`
 			EarlyHours int                  `json:"earlyHours"` // members-only sign-up window
+			EarlyTier  string               `json:"earlyTier"`  // "pro" (any plan) or "elite"
+			FreeSeats  *int                 `json:"freeSeats"`  // max free-plan seats; default 25%
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -272,6 +275,18 @@ func SetupAdminRoutes(api fiber.Router) {
 		}
 		if req.EntryFee < 0 {
 			return utils.SendError(c, 400, "Amounts can't be negative")
+		}
+		if req.EarlyTier != "elite" {
+			req.EarlyTier = "pro"
+		}
+		// Free-plan seats are capped (25% by default) so each tournament is
+		// mostly members; the free route always keeps at least one seat.
+		freeSeats := req.MaxPlayers / 4
+		if req.FreeSeats != nil {
+			freeSeats = *req.FreeSeats
+		}
+		if freeSeats < 1 || freeSeats > req.MaxPlayers {
+			return utils.SendError(c, 400, "Free seats must be between 1 and the number of players")
 		}
 		if !config.Cfg.StakingEnabled {
 			req.EntryFee = 0
@@ -326,15 +341,16 @@ func SetupAdminRoutes(api fiber.Router) {
 		}
 		ctx := c.Context()
 		id := utils.GenerateTournamentID()
-		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours, members_only_until, created_by, status)
-			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,0,$9::jsonb,$10::jsonb,$11,$12,$13,'open')`,
-			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, splitJSON, prizesJSON, req.RoundHours, membersUntil, middleware.GetUID(c))
+		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours, members_only_until, created_by, status, early_tier, free_seats)
+			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,0,$9::jsonb,$10::jsonb,$11,$12,$13,'open',$14,$15)`,
+			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, splitJSON, prizesJSON, req.RoundHours, membersUntil, middleware.GetUID(c),
+			req.EarlyTier, freeSeats)
 		if err != nil {
 			return fail(c, err)
 		}
 		log.Printf("[ADMIN] tournament %s created: %s %s fee=%d players=%d prizes=%v", id, req.Format, req.Game, req.EntryFee, req.MaxPlayers, req.Prizes)
 		if req.EntryFee == 0 && req.EarlyHours > 0 {
-			go announceEarlySignup(id, req.Name)
+			go announceEarlySignup(id, req.Name, req.EarlyTier)
 		}
 		return utils.SendSuccess(c, fiber.Map{"tournamentId": id})
 	})
@@ -451,9 +467,9 @@ func startOfWeek() time.Time {
 }
 
 // announceEarlySignup tells current members a tournament is open to them first.
-func announceEarlySignup(tid, name string) {
+func announceEarlySignup(tid, name, earlyTier string) {
 	ctx := context.Background()
-	rows, err := db.Pool.Query(ctx, "SELECT DISTINCT user_id FROM memberships WHERE starts_at <= NOW() AND ends_at > NOW()")
+	rows, err := db.Pool.Query(ctx, "SELECT DISTINCT user_id FROM memberships WHERE starts_at <= NOW() AND ends_at > NOW() AND ($1 <> 'elite' OR tier = 'elite')", earlyTier)
 	if err != nil {
 		return
 	}

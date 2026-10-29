@@ -73,7 +73,7 @@ func TestFixedPrizes(t *testing.T) {
 }
 
 func TestTiers(t *testing.T) {
-	want := map[string][3]int64{"free": {1, 0, 0}, "pro": {2, 30_00, 3_000_00}, "pro_plus": {3, 50_00, 5_000_00}, "elite": {5, 80_00, 8_000_00}}
+	want := map[string][3]int64{"free": {1, 0, 0}, "pro": {3, 30_00, 3_600_00}, "pro_plus": {4, 50_00, 5_800_00}, "elite": {6, 80_00, 9_200_00}}
 	for id, w := range want {
 		tier := TierByID(id)
 		if tier == nil || int64(tier.Entries) != w[0] || tier.Prices["GHS"] != w[1] || tier.Prices["NGN"] != w[2] {
