@@ -190,8 +190,12 @@ func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRRe
 		{InlineData: &genai.Blob{Data: img, MIMEType: mime}},
 	}}}
 	cfg := &genai.GenerateContentConfig{
-		Temperature:      genai.Ptr[float32](0),
-		MaxOutputTokens:  1024,
+		Temperature: genai.Ptr[float32](0),
+		// Reading names and a score off a result screen needs little reasoning;
+		// default (high) thinking made calls slow enough to hit Google's
+		// deadline. Thinking tokens count toward the output limit, so leave room.
+		ThinkingConfig:   &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow},
+		MaxOutputTokens:  4096,
 		ResponseMIMEType: "application/json",
 		ResponseSchema:   resultSchema,
 	}
@@ -250,7 +254,8 @@ func retryable(err error) bool {
 		return true
 	}
 	s := err.Error()
-	for _, k := range []string{"503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500", "INTERNAL", "overloaded", "high demand"} {
+	for _, k := range []string{"503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500", "INTERNAL", "overloaded", "high demand",
+		"504", "DEADLINE_EXCEEDED", "Deadline expired", "502", "BAD_GATEWAY"} {
 		if strings.Contains(s, k) {
 			return true
 		}
