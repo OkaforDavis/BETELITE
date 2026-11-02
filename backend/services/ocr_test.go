@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -66,7 +67,8 @@ func TestAnalyzeScreenshotFallsBackWhenModelBusy(t *testing.T) {
 }
 
 func TestRetryable(t *testing.T) {
-	for _, s := range []string{"Error 503, Status: UNAVAILABLE", "Error 429 RESOURCE_EXHAUSTED", "Error 500 INTERNAL"} {
+	for _, s := range []string{"Error 503, Status: UNAVAILABLE", "Error 429 RESOURCE_EXHAUSTED", "Error 500 INTERNAL",
+		"gemini (gemini-3.8-flash): Error 504, Message: Deadline expired before operation could complete., Status: DEADLINE_EXCEEDED, Details: []"} {
 		if !retryable(fmt.Errorf("%s", s)) {
 			t.Errorf("%q should be retryable", s)
 		}
@@ -87,5 +89,53 @@ func TestGeminiModelsAlwaysHaveFallback(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("GEMINI_MODEL=%q → %v, want %v", in, got, want)
 		}
+	}
+}
+
+// A model that times out on Google's side (504) must fall back to the next
+// model, and requests must ask for low thinking so they finish quickly.
+func TestGemini504FallsBackAndUsesLowThinking(t *testing.T) {
+	var sawLow atomic.Bool
+	result := `{"is_result_screen":true,"is_versus_human":true,"mode":"Dream League Live","players":[{"name":"REAL MADRID","score":2,"side":"LEFT"},{"name":"NARIONA","score":1,"side":"RIGHT"}],"confidence":100,"notes":"ok"}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), `"thinkingLevel":"LOW"`) {
+			sawLow.Store(true)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "slow-model") {
+			w.WriteHeader(504)
+			fmt.Fprint(w, `{"error":{"code":504,"message":"Deadline expired before operation could complete.","status":"DEADLINE_EXCEEDED"}}`)
+			return
+		}
+		out, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{
+			"content": map[string]any{"role": "model", "parts": []any{map[string]any{"text": result}}},
+		}}})
+		w.Write(out)
+	}))
+	defer srv.Close()
+
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey: "test", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: srv.URL + "/"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	geminiClientOnce.Do(func() {})
+	geminiClient, geminiClientErr = client, nil
+	config.Cfg.GeminiModels = []string{"slow-model", "good-model"}
+	config.Cfg.GeminiAPIKey = "test"
+	config.Cfg.OCRProviders = []string{"gemini"}
+
+	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 32))
+	res, err := AnalyzeScreenshot(context.Background(), png, GameByID("dls"), nil)
+	if err != nil {
+		t.Fatalf("a 504 must fall back to the next model, got %v", err)
+	}
+	if res.Model != "good-model" || res.Players[0].Name != "REAL MADRID" {
+		t.Fatalf("unexpected result %+v", res)
+	}
+	if !sawLow.Load() {
+		t.Fatal(`requests must set thinkingLevel "LOW"`)
 	}
 }

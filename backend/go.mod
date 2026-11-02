@@ -12,7 +12,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/livekit/protocol v1.46.0
 	google.golang.org/api v0.280.0
-	google.golang.org/genai v1.12.0
+	google.golang.org/genai v1.77.0
 )
 
 require (
