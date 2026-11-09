@@ -143,6 +143,7 @@ func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []E
 	for _, p := range config.Cfg.OCRProviders {
 		var res *OCRResult
 		var err error
+		start := time.Now()
 		switch p {
 		case "gemini":
 			res, err = analyzeGemini(ctx, img, mime, prompt)
@@ -152,12 +153,13 @@ func AnalyzeScreenshot(ctx context.Context, img []byte, game *Game, expected []E
 			continue
 		}
 		if err == nil {
+			log.Printf("[OCR] read by %s (%s) in %.1fs", p, res.Model, time.Since(start).Seconds())
 			return res, nil
 		}
 		if errors.Is(err, errProviderNotConfigured) {
 			continue
 		}
-		log.Printf("[OCR] %s failed: %v", p, err)
+		log.Printf("[OCR] %s failed after %.1fs: %v", p, time.Since(start).Seconds(), err)
 		errs = append(errs, err.Error())
 		if ctx.Err() != nil {
 			break
@@ -176,6 +178,9 @@ var errProviderNotConfigured = errors.New("provider not configured")
 func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRResult, error) {
 	if config.Cfg.GeminiAPIKey == "" {
 		return nil, errProviderNotConfigured
+	}
+	if geminiPaused() {
+		return nil, fmt.Errorf("gemini: paused after a billing error (no credit); check AI Studio billing")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
@@ -220,6 +225,10 @@ func analyzeGemini(ctx context.Context, img []byte, mime, prompt string) (*OCRRe
 				err = perr
 			}
 			lastErr = err
+			if billingProblem(err) {
+				pauseGemini()
+				return nil, fmt.Errorf("gemini (%s): account has no credit or billing is off, skipping Gemini for %v: %w", model, geminiBillingPause, err)
+			}
 			if !retryable(err) {
 				return nil, fmt.Errorf("gemini (%s): %w", model, err)
 			}
@@ -247,11 +256,48 @@ func parseOCR(resp *genai.GenerateContentResponse) (*OCRResult, error) {
 
 var errEmptyResponse = errors.New("gemini returned an empty response")
 
+// billingProblem reports an account problem (no credit, billing off) that no
+// retry or other model can fix. Google labels "credits depleted" with the same
+// RESOURCE_EXHAUSTED status as a rate limit, so check this first.
+func billingProblem(err error) bool {
+	s := err.Error()
+	for _, k := range []string{"Error 402", "credits are depleted", "prepayment", "BILLING_DISABLED", "billing account"} {
+		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// After a billing error Gemini is skipped for a while, so every upload goes
+// straight to the next provider instead of waiting on calls that must fail.
+const geminiBillingPause = 10 * time.Minute
+
+var geminiPausedUntil struct {
+	sync.Mutex
+	t time.Time
+}
+
+func geminiPaused() bool {
+	geminiPausedUntil.Lock()
+	defer geminiPausedUntil.Unlock()
+	return time.Now().Before(geminiPausedUntil.t)
+}
+
+func pauseGemini() {
+	geminiPausedUntil.Lock()
+	geminiPausedUntil.t = time.Now().Add(geminiBillingPause)
+	geminiPausedUntil.Unlock()
+}
+
 // retryable reports whether an error is temporary on Google's side
 // (overloaded, rate limited, internal error, timeout or empty answer).
 func retryable(err error) bool {
 	if errors.Is(err, errEmptyResponse) || errors.Is(err, context.DeadlineExceeded) {
 		return true
+	}
+	if billingProblem(err) {
+		return false
 	}
 	s := err.Error()
 	for _, k := range []string{"503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "500", "INTERNAL", "overloaded", "high demand",
