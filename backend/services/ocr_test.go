@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"google.golang.org/genai"
 
@@ -75,6 +76,51 @@ func TestRetryable(t *testing.T) {
 	}
 	if retryable(fmt.Errorf("Error 400, API key not valid")) {
 		t.Error("a bad API key must not be retried")
+	}
+	if retryable(fmt.Errorf("Error 402, Message: Your prepayment credits are depleted. Please go to AI Studio, Status: RESOURCE_EXHAUSTED")) {
+		t.Error("an empty prepaid balance must not be retried")
+	}
+}
+
+// With no Gemini credit (402), we must give up on Gemini after one call, not
+// retry every model, and skip it for the next uploads so Claude answers fast.
+func TestGeminiNoCreditSkipsQuickly(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(402)
+		fmt.Fprint(w, `{"error":{"code":402,"message":"Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing.","status":"RESOURCE_EXHAUSTED"}}`)
+	}))
+	defer srv.Close()
+	defer func() { geminiPausedUntil.Lock(); geminiPausedUntil.t = time.Time{}; geminiPausedUntil.Unlock() }()
+
+	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+		APIKey: "test", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: srv.URL + "/"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	geminiClientOnce.Do(func() {})
+	geminiClient, geminiClientErr = client, nil
+	config.Cfg.GeminiModels = []string{"a-model", "b-model", "c-model"}
+	config.Cfg.GeminiAPIKey = "test"
+	config.Cfg.OCRProviders = []string{"gemini"}
+
+	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 32))
+	start := time.Now()
+	if _, err := AnalyzeScreenshot(context.Background(), png, GameByID("dls"), nil); err == nil {
+		t.Fatal("expected an error with no credit")
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("Gemini called %d times, want 1 (no retries on a billing error)", calls.Load())
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("giving up took %v, want under 2s", d)
+	}
+	AnalyzeScreenshot(context.Background(), png, GameByID("dls"), nil)
+	if calls.Load() != 1 {
+		t.Fatalf("Gemini was called again while paused (%d calls)", calls.Load())
 	}
 }
 
