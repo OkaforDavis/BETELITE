@@ -16,7 +16,7 @@ export default async function membership(view) {
   }
 
   function draw() {
-    const { tiers, usage, currency, balance, renewWindowDays } = data;
+    const { tiers, usage, currency, balance, renewWindowDays, upgrade } = data;
     const plan = usage.plan;
     const daysLeft = plan ? Math.ceil((new Date(plan.endsAt) - new Date()) / 864e5) : 0;
     const canRenew = plan && !usage.renewedTo && daysLeft <= renewWindowDays;
@@ -45,6 +45,8 @@ export default async function membership(view) {
           if (current && canRenew) action = html`<button class="btn primary block" data-buy="${t.id}">Renew for ${money(t.price, currency)}</button>`;
           else if (current) action = html`<button class="btn secondary block" disabled>Current plan</button>`;
           else if (!plan) action = html`<button class="btn ${t.id === 'pro' ? 'primary' : 'secondary'} block" data-buy="${t.id}">Get ${t.name}</button>`;
+          else if (t.id === 'elite' && upgrade) action = html`<button class="btn primary block" id="upgrade">${ic('crown')} Upgrade now for ${money(upgrade.price, currency)}</button>
+            <p class="tiny faint" style="margin-top:8px">Elite starts today for 30 days with ${t.entries} entries. The rest of your ${tiers.find((x) => x.id === upgrade.from)?.name} plan is replaced.</p>`;
           else action = html`<button class="btn ghost block" disabled>Available after ${fmtDate(usage.renewedTo || plan.endsAt)}</button>`;
         }
         return html`<div class="card plan tier-${t.id} ${current ? 'current' : ''}">
@@ -61,6 +63,45 @@ export default async function membership(view) {
     </div>`);
 
     view.querySelectorAll('[data-buy]').forEach((b) => (b.onclick = () => buy(tiers.find((t) => t.id === b.dataset.buy), b, balance, currency)));
+    view.querySelector('#upgrade')?.addEventListener('click', (e) => upgradeToElite(tiers.find((t) => t.id === 'elite'), e.currentTarget, balance, currency));
+  }
+
+  // Pro / Pro Plus → Elite today, at the upgrade price (wallet first, then checkout).
+  async function upgradeToElite(elite, btn, balance, currency) {
+    const profile = store.get().profile;
+    if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
+    const price = data.upgrade.price;
+    const fromWallet = balance >= price;
+    const shortfall = Math.max(price - balance, data.minDeposit || 0);
+    const pc = payCurrency() || currency;
+    let charge = grossUp(shortfall, data.feeRule);
+    let payCur = currency;
+    if (!fromWallet && pc !== currency) {
+      try {
+        const q = await get('/wallet/quote?amount=' + shortfall + '&payCurrency=' + pc);
+        charge = q.charged;
+        payCur = pc;
+      } catch { /* fall back to the wallet currency */ }
+    }
+    const ok = await confirmSheet({
+      title: 'Upgrade to Elite?',
+      message: (fromWallet
+        ? `${money(price, currency)} will be paid from your wallet.`
+        : `You'll pay ${money(charge, payCur)} by card, bank or mobile money${balance > 0 ? `; your wallet covers ${money(balance, currency)}` : ''}.`)
+        + ` Elite starts today for 30 days with ${elite.entries} tournament entries. The remaining days of your current plan are replaced.`,
+      confirm: fromWallet ? `Pay ${money(price, currency)}` : `Pay ${money(charge, payCur)}`,
+    });
+    if (!ok) return;
+    busy(btn, async () => {
+      const r = await post('/membership/upgrade', { payCurrency: payCur });
+      if (r.membership) {
+        toast(`You can now enter ${elite.entries} tournaments.`, 'ok', 'Welcome to Elite');
+        refreshProfile();
+        load();
+        return;
+      }
+      await openCheckout(r.checkout, (ref) => waitForPlan(ref));
+    });
   }
 
   async function buy(tier, btn, balance, currency) {

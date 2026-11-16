@@ -57,6 +57,14 @@ var Tiers = []Tier{
 		"5 tournaments + your free one", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
 }
 
+// UpgradePrices is what a member on a lower plan pays to switch to Elite
+// right away: Elite starts fresh for 30 days with Elite entries, and the
+// rest of the old plan is given up. Keyed by current tier, then currency.
+var UpgradePrices = map[string]map[string]int64{
+	"pro":      {"NGN": 6_100_00, "GHS": 55_00},
+	"pro_plus": {"NGN": 4_100_00, "GHS": 36_00},
+}
+
 // TierByID returns a tier, or nil.
 func TierByID(id string) *Tier {
 	for i := range Tiers {
@@ -230,6 +238,84 @@ func BuyMembership(ctx context.Context, uid, tierID string) (*Membership, error)
 	forgetTier(uid)
 	Notify(uid, "membership", tier.Name+" membership active ⭐", msg, "/membership", nil)
 	go RewardReferral(context.Background(), uid) // a first membership unlocks invite rewards
+	return m, nil
+}
+
+// UpgradeOffer is the Elite upgrade available to a member, if any.
+type UpgradeOffer struct {
+	From  string `json:"from"`  // current tier
+	Price int64  `json:"price"` // in the player's currency
+}
+
+// UpgradeOfferFor returns the Elite upgrade a player can buy now, or nil:
+// they must be on Pro or Pro Plus with no renewal already bought.
+func UpgradeOfferFor(ctx context.Context, q querier, uid, currency string) (*UpgradeOffer, error) {
+	current, err := ActiveMembership(ctx, q, uid)
+	if err != nil || current == nil {
+		return nil, err
+	}
+	prices, ok := UpgradePrices[current.Tier]
+	if !ok {
+		return nil, nil
+	}
+	price, ok := prices[currency]
+	if !ok {
+		return nil, nil
+	}
+	if latest, err := latestMembership(ctx, q, uid); err == nil && latest != nil && latest.ID != current.ID {
+		return nil, nil // a renewal is already queued; upgrade after it
+	}
+	return &UpgradeOffer{From: current.Tier, Price: price}, nil
+}
+
+// UpgradeToElite ends the player's current Pro / Pro Plus plan now and
+// starts Elite for 30 days, paid from the wallet at the upgrade price.
+func UpgradeToElite(ctx context.Context, uid string) (*Membership, error) {
+	tx, err := db.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	var currency string
+	if err := tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1 FOR UPDATE", uid).Scan(&currency); err != nil {
+		return nil, err
+	}
+	offer, err := UpgradeOfferFor(ctx, tx, uid, currency)
+	if err != nil {
+		return nil, err
+	}
+	if offer == nil {
+		return nil, userErr(409, "The Elite upgrade is for players on an active Pro or Pro Plus plan with no renewal queued")
+	}
+	current, err := ActiveMembership(ctx, tx, uid)
+	if err != nil || current == nil {
+		return nil, userErr(409, "No active plan to upgrade")
+	}
+	elite := TierByID("elite")
+	now := time.Now()
+	m := &Membership{ID: "mem_" + utils.GenerateBaseID(), Tier: elite.ID, Price: offer.Price, Currency: currency,
+		StartsAt: now, EndsAt: now.Add(MembershipPeriod)}
+	if err := AdjustBalance(ctx, tx, uid, -offer.Price, "membership_upgrade", m.ID, fmt.Sprintf(`{"from": %q, "tier": "elite"}`, current.Tier)); err != nil {
+		if errors.Is(err, ErrInsufficientFunds) {
+			return nil, userErr(402, "Not enough balance for the Elite upgrade")
+		}
+		return nil, err
+	}
+	// The old plan ends now; its entries were counted from its start, the
+	// new Elite plan counts from now, so the player gets a fresh allowance.
+	if _, err := tx.Exec(ctx, "UPDATE memberships SET ends_at = $2 WHERE id = $1", current.ID, now); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO memberships (id, user_id, tier, price, currency, starts_at, ends_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`, m.ID, uid, m.Tier, m.Price, m.Currency, m.StartsAt, m.EndsAt); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	forgetTier(uid)
+	Notify(uid, "membership", "Welcome to Elite 👑", fmt.Sprintf("You can now enter %d tournaments until %s.", elite.Entries, m.EndsAt.Format("2 Jan")), "/membership", nil)
 	return m, nil
 }
 
