@@ -80,6 +80,13 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 		return "", err
 	}
 	log.Printf("[PAYMENTS] credited deposit %s (%d %s) to %s", reference, amount, currency, uid)
+	if purpose == "upgrade:elite" {
+		if _, err := UpgradeToElite(ctx, uid); err != nil {
+			log.Printf("[PAYMENTS] elite upgrade after deposit %s: %v", reference, err)
+			Notify(uid, "deposit", "Payment received", FormatMoney(amount, currency)+" is in your wallet. We couldn't complete the Elite upgrade automatically; open Membership to try again.", "/membership", nil)
+		}
+		return "paid", nil
+	}
 	if tier, ok := strings.CutPrefix(purpose, "membership:"); ok {
 		// A checkout started from the membership page buys the plan right away.
 		if _, err := BuyMembership(ctx, uid, tier); err != nil {

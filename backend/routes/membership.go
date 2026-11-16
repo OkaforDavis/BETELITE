@@ -34,8 +34,50 @@ func SetupMembershipRoutes(api fiber.Router) {
 		for _, t := range services.Tiers {
 			tiers = append(tiers, tierView{Tier: t, Price: t.Prices[currency]})
 		}
+		upgrade, _ := services.UpgradeOfferFor(ctx, db.Pool, uid, currency)
 		return utils.SendSuccess(c, fiber.Map{"tiers": tiers, "currency": currency, "balance": balance, "usage": usage, "feeRule": feeRuleFor(currency), "minDeposit": minDeposit[currency], "payCurrencies": services.PayCurrencies(),
-			"renewWindowDays": int(services.MembershipRenewWindow.Hours() / 24)})
+			"renewWindowDays": int(services.MembershipRenewWindow.Hours() / 24), "upgrade": upgrade})
+	})
+
+	// Upgrade a Pro / Pro Plus plan to Elite now. Paid from the wallet when
+	// it covers the price; otherwise a checkout for the difference does it once paid.
+	mem.Post("/upgrade", func(c *fiber.Ctx) error {
+		var req struct {
+			PayCurrency string `json:"payCurrency"`
+		}
+		c.BodyParser(&req)
+		uid := middleware.GetUID(c)
+		ctx := c.Context()
+		if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+			return fail(c, err)
+		}
+		var currency string
+		var balance int64
+		db.Pool.QueryRow(ctx, "SELECT COALESCE(currency,'NGN'), balance FROM users WHERE id = $1", uid).Scan(&currency, &balance)
+		offer, err := services.UpgradeOfferFor(ctx, db.Pool, uid, currency)
+		if err != nil {
+			return fail(c, err)
+		}
+		if offer == nil {
+			return utils.SendError(c, 409, "The Elite upgrade is for players on an active Pro or Pro Plus plan")
+		}
+		if balance >= offer.Price {
+			m, err := services.UpgradeToElite(ctx, uid)
+			if err != nil {
+				return fail(c, err)
+			}
+			return utils.SendSuccess(c, fiber.Map{"membership": m})
+		}
+		email := middleware.GetEmail(c)
+		if email == "" {
+			return utils.SendError(c, 400, "Add an email address to your account to pay")
+		}
+		amount := max(offer.Price-balance, minDeposit[currency])
+		checkout, err := startDeposit(c, uid, email, amount, currency, req.PayCurrency, "upgrade:elite")
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"checkout": checkout})
 	})
 
 	// Buy or renew a plan. Paid from the wallet when it covers the price;

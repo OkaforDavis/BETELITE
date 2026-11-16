@@ -21,6 +21,7 @@ const TX = {
   referral_bonus: ['Welcome bonus', 'sparkles', 'brand'],
   membership: ['Membership', 'sparkles', ''],
   membership_cashback: ['Membership cashback', 'coins', 'brand'],
+  membership_upgrade: ['Upgrade to Elite', 'crown', ''],
   currency_switch: ['Wallet moved to new country', 'refresh', 'info'],
   admin_adjustment: ['Balance adjustment', 'settings', ''],
 };
