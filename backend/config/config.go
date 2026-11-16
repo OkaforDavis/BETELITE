@@ -35,9 +35,10 @@ type Config struct {
 	LiveKitAPIKey              string
 	LiveKitAPISecret           string
 	LiveKitURL                 string
-	StakingEnabled             bool // real-money 1v1 stakes and paid tournament entries; off until licensed
-	HostCupsEnabled            bool // players can host cups: they fund the prize pool, entry is free
-	BountyEnabled              bool // bounty 1v1s: only the host puts up a prize, the challenger plays free
+	StakingEnabled             bool             // real-money 1v1 stakes and paid tournament entries; off until licensed
+	HostCupsEnabled            bool             // players can host cups: they fund the prize pool, entry is free
+	BountyEnabled              bool             // bounty 1v1s: only the host puts up a prize, the challenger plays free
+	AutoPayoutLimit            map[string]int64 // withdrawals up to this (minor units, per currency) are sent without an admin; 0 = all wait
 	FlutterwaveSecretKey       string
 	FlutterwavePublicKey       string
 	FlutterwaveWebhookHash     string   // "secret hash" set in the Flutterwave dashboard
@@ -89,14 +90,18 @@ func Load() {
 		StakingEnabled:             getEnv("STAKING_ENABLED", "") == "true",
 		HostCupsEnabled:            getEnv("HOST_CUPS_ENABLED", "true") != "false",
 		BountyEnabled:              getEnv("BOUNTY_ENABLED", "true") != "false",
-		FirebaseAuthDomain:         getEnv("FIREBASE_AUTH_DOMAIN", ""),
-		FlutterwaveSecretKey:       getEnv("FLUTTERWAVE_SECRET_KEY", ""),
-		FlutterwavePublicKey:       getEnv("FLUTTERWAVE_PUBLIC_KEY", ""),
-		FlutterwaveWebhookHash:     getEnv("FLUTTERWAVE_WEBHOOK_HASH", ""),
-		FlutterwaveGHS:             getEnv("FLUTTERWAVE_GHS", "") == "true",
-		PaymentProviders:           splitList(getEnv("PAYMENT_PROVIDERS", "flutterwave,paystack")),
-		FXMarginPct:                parseFloat(getEnv("FX_MARGIN_PCT", "3"), 3),
-		FXNGNPerGHS:                parseFloat(getEnv("FX_NGN_PER_GHS", "0"), 0),
+		AutoPayoutLimit: map[string]int64{ // env values are in naira / cedis
+			"NGN": int64(parseFloat(getEnv("AUTO_PAYOUT_LIMIT_NGN", "0"), 0) * 100),
+			"GHS": int64(parseFloat(getEnv("AUTO_PAYOUT_LIMIT_GHS", "0"), 0) * 100),
+		},
+		FirebaseAuthDomain:     getEnv("FIREBASE_AUTH_DOMAIN", ""),
+		FlutterwaveSecretKey:   getEnv("FLUTTERWAVE_SECRET_KEY", ""),
+		FlutterwavePublicKey:   getEnv("FLUTTERWAVE_PUBLIC_KEY", ""),
+		FlutterwaveWebhookHash: getEnv("FLUTTERWAVE_WEBHOOK_HASH", ""),
+		FlutterwaveGHS:         getEnv("FLUTTERWAVE_GHS", "") == "true",
+		PaymentProviders:       splitList(getEnv("PAYMENT_PROVIDERS", "flutterwave,paystack")),
+		FXMarginPct:            parseFloat(getEnv("FX_MARGIN_PCT", "3"), 3),
+		FXNGNPerGHS:            parseFloat(getEnv("FX_NGN_PER_GHS", "0"), 0),
 	}
 }
 

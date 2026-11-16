@@ -41,6 +41,11 @@ func SetupPaymentRoutes(api fiber.Router) {
 	// Paystack webhook (HMAC-signed) and Flutterwave webhook (secret hash).
 	api.Post("/payments/webhook", paystackWebhook)
 	api.Post("/payments/flutterwave/webhook", flutterwaveWebhook)
+	// Paystack "transfer approval" URL: set it in the Paystack dashboard
+	// (Settings → Preferences → Transfer approval) to
+	// https://crestarena.com/api/payments/paystack/approve. Paystack asks before
+	// every transfer; 200 approves, 400 refuses. Must answer within seconds.
+	api.Post("/payments/paystack/approve", paystackApprove)
 
 	wallet := api.Group("/wallet", middleware.AuthRequired(), dbRequired)
 
@@ -227,8 +232,13 @@ func SetupPaymentRoutes(api fiber.Router) {
 		if err := tx.Commit(ctx); err != nil {
 			return fail(c, err)
 		}
-		services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
-			services.FormatMoney(req.Amount-fee, currency), req.AccountName, req.BankName))
+		if limit := config.Cfg.AutoPayoutLimit[currency]; limit > 0 && req.Amount <= limit {
+			// Small withdrawals go out by themselves; admins hear only if it fails.
+			go services.AutoApproveWithdrawal(context.Background(), id, req.Amount, currency)
+		} else {
+			services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
+				services.FormatMoney(req.Amount-fee, currency), req.AccountName, req.BankName))
+		}
 		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "payout": req.Amount - fee})
 	})
 
@@ -255,10 +265,52 @@ func SetupPaymentRoutes(api fiber.Router) {
 	})
 }
 
-func paystackWebhook(c *fiber.Ctx) error {
+// paystackApprove approves a transfer only when it matches a withdrawal we
+// are sending right now. Paystack's request is signed like a webhook when
+// a signature is present; the database check is what really protects us.
+func paystackApprove(c *fiber.Ctx) error {
 	body := c.Body()
-	sig := c.Get("x-paystack-signature")
-	valid := false
+	if sig := c.Get("x-paystack-signature"); sig != "" && !paystackSigned(body, sig) {
+		log.Printf("[PAYMENTS] transfer approval: bad signature")
+		return c.Status(400).JSON(fiber.Map{"status": false, "message": "bad signature"})
+	}
+	var req struct {
+		Reference string `json:"reference"`
+		Amount    int64  `json:"amount"`
+		Currency  string `json:"currency"`
+		Recipient struct {
+			Details struct {
+				AccountNumber string `json:"account_number"`
+			} `json:"details"`
+		} `json:"recipient"`
+		Data *struct { // some payloads wrap the transfer in "data"
+			Reference string `json:"reference"`
+			Amount    int64  `json:"amount"`
+			Currency  string `json:"currency"`
+			Recipient struct {
+				Details struct {
+					AccountNumber string `json:"account_number"`
+				} `json:"details"`
+			} `json:"recipient"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || db.Pool == nil {
+		return c.Status(400).JSON(fiber.Map{"status": false, "message": "bad request"})
+	}
+	ref, amount, cur, acct := req.Reference, req.Amount, req.Currency, req.Recipient.Details.AccountNumber
+	if ref == "" && req.Data != nil {
+		ref, amount, cur, acct = req.Data.Reference, req.Data.Amount, req.Data.Currency, req.Data.Recipient.Details.AccountNumber
+	}
+	if err := services.ApproveTransferRequest(c.Context(), ref, amount, cur, acct); err != nil {
+		log.Printf("[PAYMENTS] transfer approval REFUSED %s: %v", ref, err)
+		return c.Status(400).JSON(fiber.Map{"status": false, "message": "not an expected transfer"})
+	}
+	log.Printf("[PAYMENTS] transfer approval ok %s", ref)
+	return c.Status(200).JSON(fiber.Map{"status": true})
+}
+
+// paystackSigned checks Paystack's HMAC-SHA512 signature with either business key.
+func paystackSigned(body []byte, sig string) bool {
 	for _, key := range []string{config.Cfg.PaystackSecretKey, config.Cfg.PaystackSecretKeyGH} {
 		if key == "" {
 			continue
@@ -266,10 +318,15 @@ func paystackWebhook(c *fiber.Ctx) error {
 		mac := hmac.New(sha512.New, []byte(key))
 		mac.Write(body)
 		if hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(sig)) {
-			valid = true
+			return true
 		}
 	}
-	if !valid {
+	return false
+}
+
+func paystackWebhook(c *fiber.Ctx) error {
+	body := c.Body()
+	if !paystackSigned(body, c.Get("x-paystack-signature")) {
 		return c.SendStatus(401)
 	}
 
