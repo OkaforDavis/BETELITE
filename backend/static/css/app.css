@@ -400,6 +400,7 @@ button.list-row:active { background: var(--surface-2); }
 .banner .grow b { display: block; font-size: 15px; }
 .banner .grow span { font-size: 13px; color: var(--text-2); }
 .banner.cookie { border-color: var(--line-2); z-index: 55; }
+.banner.install { z-index: 60; }
 .banner.cookie.standalone { bottom: calc(var(--safe-bottom) + 12px); }
 .connection {
   position: fixed; z-index: 40; top: calc(var(--appbar-h) + var(--safe-top)); left: 0; right: 0; text-align: center;

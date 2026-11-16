@@ -84,20 +84,60 @@ function showUpdate(force = false) {
 }
 
 // ── Install ──────────────────────────────────────────────────
+// Chrome fires this a few seconds after the page loads, usually after the
+// home page has already drawn. Pages listen for 'installable' to redraw, and
+// a small banner offers the install the first time it becomes possible.
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstall = e;
   document.dispatchEvent(new Event('installable'));
+  showInstallBanner();
 });
-window.addEventListener('appinstalled', () => { deferredInstall = null; toast('CrestArena installed on your device'); });
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  document.querySelector('.banner.install')?.remove();
+  document.dispatchEvent(new Event('installable'));
+  toast('CrestArena installed on your device');
+});
 
 export const canInstall = () => !isStandalone() && (!!deferredInstall || isIOS);
 
+// onInstallable runs fn whenever the install state changes; returns an unsubscribe.
+export function onInstallable(fn) {
+  document.addEventListener('installable', fn);
+  return () => document.removeEventListener('installable', fn);
+}
+
+const INSTALL_SNOOZE = 'crestarena.install-snooze';
+function showInstallBanner() {
+  if (isStandalone() || document.querySelector('.banner.install')) return;
+  try {
+    if (+localStorage.getItem(INSTALL_SNOOZE) > Date.now()) return;
+  } catch { /* storage unavailable */ }
+  const el = document.createElement('div');
+  el.className = 'banner install';
+  el.setAttribute('role', 'dialog');
+  el.innerHTML = String(html`<div class="icon-tile brand">${ic('phone')}</div>
+    <div class="grow"><b>Install CrestArena</b><span>Full screen, faster, with match alerts.</span></div>
+    <button class="btn primary sm" data-install>Install</button>
+    <button class="icon-btn" data-later aria-label="Not now">${ic('x')}</button>`);
+  const snooze = () => {
+    el.remove();
+    try { localStorage.setItem(INSTALL_SNOOZE, String(Date.now() + 7 * 864e5)); } catch { /* ignore */ }
+  };
+  el.querySelector('[data-install]').onclick = async () => { el.remove(); await promptInstall(); };
+  el.querySelector('[data-later]').onclick = snooze;
+  document.body.append(el);
+}
+
 export async function promptInstall() {
   if (deferredInstall) {
-    deferredInstall.prompt();
-    await deferredInstall.userChoice.catch(() => {});
+    const ev = deferredInstall;
     deferredInstall = null;
+    ev.prompt();
+    const choice = await ev.userChoice.catch(() => null);
+    if (choice?.outcome !== 'accepted') deferredInstall = ev; // keep the offer if they said no
+    document.dispatchEvent(new Event('installable'));
     return;
   }
   if (isIOS) {
