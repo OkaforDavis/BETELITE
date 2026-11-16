@@ -356,53 +356,10 @@ func SetupAdminRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"tournamentId": id})
 	})
 
-	// Cancel an open tournament and refund everyone who joined.
+	// Cancel an open tournament: entries, and a host's pool and fee, are refunded.
 	admin.Delete("/tournaments/:id", func(c *fiber.Ctx) error {
-		ctx := c.Context()
-		tid := c.Params("id")
-		tx, err := db.Pool.Begin(ctx)
-		if err != nil {
+		if err := services.CancelTournament(c.Context(), c.Params("id"), middleware.GetUID(c), "Cancelled by an admin."); err != nil {
 			return fail(c, err)
-		}
-		defer tx.Rollback(ctx)
-		var status, name string
-		var fee int64
-		if err := tx.QueryRow(ctx, "SELECT status, entry_fee, name FROM tournaments WHERE id = $1 FOR UPDATE", tid).Scan(&status, &fee, &name); err != nil {
-			return utils.SendError(c, 404, "Tournament not found")
-		}
-		if status != "open" {
-			return utils.SendError(c, 409, "Only tournaments that haven't started can be cancelled")
-		}
-		rows, err := tx.Query(ctx, "SELECT user_id FROM tournament_players WHERE tournament_id = $1", tid)
-		if err != nil {
-			return fail(c, err)
-		}
-		var players []string
-		for rows.Next() {
-			var id string
-			if rows.Scan(&id) == nil {
-				players = append(players, id)
-			}
-		}
-		rows.Close()
-		for _, p := range players {
-			if fee > 0 {
-				if err := services.AdjustBalance(ctx, tx, p, fee, "tournament_refund", tid); err != nil {
-					return fail(c, err)
-				}
-			}
-		}
-		if _, err := tx.Exec(ctx, "DELETE FROM tournament_players WHERE tournament_id = $1", tid); err != nil {
-			return fail(c, err)
-		}
-		if _, err := tx.Exec(ctx, "UPDATE tournaments SET status = 'cancelled' WHERE id = $1", tid); err != nil {
-			return fail(c, err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fail(c, err)
-		}
-		for _, p := range players {
-			services.Notify(p, "tournament_cancelled", "Tournament cancelled", name+" was cancelled. Any entry fee has been refunded.", "/tournaments", nil)
 		}
 		return utils.SendSuccess(c, fiber.Map{})
 	})

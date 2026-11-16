@@ -18,7 +18,7 @@ export default async function play(view, { query }) {
 
   view.innerHTML = String(html`<div class="page">
     <div class="row between">
-      <div><div class="h1">${store.get().stakingEnabled ? 'Play 1v1' : 'Friendly 1v1'}</div><div class="muted small" style="margin-top:4px">${store.get().stakingEnabled ? `Stake, play, upload the result. Winner takes ${WIN_PCT}%.` : 'Free 1v1 matches. Challenge a player, play, upload the result.'}</div></div>
+      <div><div class="h1">${store.get().stakingEnabled ? 'Play 1v1' : store.get().bountyEnabled ? '1v1 & Bounties' : 'Friendly 1v1'}</div><div class="muted small" style="margin-top:4px">${store.get().stakingEnabled ? `Stake, play, upload the result. Winner takes ${WIN_PCT}%.` : store.get().bountyEnabled ? 'Free friendlies, or post a bounty: anyone who beats you takes it. Accepting is always free.' : 'Free 1v1 matches. Challenge a player, play, upload the result.'}</div></div>
     </div>
     <button class="btn primary block" style="margin-top:16px" id="new">${ic('plus')} Post a challenge</button>
     <div class="seg" style="margin-top:20px" role="tablist">
@@ -54,7 +54,10 @@ export default async function play(view, { query }) {
             <div class="h3 ellipsis">${c.creatorId === uid ? 'Your challenge' : c.creatorName}</div>
             <div class="small muted ellipsis">${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>
           </div>
-          <div style="text-align:right">${c.amount ? html`
+          <div style="text-align:right">${c.kind === 'bounty' && c.amount ? html`
+            <span class="badge brand">${ic('zap')}Bounty</span>
+            <div class="h3 num brand-text" style="margin-top:4px">${money(c.prize, c.currency)}</div>
+            <div class="tiny muted">free to accept</div>` : c.amount ? html`
             <div class="h3 num">${money(c.amount, c.currency)}</div>
             <div class="tiny brand-text">Win ${money(c.prize, c.currency)}</div>` : html`<span class="badge">Friendly</span>`}
           </div>
@@ -67,8 +70,10 @@ export default async function play(view, { query }) {
     body.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { filter = b.dataset.game; drawOpen(); }));
     body.querySelectorAll('[data-accept]').forEach((b) => (b.onclick = () => accept(challenges.find((c) => c.id === b.dataset.accept), b)));
     body.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = async () => {
-      if (!(await confirmSheet({ title: 'Cancel challenge?', message: 'Your stake goes straight back to your wallet.', confirm: 'Cancel challenge', danger: true }))) return;
-      busy(b, async () => { await post('/lobby/delete', { challengeId: b.dataset.cancel }); toast('Challenge cancelled. Stake refunded.'); refreshProfile(); drawOpen(); });
+      const c = challenges.find((x) => x.id === b.dataset.cancel);
+      const msg = c?.kind === 'bounty' ? 'Your bounty and the hosting fee go straight back to your wallet.' : c?.amount ? 'Your stake goes straight back to your wallet.' : 'Nobody has accepted yet.';
+      if (!(await confirmSheet({ title: 'Cancel challenge?', message: msg, confirm: 'Cancel challenge', danger: true }))) return;
+      busy(b, async () => { await post('/lobby/delete', { challengeId: b.dataset.cancel }); toast(c?.amount ? 'Challenge cancelled. Money refunded.' : 'Challenge cancelled.'); refreshProfile(); drawOpen(); });
     }));
   }
 
@@ -86,6 +91,7 @@ export default async function play(view, { query }) {
   async function accept(c, btn) {
     const profile = store.get().profile;
     if (!c.amount) return acceptFree(c, btn);
+    if (c.kind === 'bounty') return acceptBounty(c, btn);
     if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => accept(c, btn));
     if (profile.balance < c.amount) {
@@ -102,6 +108,25 @@ export default async function play(view, { query }) {
       const { matchId } = await post('/lobby/accept', { challengeId: c.id });
       toast("Challenge accepted. It's game time!", 'ok');
       refreshProfile();
+      refreshCurrent();
+      navigate('/match/' + matchId);
+    });
+  }
+
+  // Bounty: free to accept. Beat the host and the bounty is yours.
+  async function acceptBounty(c, btn) {
+    const profile = store.get().profile;
+    if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
+    if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptBounty(c, btn));
+    const ok = await confirmSheet({
+      title: `Take on ${c.creatorName}'s bounty?`,
+      message: `Free to accept. Beat ${c.creatorName} at ${gameName(c.game)} and ${money(c.prize, c.currency)} is yours${profile.currency !== c.currency ? ` (paid in ${profile.currency} at the market rate)` : ''}. Lose or draw and nothing is taken from you. Play within 3 hours and upload the full-time screen showing both usernames.`,
+      confirm: 'Accept bounty',
+    });
+    if (!ok) return;
+    busy(btn, async () => {
+      const { matchId } = await post('/lobby/accept', { challengeId: c.id });
+      toast("Bounty accepted. It's game time!", 'ok');
       refreshCurrent();
       navigate('/match/' + matchId);
     });
@@ -132,7 +157,7 @@ export default async function play(view, { query }) {
 }
 
 function createChallenge(onDone) {
-  if (!store.get().stakingEnabled) return createFreeChallenge(onDone);
+  if (!store.get().stakingEnabled) return store.get().bountyEnabled ? createFreeOrBounty(onDone) : createFreeChallenge(onDone);
   const profile = store.get().profile;
   if (needsConsent(profile)) return consentGate(profile, () => refreshProfile());
   const cur = profile.currency;
@@ -191,6 +216,95 @@ function createChallenge(onDone) {
           await post('/lobby/create', { game, amount: amount * 100 });
           close();
           toast('Challenge posted. We’ll notify you when someone accepts.');
+          refreshProfile();
+          onDone();
+        });
+      };
+    },
+  });
+}
+
+// Friendly (free) or Bounty (only the host puts up a prize; accepting is free).
+const BOUNTY_QUICK = { NGN: [500, 1000, 2000, 5000], GHS: [5, 10, 20, 50] };
+function createFreeOrBounty(onDone) {
+  const profile = store.get().profile;
+  const games = store.get().games;
+  const cur = profile.currency;
+  const feePct = store.get().hostFeePercent;
+  let game = profile.gameProfiles[0]?.game || games[0].id;
+  let kind = 'friendly';
+  let amount = BOUNTY_QUICK[cur][1];
+
+  sheet(String(html`${sheetHead('Post a challenge', 'A free friendly, or a bounty for anyone who can beat you')}
+    <form id="cc">
+      <span class="label">Game</span>
+      <div id="games">${gameChips(game)}</div>
+      <div class="field" style="margin-top:18px"><span class="label">Type</span>
+        <div class="seg" id="kind"><button type="button" data-k="friendly" class="active">Friendly</button><button type="button" data-k="bounty">${ic('zap')} Bounty</button></div></div>
+      <div id="bounty-box" hidden>
+        <div class="field" style="margin-top:14px"><span class="label">Bounty (your prize for the winner)</span>
+          <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="amount" inputmode="numeric" pattern="[0-9]*" value="${amount}" aria-label="Bounty amount"></div>
+          <div class="chips" style="margin-top:10px">${BOUNTY_QUICK[cur].map((q) => html`<button type="button" class="chip" data-q="${q}">${money(q * 100, cur)}</button>`)}</div>
+        </div>
+        <div class="card flat" style="margin-top:14px" id="summary"></div>
+      </div>
+      <ul class="checklist" style="margin-top:16px" id="rules"></ul>
+      <div class="sheet-actions"><button class="btn primary block" type="submit" id="go">Post challenge</button></div>
+    </form>`), {
+    label: 'Post a challenge',
+    onMount(root, close) {
+      const input = root.querySelector('[name=amount]');
+      const summary = root.querySelector('#summary');
+      const rules = root.querySelector('#rules');
+      const update = () => {
+        amount = Math.max(0, parseInt(input.value.replace(/\D/g, ''), 10) || 0);
+        const prize = amount * 100;
+        const fee = Math.ceil(prize * feePct / 100);
+        root.querySelector('#bounty-box').hidden = kind !== 'bounty';
+        root.querySelector('#go').textContent = kind === 'bounty' ? `Post bounty · ${money(prize + fee, cur)}` : 'Post challenge';
+        rules.innerHTML = String(kind === 'bounty' ? html`
+          <li class="ok">${ic('check')}<span>Anyone can accept <b>for free</b>. If they beat you, they take the bounty.</span></li>
+          <li class="ok">${ic('check')}<span>If you win or draw, the bounty <b>comes back to you</b>. You can never win money from a bounty.</span></li>
+          <li class="ok">${ic('check')}<span>The ${feePct}% hosting fee is kept only if the match is played. Cancelled or expired bounties are refunded in full.</span></li>
+          <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>` : html`
+          <li class="ok">${ic('check')}<span>Play a <b>player-vs-player</b> match (not vs AI or a scenario)</span></li>
+          <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>
+          <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute, then the result is final</span></li>`);
+        summary.innerHTML = String(html`
+          <div class="row between small"><span class="muted">Bounty for the winner</span><b class="num">${money(prize, cur)}</b></div>
+          <div class="row between small" style="margin-top:6px"><span class="muted">Hosting fee (${feePct}%)</span><b class="num">${money(fee, cur)}</b></div>
+          <div class="divider" style="margin:10px 0"></div>
+          <div class="row between"><span>Taken from your wallet now</span><b class="h3 num">${money(prize + fee, cur)}</b></div>
+          <div class="tiny faint" style="margin-top:6px">Win or draw: ${money(prize, cur)} returns to you. Lose: your challenger gets it.</div>`);
+      };
+      const bindGames = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
+        game = b.dataset.game;
+        root.querySelector('#games').innerHTML = String(gameChips(game));
+        bindGames();
+      }));
+      bindGames();
+      root.querySelectorAll('[data-k]').forEach((b) => (b.onclick = () => {
+        kind = b.dataset.k;
+        root.querySelectorAll('[data-k]').forEach((x) => x.classList.toggle('active', x === b));
+        update();
+      }));
+      input.oninput = update;
+      root.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { input.value = b.dataset.q; update(); }));
+      update();
+      root.querySelector('#cc').onsubmit = (e) => {
+        e.preventDefault();
+        if (kind === 'bounty' && needsConsent(profile)) { close(); return consentGate(profile, () => refreshProfile()); }
+        if (!hasGameProfile(game)) { close(); return gameIdSheet(game, () => createFreeOrBounty(onDone)); }
+        const total = kind === 'bounty' ? amount * 100 + Math.ceil(amount * 100 * feePct / 100) : 0;
+        if (total > profile.balance) {
+          close();
+          toast(`You need ${money(total, cur)} in your wallet to post this bounty.`, 'info');
+          return navigate('/wallet?deposit=' + Math.ceil((total - profile.balance) / 100));
+        }
+        busy(e.target.querySelector('[type=submit]'), async () => {
+          await post('/lobby/create', kind === 'bounty' ? { game, amount: amount * 100, kind: 'bounty' } : { game, amount: 0 });
+          close();
+          toast(kind === 'bounty' ? 'Bounty posted. We’ll notify you when someone takes it on.' : 'Challenge posted. We’ll notify you when someone accepts.');
           refreshProfile();
           onDone();
         });

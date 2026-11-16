@@ -54,7 +54,7 @@ var Tiers = []Tier{
 	{ID: "pro_plus", Name: "Pro Plus", Rank: 2, Entries: FreeEntries + 3, Cashback: 7, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_800_00}, Perks: []string{
 		"3 tournaments + your free one", "Go live and chat in streams", "Pro Plus badge", "Early tournament sign-up", "7% cashback when you renew"}},
 	{ID: "elite", Name: "Elite", Rank: 3, Entries: FreeEntries + 5, Cashback: 10, Prices: map[string]int64{"GHS": 80_00, "NGN": 9_200_00}, Perks: []string{
-		"5 tournaments + your free one", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
+		"5 tournaments + your free one", "Host 1 cup a month with no hosting fee", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
 }
 
 // UpgradePrices is what a member on a lower plan pays to switch to Elite
@@ -162,8 +162,9 @@ func EntryUsage(ctx context.Context, q querier, uid string) (*Usage, error) {
 	if t := TierByID(u.Tier); t != nil {
 		u.Allowed = t.Entries
 	}
+	// Player-hosted cups are free and unlimited: they don't use an entry.
 	if err := q.QueryRow(ctx, `SELECT COUNT(*) FROM tournament_players tp JOIN tournaments t ON t.id = tp.tournament_id
-		WHERE tp.user_id = $1 AND tp.joined_at >= $2 AND t.status <> 'cancelled' AND t.entry_fee = 0`, uid, from).Scan(&u.Used); err != nil {
+		WHERE tp.user_id = $1 AND tp.joined_at >= $2 AND t.status <> 'cancelled' AND t.entry_fee = 0 AND t.host_id IS NULL`, uid, from).Scan(&u.Used); err != nil {
 		return nil, err
 	}
 	u.Left = max(u.Allowed-u.Used, 0)
@@ -315,7 +316,7 @@ func UpgradeToElite(ctx context.Context, uid string) (*Membership, error) {
 		return nil, err
 	}
 	forgetTier(uid)
-	Notify(uid, "membership", "Welcome to Elite 👑", fmt.Sprintf("You can now enter %d tournaments until %s.", elite.Entries, m.EndsAt.Format("2 Jan")), "/membership", nil)
+	Notify(uid, "membership", "Welcome to Elite 👑", fmt.Sprintf("You can now enter %d tournaments until %s, and host one cup with no hosting fee.", elite.Entries, m.EndsAt.Format("2 Jan")), "/membership", nil)
 	return m, nil
 }
 

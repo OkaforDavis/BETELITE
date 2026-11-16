@@ -98,11 +98,11 @@ function nowBody(current) {
   return html`<div class="grid-2">
     <a class="card tap" href="/play" style="color:inherit">
       <div class="icon-tile brand">${ic('swords')}</div>
-      <div class="h3" style="margin-top:12px">${store.get().stakingEnabled ? 'Play 1v1' : 'Friendly 1v1'}</div>
-      <div class="small muted">${store.get().stakingEnabled ? 'Challenge a player. Winner takes 80% of the pot.' : 'Free friendly matches against real players.'}</div></a>
+      <div class="h3" style="margin-top:12px">${store.get().stakingEnabled ? 'Play 1v1' : store.get().bountyEnabled ? '1v1 & bounties' : 'Friendly 1v1'}</div>
+      <div class="small muted">${store.get().stakingEnabled ? 'Challenge a player. Winner takes 80% of the pot.' : store.get().bountyEnabled ? 'Friendly matches, or put up a bounty for anyone who can beat you.' : 'Free friendly matches against real players.'}</div></a>
     <a class="card tap" href="/tournaments" style="color:inherit">
       <div class="icon-tile info">${ic('trophy')}</div>
       <div class="h3" style="margin-top:12px">Tournaments</div>
-      <div class="small muted">Fixed cash prizes. No entry fees.</div></a>
+      <div class="small muted">Cash prizes, free to enter.${store.get().hostCupsEnabled ? ' Or host your own cup.' : ''}</div></a>
   </div>`;
 }

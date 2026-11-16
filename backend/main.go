@@ -93,11 +93,14 @@ func main() {
 	})
 	api.Get("/settings", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true, "settings": fiber.Map{
-			"paystackKey":    config.Cfg.PaystackPublicKey,
-			"paystackKeyGH":  config.Cfg.PaystackPublicKeyGH,
-			"vapidKey":       config.Cfg.VAPIDPublicKey,
-			"termsVersion":   services.TermsVersion,
-			"stakingEnabled": config.Cfg.StakingEnabled,
+			"paystackKey":     config.Cfg.PaystackPublicKey,
+			"paystackKeyGH":   config.Cfg.PaystackPublicKeyGH,
+			"vapidKey":        config.Cfg.VAPIDPublicKey,
+			"termsVersion":    services.TermsVersion,
+			"stakingEnabled":  config.Cfg.StakingEnabled,
+			"hostCupsEnabled": config.Cfg.HostCupsEnabled,
+			"bountyEnabled":   config.Cfg.BountyEnabled,
+			"hostFeePercent":  services.HostFeePercent,
 		}})
 	})
 

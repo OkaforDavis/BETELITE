@@ -26,7 +26,8 @@ export function nextStep(m) {
 export function matchHero(m) {
   const uid = me();
   const step = nextStep(m);
-  const prize = m.kind === 'p2p' && m.pool > 0 ? money(Math.floor((m.pool * 80) / 100), m.currency) : '';
+  const bounty = m.escrowKind === 'bounty';
+  const prize = m.kind === 'p2p' && m.pool > 0 ? money(bounty ? m.stake : Math.floor((m.pool * 80) / 100), m.currency) : '';
   const deadline = m.status === 'submitted' ? m.disputeDeadline : m.status === 'ready' ? m.playDeadline : null;
   return html`
   <a class="card highlight tap" href="/match/${m.id}" style="display:block;color:inherit">
@@ -43,7 +44,7 @@ export function matchHero(m) {
     </div>
     ${step ? html`<div class="notice ${step.tone}">${ic(step.tone === 'brand' ? 'gamepad' : 'clock')}
       <div class="grow"><b>${step.text}</b>${deadline ? html`<div class="small">Time left: <span class="num" data-countdown="${deadline}">${timeLeft(deadline)}</span></div>` : ''}</div></div>` : ''}
-    ${prize ? html`<div class="row between small" style="margin-top:12px"><span class="muted">Stake ${money(m.stake, m.currency)} each</span><span>Prize <b class="brand-text">${prize}</b></span></div>` : ''}
+    ${prize ? html`<div class="row between small" style="margin-top:12px"><span class="muted">${bounty ? `Bounty by ${m.homeId === uid ? 'you' : m.homeName}` : `Stake ${money(m.stake, m.currency)} each`}</span><span>Prize <b class="brand-text">${prize}</b></span></div>` : ''}
   </a>`;
 }
 
@@ -95,13 +96,13 @@ export function tournamentCard(t) {
   return html`
   <a class="card tap" href="/tournaments/${t.id}" style="display:block;color:inherit">
     <div class="row between">
-      <span class="row" style="gap:6px">${formatBadge(t)}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
+      <span class="row" style="gap:6px">${formatBadge(t)}${t.hostId ? html`<span class="badge info">${ic('users')}Host cup</span>` : ''}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
       <span class="badge ${status[1]}">${status[0]}</span>
     </div>
     <div class="h3" style="margin-top:12px">${t.name}</div>
-    <div class="small muted">${t.gameName}${t.joined ? html` · <span class="brand-text">You're in</span>` : ''}</div>
+    <div class="small muted">${t.gameName}${t.hostId ? html` · Hosted by ${t.hostId === me() ? 'you' : t.hostName}` : ''}${t.joined ? html` · <span class="brand-text">You're in</span>` : ''}</div>
     <div class="grid-3" style="margin-top:14px">
-      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : '1 entry'}</div></div>
+      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : t.hostId ? 'Free' : '1 entry'}</div></div>
       <div><div class="tiny faint">1ST PRIZE</div><div class="h3 num brand-text">${top ? money(top, prizes.cur) : '—'}</div></div>
       <div><div class="tiny faint">PLAYERS</div><div class="h3 num">${t.playerCount}/${t.maxPlayers}</div></div>
     </div>

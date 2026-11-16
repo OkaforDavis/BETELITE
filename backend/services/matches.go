@@ -81,6 +81,7 @@ type MatchView struct {
 	InGameMatchID   string     `json:"inGameMatchId,omitempty"`
 	Stake           int64      `json:"stake"`
 	Pool            int64      `json:"pool"`
+	EscrowKind      string     `json:"escrowKind,omitempty"` // "bounty": only the host (home) put up the prize
 	Currency        string     `json:"currency"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	SettledAt       *time.Time `json:"settledAt,omitempty"`
@@ -93,7 +94,7 @@ SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.ga
        m.score_home, m.score_away, m.pens_home, m.pens_away, COALESCE(m.winner_id,''),
        COALESCE(m.submitted_by,''), m.dispute_deadline, m.play_deadline,
        COALESCE(m.disputed_by,''), COALESCE(m.dispute_reason,''), COALESCE(m.ingame_match_id,''),
-       COALESCE(e.amount,0), COALESCE(e.pool,0), COALESCE(e.currency, t.currency, 'NGN'),
+       COALESCE(e.amount,0), COALESCE(e.pool,0), COALESCE(e.kind,''), COALESCE(e.currency, t.currency, 'NGN'),
        m.created_at, m.settled_at
 FROM matches m
 LEFT JOIN users hu ON hu.id = m.home_id
@@ -111,7 +112,7 @@ func scanMatch(row pgx.Row) (*MatchView, error) {
 		&m.ScoreHome, &m.ScoreAway, &m.PensHome, &m.PensAway, &m.WinnerID,
 		&m.SubmittedBy, &m.DisputeDeadline, &m.PlayDeadline,
 		&m.DisputedBy, &m.DisputeReason, &m.InGameMatchID,
-		&m.Stake, &m.Pool, &m.Currency, &m.CreatedAt, &m.SettledAt)
+		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt)
 	if err != nil {
 		return nil, err
 	}
@@ -496,12 +497,14 @@ func SettleMatch(ctx context.Context, matchID, resolvedBy string) error {
 }
 
 // settleEscrow pays the 1v1 winner P2PWinnerPercent of the pool, or refunds both on a draw.
+// For a bounty, the challenger wins the host's prize; otherwise (host wins,
+// or a draw) the prize goes back to the host. The hosting fee is kept.
 func settleEscrow(ctx context.Context, tx pgx.Tx, challengeID, winner, homeID, awayID string) error {
 	var escrowID int64
 	var amount, pool int64
-	var status string
-	err := tx.QueryRow(ctx, "SELECT id, amount, pool, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", challengeID).
-		Scan(&escrowID, &amount, &pool, &status)
+	var status, kind, creator, currency string
+	err := tx.QueryRow(ctx, "SELECT id, amount, pool, status, kind, creator_id, COALESCE(currency,'NGN') FROM escrow WHERE challenge_id = $1 FOR UPDATE", challengeID).
+		Scan(&escrowID, &amount, &pool, &status, &kind, &creator, &currency)
 	if err != nil {
 		return fmt.Errorf("escrow for %s: %w", challengeID, err)
 	}
@@ -509,6 +512,26 @@ func settleEscrow(ctx context.Context, tx pgx.Tx, challengeID, winner, homeID, a
 		return nil
 	}
 	if pool == 0 { // free friendly match: nothing to pay
+		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'paid_out' WHERE id = $1", escrowID)
+		return err
+	}
+	if kind == "bounty" {
+		if winner == "" || winner == creator {
+			if err := AdjustBalance(ctx, tx, creator, amount, "bounty_return", challengeID); err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'returned' WHERE id = $1", escrowID)
+			return err
+		}
+		var cur string
+		tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", winner).Scan(&cur)
+		prize, err := ConvertPrize(ctx, amount, currency, cur)
+		if err != nil {
+			return fmt.Errorf("convert bounty: %w", err)
+		}
+		if err := AdjustBalance(ctx, tx, winner, prize, "bounty_win", challengeID, fmt.Sprintf(`{"bounty": %d, "currency": %q}`, amount, currency)); err != nil {
+			return err
+		}
 		_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'paid_out' WHERE id = $1", escrowID)
 		return err
 	}
@@ -564,12 +587,20 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 			return err
 		}
 	} else {
-		var escrowID, amount int64
-		var est string
-		if err := tx.QueryRow(ctx, "SELECT id, amount, status FROM escrow WHERE challenge_id = $1 FOR UPDATE", deref(challengeID)).Scan(&escrowID, &amount, &est); err != nil {
+		var escrowID, amount, efee int64
+		var est, ekind, ecreator string
+		if err := tx.QueryRow(ctx, "SELECT id, amount, status, kind, fee, creator_id FROM escrow WHERE challenge_id = $1 FOR UPDATE", deref(challengeID)).Scan(&escrowID, &amount, &est, &ekind, &efee, &ecreator); err != nil {
 			return err
 		}
 		if est == "held" && amount == 0 {
+			if _, err := tx.Exec(ctx, "UPDATE escrow SET status = 'refunded' WHERE id = $1", escrowID); err != nil {
+				return err
+			}
+		} else if est == "held" && ekind == "bounty" {
+			// Unplayed bounty: the host gets the prize and the fee back.
+			if err := AdjustBalance(ctx, tx, ecreator, amount+efee, "bounty_refund", deref(challengeID)); err != nil {
+				return err
+			}
 			if _, err := tx.Exec(ctx, "UPDATE escrow SET status = 'refunded' WHERE id = $1", escrowID); err != nil {
 				return err
 			}
@@ -595,6 +626,8 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 	msg := "The match was cancelled and your stake refunded. " + reason
 	if kind != "tournament" && stakeless(ctx, deref(challengeID)) {
 		msg = "The match was cancelled. " + reason
+	} else if kind != "tournament" && escrowKind(ctx, deref(challengeID)) == "bounty" {
+		msg = "The match was cancelled. The bounty and hosting fee went back to the host. " + reason
 	}
 	if kind == "tournament" {
 		msg = "The result was cleared. Please replay the match and submit a new screenshot. " + reason
@@ -742,4 +775,11 @@ func stakeless(ctx context.Context, challengeID string) bool {
 		return false
 	}
 	return amount == 0
+}
+
+// escrowKind is "stake" (both players pay) or "bounty" (only the host pays).
+func escrowKind(ctx context.Context, challengeID string) string {
+	var kind string
+	db.Pool.QueryRow(ctx, "SELECT kind FROM escrow WHERE challenge_id = $1", challengeID).Scan(&kind)
+	return kind
 }

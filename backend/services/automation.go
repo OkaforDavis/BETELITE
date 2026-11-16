@@ -57,6 +57,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)
 	cleanupStaleChallenges(ctx, hub, cfg.ChallengeExpireDuration)
+	ExpireUnfilledCups(ctx)
 }
 
 func idsFrom(ctx context.Context, sql string, args ...any) []string {
@@ -114,10 +115,11 @@ func cleanupStaleChallenges(ctx context.Context, hub *ws.Hub, expiry time.Durati
 			continue
 		}
 		var creator string
-		var amount int64
-		err = tx.QueryRow(ctx, "SELECT creator_id, amount FROM escrow WHERE challenge_id = $1 AND status = 'waiting' FOR UPDATE", cid).Scan(&creator, &amount)
-		if err == nil && amount > 0 {
-			err = AdjustBalance(ctx, tx, creator, amount, "challenge_expired_refund", cid)
+		var amount, fee int64
+		err = tx.QueryRow(ctx, "SELECT creator_id, amount, fee FROM escrow WHERE challenge_id = $1 AND status = 'waiting' FOR UPDATE", cid).Scan(&creator, &amount, &fee)
+		if err == nil && amount+fee > 0 {
+			// A bounty host gets the prize and the hosting fee back.
+			err = AdjustBalance(ctx, tx, creator, amount+fee, "challenge_expired_refund", cid)
 		}
 		if err == nil {
 			_, err = tx.Exec(ctx, "UPDATE escrow SET status = 'expired' WHERE challenge_id = $1", cid)
@@ -129,7 +131,9 @@ func cleanupStaleChallenges(ctx context.Context, hub *ws.Hub, expiry time.Durati
 		log.Printf("[AUTOMATION] expired challenge %s, refunded %d to %s", cid, amount, creator)
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", map[string]string{"id": cid, "reason": "expired"})
 		msg := "Nobody accepted your challenge in 24 hours. Your stake has been refunded."
-		if amount == 0 {
+		if fee > 0 {
+			msg = "Nobody accepted your bounty in 24 hours. The prize and the hosting fee are back in your wallet."
+		} else if amount == 0 {
 			msg = "Nobody accepted your challenge in 24 hours. Post a new one any time."
 		}
 		Notify(creator, "challenge_expired", "Challenge expired", msg, "/play", nil)

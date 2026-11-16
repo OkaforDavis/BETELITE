@@ -311,6 +311,17 @@ var migrations = []string{
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS seen_country TEXT;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS seen_country_since TIMESTAMPTZ;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS currency_changed_at TIMESTAMPTZ;`,
+
+	// 11: player-hosted cups (the host funds the prize pool and pays a hosting
+	// fee; players join free) and bounty 1v1s (only the host puts up a prize).
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS host_id TEXT REFERENCES users(id);
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS host_pool BIGINT NOT NULL DEFAULT 0;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS host_fee BIGINT NOT NULL DEFAULT 0;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS host_fee_waived BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS fill_deadline TIMESTAMPTZ;
+	CREATE INDEX IF NOT EXISTS tournaments_host_idx ON tournaments(host_id, created_at DESC);
+	ALTER TABLE escrow ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'stake';
+	ALTER TABLE escrow ADD COLUMN IF NOT EXISTS fee BIGINT NOT NULL DEFAULT 0;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

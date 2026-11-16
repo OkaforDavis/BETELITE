@@ -6,6 +6,9 @@ const state = {
   unread: 0,        // unread notifications
   current: null,    // the match I should act on now
   stakingEnabled: false, // real-money stakes (off until licensed)
+  bountyEnabled: false,  // bounty 1v1s: only the host puts up a prize
+  hostCupsEnabled: false, // player-hosted cups
+  hostFeePercent: 20,
   location: null,   // where the player is now ({country, currency})
   homeSwitch: null, // whether they can move their wallet to that country
   payCurrencies: [], // currencies payable right now (e.g. NGN, GHS)

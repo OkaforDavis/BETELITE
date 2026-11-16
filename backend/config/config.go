@@ -36,6 +36,8 @@ type Config struct {
 	LiveKitAPISecret           string
 	LiveKitURL                 string
 	StakingEnabled             bool // real-money 1v1 stakes and paid tournament entries; off until licensed
+	HostCupsEnabled            bool // players can host cups: they fund the prize pool, entry is free
+	BountyEnabled              bool // bounty 1v1s: only the host puts up a prize, the challenger plays free
 	FlutterwaveSecretKey       string
 	FlutterwavePublicKey       string
 	FlutterwaveWebhookHash     string   // "secret hash" set in the Flutterwave dashboard
@@ -85,6 +87,8 @@ func Load() {
 		LiveKitAPISecret:           getEnv("LIVEKIT_API_SECRET", ""),
 		LiveKitURL:                 getEnv("LIVEKIT_URL", "wss://betelite-38umojt1.livekit.cloud"),
 		StakingEnabled:             getEnv("STAKING_ENABLED", "") == "true",
+		HostCupsEnabled:            getEnv("HOST_CUPS_ENABLED", "true") != "false",
+		BountyEnabled:              getEnv("BOUNTY_ENABLED", "true") != "false",
 		FirebaseAuthDomain:         getEnv("FIREBASE_AUTH_DOMAIN", ""),
 		FlutterwaveSecretKey:       getEnv("FLUTTERWAVE_SECRET_KEY", ""),
 		FlutterwavePublicKey:       getEnv("FLUTTERWAVE_PUBLIC_KEY", ""),
