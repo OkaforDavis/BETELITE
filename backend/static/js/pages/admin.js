@@ -98,8 +98,8 @@ async function review(body, redraw) {
 
 async function withdrawals(body, redraw) {
   const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=pending'), get('/admin/payout-balances').catch(() => null)]);
-  const balances = bal ? html`<div class="card" style="margin-bottom:12px"><div class="h3">Paystack balance (transfers are paid from this)</div>
-    <div class="list" style="margin-top:8px">${Object.entries(bal.paystack || {}).map(([cur, b]) => html`<div class="list-row"><div class="grow muted">${cur}${b.error ? html` <span class="tiny danger-text">${b.error}</span>` : ''}</div>
+  const balances = bal ? html`<div class="card" style="margin-bottom:12px"><div class="h3">Provider balances (transfers are paid from these)</div>
+    <div class="list" style="margin-top:8px">${[['Paystack', bal.paystack], ['Flutterwave', bal.flutterwave]].flatMap(([name, m]) => Object.entries(m || {}).map(([cur, b]) => [name + ' ' + cur, cur, b])).map(([label, cur, b]) => html`<div class="list-row"><div class="grow muted">${label}${b.error ? html` <span class="tiny danger-text">${b.error}</span>` : ''}</div>
       <b class="num ${b.balance != null && b.balance < (bal.waiting?.[cur] || 0) ? 'danger-text' : ''}">${b.balance != null ? money(b.balance, cur) : '—'}</b><span class="tiny faint" style="margin-left:8px">waiting ${money(bal.waiting?.[cur] || 0, cur)}</span></div>`)}</div>
     <p class="tiny faint" style="margin-top:8px">Automatic payouts: ${['NGN', 'GHS'].map((c) => `${c} up to ${bal.autoPayoutLimit?.[c] ? money(bal.autoPayoutLimit[c], c) : 'off'}`).join(' · ')} (AUTO_PAYOUT_LIMIT_NGN / _GHS in Render). If the balance is below "waiting", top up on the Paystack dashboard (Balance → Top up).</p></div>` : '';
   if (!list.length) { body.innerHTML = String(html`${balances}<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); return; }

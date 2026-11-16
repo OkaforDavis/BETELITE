@@ -55,7 +55,7 @@ func setupAdminMoney(admin fiber.Router) {
 			db.Pool.QueryRow(ctx, "SELECT COALESCE(SUM(amount - fee),0) FROM withdrawals WHERE currency = $1 AND status IN ('pending','processing')", cur).Scan(&w)
 			waiting[cur] = w
 		}
-		return utils.SendSuccess(c, fiber.Map{"paystack": paystackBalances(ctx), "waiting": waiting, "autoPayoutLimit": config.Cfg.AutoPayoutLimit})
+		return utils.SendSuccess(c, fiber.Map{"paystack": paystackBalances(ctx), "flutterwave": flutterwaveBalances(ctx), "waiting": waiting, "autoPayoutLimit": config.Cfg.AutoPayoutLimit})
 	})
 
 	// Move a player's wallet to another country (after a complaint); skips the 30/90-day rules.
@@ -84,6 +84,23 @@ func paystackBalances(ctx context.Context) map[string]fiber.Map {
 			continue
 		}
 		bal, err := services.PaystackBalance(ctx, cur)
+		if err != nil {
+			out[cur] = fiber.Map{"error": err.Error()}
+			continue
+		}
+		out[cur] = fiber.Map{"balance": bal}
+	}
+	return out
+}
+
+// flutterwaveBalances fetches each currency's Flutterwave wallet balance.
+func flutterwaveBalances(ctx context.Context) map[string]fiber.Map {
+	out := map[string]fiber.Map{}
+	if !services.FlutterwaveReady() {
+		return out
+	}
+	for _, cur := range []string{"NGN", "GHS"} {
+		bal, err := services.FlutterwaveBalance(ctx, cur)
 		if err != nil {
 			out[cur] = fiber.Map{"error": err.Error()}
 			continue

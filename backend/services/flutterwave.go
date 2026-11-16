@@ -26,6 +26,20 @@ var flutterwaveBaseURL = "https://api.flutterwave.com/v3"
 // FlutterwaveReady reports whether Flutterwave keys are configured.
 func FlutterwaveReady() bool { return config.Cfg.FlutterwaveSecretKey != "" }
 
+// FlutterwaveBalance is the available wallet balance transfers are paid
+// from, in minor units, for a currency. Also a cheap "is the live key
+// accepted?" check: an unapproved account answers with an error.
+func FlutterwaveBalance(ctx context.Context, currency string) (int64, error) {
+	var d struct {
+		Currency  string  `json:"currency"`
+		Available float64 `json:"available_balance"`
+	}
+	if err := flutterwave(ctx, "GET", "/balances/"+currency, nil, &d); err != nil {
+		return 0, err
+	}
+	return int64(d.Available*100 + 0.5), nil
+}
+
 func flutterwave(ctx context.Context, method, path string, body any, out any) error {
 	if !FlutterwaveReady() {
 		return fmt.Errorf("flutterwave is not configured")
