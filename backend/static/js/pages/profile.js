@@ -4,7 +4,7 @@ import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError } fr
 import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
 import { tierBadge, TIER_NAMES } from '../components.js';
-import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS } from '../pwa.js';
+import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification } from '../auth.js';
 import { refreshProfile } from '../app.js';
 
@@ -204,6 +204,7 @@ export default async function profilePage(view, { query }) {
 
   draw();
   if (query.section === 'games') view.querySelector('#games')?.scrollIntoView({ behavior: 'smooth' });
+  return onInstallable(draw); // show the install row when Chrome says it's possible
 }
 
 function editProfile(onDone) {

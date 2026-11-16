@@ -3,7 +3,7 @@ import { store } from '../store.js';
 import { html, ic, skeleton, empty, sectionError } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { matchHero, matchRow, tournamentCard } from '../components.js';
-import { canInstall, promptInstall, pushState, enablePush } from '../pwa.js';
+import { canInstall, promptInstall, pushState, enablePush, onInstallable } from '../pwa.js';
 import { refreshCurrent } from '../app.js';
 
 export default async function home(view) {
@@ -88,7 +88,9 @@ export default async function home(view) {
     if (body && key(current) !== last) { last = key(current); body.innerHTML = String(nowBody(current)); }
   });
   refreshCurrent();
-  return () => unsub();
+  // Chrome announces "installable" after the first draw: show the install card then.
+  const offInstall = onInstallable(() => draw());
+  return () => { unsub(); offInstall(); };
 }
 
 const key = (m) => (m ? m.id + m.status : '');
