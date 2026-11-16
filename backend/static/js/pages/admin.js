@@ -148,7 +148,7 @@ async function tournaments(body, redraw) {
   const { tournaments: list } = await get('/tournaments');
   body.innerHTML = String(html`<button class="btn primary block" id="new">${ic('plus')} Create tournament</button>
     <div class="list" style="margin-top:16px">${list.length ? list.map((t) => html`<div class="list-row">
-      <div class="grow"><div class="h3">${t.name}</div><div class="small muted">${t.format} · ${t.gameName} · ${t.playerCount}/${t.maxPlayers} · ${t.entryFee ? money(t.entryFee, t.currency) : t.fixedPrizes ? '1st ' + money(t.fixedPrizes.GHS?.[0] || 0, 'GHS') : 'free'} · ${t.status}</div></div>
+      <div class="grow"><div class="h3">${t.name}</div><div class="small muted">${t.hostId ? `hosted by ${t.hostName} (pool ${money(t.hostPool, t.currency)}, fee ${money(t.hostFee, t.currency)}) · ` : ''}${t.format} · ${t.gameName} · ${t.playerCount}/${t.maxPlayers} · ${t.entryFee ? money(t.entryFee, t.currency) : t.fixedPrizes ? '1st ' + money(t.fixedPrizes.GHS?.[0] ?? t.fixedPrizes.NGN?.[0] ?? 0, t.fixedPrizes.GHS ? 'GHS' : 'NGN') : 'free'} · ${t.status}</div></div>
       ${t.status === 'open' ? html`<button class="btn danger sm" data-cancel="${t.id}">Cancel</button>` : html`<a class="btn secondary sm" href="/tournaments/${t.id}">View</a>`}</div>`) : html`<div class="list-row muted">No tournaments yet</div>`}</div>`);
 
   body.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = async () => {

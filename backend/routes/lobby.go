@@ -30,6 +30,7 @@ type challengeView struct {
 	CreatorAvatar string    `json:"creatorAvatar"`
 	Game          string    `json:"game"`
 	GameName      string    `json:"gameName"`
+	Kind          string    `json:"kind"` // stake | bounty (amount 0 = friendly)
 	Amount        int64     `json:"amount"`
 	Currency      string    `json:"currency"`
 	Prize         int64     `json:"prize"`
@@ -42,7 +43,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	// Open challenges waiting for an opponent.
 	lobby.Get("/", func(c *fiber.Ctx) error {
 		rows, err := db.Pool.Query(c.Context(), `
-			SELECT e.challenge_id, e.creator_id, u.username, COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''), COALESCE(e.game,''), e.amount, COALESCE(e.currency,'NGN'), e.created_at
+			SELECT e.challenge_id, e.creator_id, u.username, COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''), COALESCE(e.game,''), e.kind, e.amount, COALESCE(e.currency,'NGN'), e.created_at
 			FROM escrow e
 			JOIN users u ON u.id = e.creator_id
 			LEFT JOIN game_profiles gp ON gp.user_id = e.creator_id AND gp.game = e.game
@@ -54,22 +55,29 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		list := []challengeView{}
 		for rows.Next() {
 			var ch challengeView
-			if rows.Scan(&ch.ID, &ch.CreatorID, &ch.CreatorName, &ch.CreatorTag, &ch.CreatorAvatar, &ch.Game, &ch.Amount, &ch.Currency, &ch.CreatedAt) == nil {
+			if rows.Scan(&ch.ID, &ch.CreatorID, &ch.CreatorName, &ch.CreatorTag, &ch.CreatorAvatar, &ch.Game, &ch.Kind, &ch.Amount, &ch.Currency, &ch.CreatedAt) == nil {
 				if g := services.GameByID(ch.Game); g != nil {
 					ch.GameName = g.Short
 				}
-				ch.Prize = ch.Amount * 2 * services.P2PWinnerPercent / 100
+				if ch.Kind == "bounty" {
+					ch.Prize = ch.Amount // the challenger wins the whole bounty
+				} else {
+					ch.Prize = ch.Amount * 2 * services.P2PWinnerPercent / 100
+				}
 				list = append(list, ch)
 			}
 		}
 		return utils.SendSuccess(c, fiber.Map{"challenges": list})
 	})
 
-	// Post a challenge: the stake is held in escrow until someone accepts.
+	// Post a challenge. Friendly: nothing held. Bounty: the host's prize and
+	// hosting fee are held until the match is settled; the challenger plays
+	// free. Stake (both pay): only when staking is licensed and enabled.
 	lobby.Post("/create", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
 		var req struct {
 			Game   string `json:"game"`
 			Amount int64  `json:"amount"`
+			Kind   string `json:"kind"` // "" | stake | bounty
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -80,8 +88,14 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if game == nil {
 			return utils.SendError(c, 400, "Choose a supported game")
 		}
-		// Without a gaming licence, 1v1s are free friendly matches (no stakes).
-		if !config.Cfg.StakingEnabled {
+		kind := "stake"
+		if req.Kind == "bounty" && req.Amount > 0 {
+			if !config.Cfg.BountyEnabled {
+				return utils.SendError(c, 409, "Bounty matches are paused right now")
+			}
+			kind = "bounty"
+		} else if !config.Cfg.StakingEnabled {
+			// Without a gaming licence, 1v1s are free friendly matches (no stakes).
 			req.Amount = 0
 		}
 		if req.Amount > 0 {
@@ -94,7 +108,11 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		var currency string
 		db.Pool.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&currency)
-		if req.Amount > 0 && (req.Amount < minStake[currency] || req.Amount > maxStake[currency]) {
+		if kind == "bounty" && (req.Amount < services.MinBounty[currency] || req.Amount > services.MaxBounty[currency]) {
+			return utils.SendError(c, 400, fmt.Sprintf("A bounty must be between %s and %s",
+				services.FormatMoney(services.MinBounty[currency], currency), services.FormatMoney(services.MaxBounty[currency], currency)))
+		}
+		if kind == "stake" && req.Amount > 0 && (req.Amount < minStake[currency] || req.Amount > maxStake[currency]) {
 			return utils.SendError(c, 400, fmt.Sprintf("Stake must be between %s and %s",
 				services.FormatMoney(minStake[currency], currency), services.FormatMoney(maxStake[currency], currency)))
 		}
@@ -110,7 +128,19 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
-		if req.Amount > 0 {
+		var fee int64
+		if kind == "bounty" {
+			fee = services.HostFee(req.Amount)
+			if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "bounty_hold", id); err == nil {
+				err = services.AdjustBalance(ctx, tx, uid, -fee, "bounty_fee", id)
+			} else if err != nil {
+				if errors.Is(err, services.ErrInsufficientFunds) {
+					return utils.SendError(c, 400, fmt.Sprintf("You need %s to post this bounty (%s prize + %s hosting fee). Top up first.",
+						services.FormatMoney(req.Amount+fee, currency), services.FormatMoney(req.Amount, currency), services.FormatMoney(fee, currency)))
+				}
+				return fail(c, err)
+			}
+		} else if req.Amount > 0 {
 			if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "wager_hold", id); err != nil {
 				if errors.Is(err, services.ErrInsufficientFunds) {
 					return utils.SendError(c, 400, "Insufficient balance. Deposit to post this challenge.")
@@ -118,8 +148,8 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 				return fail(c, err)
 			}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency)
-			VALUES ($1,$2,$3,$3,'waiting',$4,$5)`, id, uid, req.Amount, game.ID, currency); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency, kind, fee)
+			VALUES ($1,$2,$3,$3,'waiting',$4,$5,$6,$7)`, id, uid, req.Amount, game.ID, currency, kind, fee); err != nil {
 			return fail(c, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -148,9 +178,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		defer tx.Rollback(ctx)
 
 		var escrowID, amount int64
-		var creator, status, game, currency string
-		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status, COALESCE(game,''), COALESCE(currency,'NGN') FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
-			Scan(&escrowID, &creator, &amount, &status, &game, &currency)
+		var creator, status, game, currency, kind string
+		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status, COALESCE(game,''), COALESCE(currency,'NGN'), kind FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
+			Scan(&escrowID, &creator, &amount, &status, &game, &currency, &kind)
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && status != "waiting") {
 			return utils.SendError(c, 409, "This challenge is no longer available")
 		}
@@ -163,7 +193,13 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if services.GameByID(game) == nil {
 			return utils.SendError(c, 400, "This challenge is for an unsupported game")
 		}
-		if amount > 0 {
+		bounty := kind == "bounty"
+		if amount > 0 && bounty {
+			// Free to accept; the challenger must still be 18+ on current terms to win money.
+			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+				return fail(c, err)
+			}
+		} else if amount > 0 {
 			if !config.Cfg.StakingEnabled {
 				return utils.SendError(c, 409, "Staked challenges are paused. Post a free challenge instead.")
 			}
@@ -179,7 +215,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if err := services.RequireGameProfile(ctx, tx, uid, game); err != nil {
 			return fail(c, err)
 		}
-		if amount > 0 {
+		if amount > 0 && !bounty {
 			if err := services.AdjustBalance(ctx, tx, uid, -amount, "wager_hold", req.ChallengeID); err != nil {
 				if errors.Is(err, services.ErrInsufficientFunds) {
 					return utils.SendError(c, 400, "Insufficient balance to match this stake")
@@ -191,7 +227,11 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if err != nil {
 			return fail(c, err)
 		}
-		if _, err := tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = amount * 2, status = 'held', match_id = $2 WHERE id = $3",
+		pool := "amount * 2"
+		if bounty {
+			pool = "amount"
+		}
+		if _, err := tx.Exec(ctx, "UPDATE escrow SET acceptor_id = $1, pool = "+pool+", status = 'held', match_id = $2 WHERE id = $3",
 			uid, matchID, escrowID); err != nil {
 			return fail(c, err)
 		}
@@ -200,8 +240,12 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", fiber.Map{"id": req.ChallengeID})
+		what := "challenge"
+		if bounty {
+			what = "bounty"
+		}
 		services.Notify(creator, "challenge_accepted", "Challenge accepted! ⚔️",
-			services.Username(ctx, uid)+" accepted your challenge. Play the match and upload the final result screen within 3 hours.",
+			services.Username(ctx, uid)+" accepted your "+what+". Play the match and upload the final result screen within 3 hours.",
 			"/match/"+matchID, map[string]any{"matchId": matchID})
 		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
 	})
@@ -222,16 +266,20 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		defer tx.Rollback(ctx)
 
-		var amount int64
-		var status string
-		err = tx.QueryRow(ctx, "SELECT amount, status FROM escrow WHERE challenge_id = $1 AND creator_id = $2 FOR UPDATE", req.ChallengeID, uid).Scan(&amount, &status)
+		var amount, fee int64
+		var status, kind string
+		err = tx.QueryRow(ctx, "SELECT amount, fee, status, kind FROM escrow WHERE challenge_id = $1 AND creator_id = $2 FOR UPDATE", req.ChallengeID, uid).Scan(&amount, &fee, &status, &kind)
 		if err != nil {
 			return utils.SendError(c, 404, "Challenge not found")
 		}
 		if status != "waiting" {
 			return utils.SendError(c, 409, "This challenge has already been accepted")
 		}
-		if amount > 0 {
+		if kind == "bounty" && amount+fee > 0 {
+			if err := services.AdjustBalance(ctx, tx, uid, amount+fee, "bounty_refund", req.ChallengeID); err != nil {
+				return fail(c, err)
+			}
+		} else if amount > 0 {
 			if err := services.AdjustBalance(ctx, tx, uid, amount, "wager_refund", req.ChallengeID); err != nil {
 				return fail(c, err)
 			}

@@ -175,7 +175,7 @@ async function onUser(user) {
   const wake = setTimeout(() => { const w = root.querySelector('.sk-wake'); if (w) w.hidden = false; }, 6000);
   try {
     const [{ games }, { settings }] = await Promise.all([get('/games'), get('/settings'), refreshProfile()]);
-    store.set({ games, stakingEnabled: !!settings?.stakingEnabled });
+    store.set({ games, stakingEnabled: !!settings?.stakingEnabled, bountyEnabled: !!settings?.bountyEnabled, hostCupsEnabled: !!settings?.hostCupsEnabled, hostFeePercent: settings?.hostFeePercent ?? 20 });
     quietGet('/payments/geo').then((g) => store.set({ payCurrencies: g.payCurrencies || [] })).catch(() => {});
   } catch (e) {
     root.innerHTML = String(html`<div class="auth center"><div class="h2">Can't reach CrestArena</div>

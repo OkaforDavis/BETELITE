@@ -372,13 +372,25 @@ func roundName(players int) string {
 func finishTournament(ctx context.Context, tx pgx.Tx, tournamentID string, order []string) error {
 	var entryFee, seed int64
 	var splitJSON, fixedJSON []byte
-	var format, name, currency string
-	if err := tx.QueryRow(ctx, "SELECT entry_fee, prize_pool, prize_split, format, name, currency, prizes FROM tournaments WHERE id = $1", tournamentID).
-		Scan(&entryFee, &seed, &splitJSON, &format, &name, &currency, &fixedJSON); err != nil {
+	var format, name, currency, host string
+	if err := tx.QueryRow(ctx, "SELECT entry_fee, prize_pool, prize_split, format, name, currency, prizes, COALESCE(host_id,'') FROM tournaments WHERE id = $1", tournamentID).
+		Scan(&entryFee, &seed, &splitJSON, &format, &name, &currency, &fixedJSON, &host); err != nil {
 		return err
 	}
 	if fixed := ParseFixedPrizes(fixedJSON); fixed != nil {
-		return finishWithFixedPrizes(ctx, tx, tournamentID, name, order, fixed)
+		// A host cup's prizes exist only in the host's currency; other
+		// winners are paid the converted amount.
+		convertFrom := ""
+		if host != "" {
+			convertFrom = currency
+		}
+		if err := finishWithFixedPrizes(ctx, tx, tournamentID, name, order, fixed, convertFrom); err != nil {
+			return err
+		}
+		if host != "" {
+			go Notify(host, "tournament_finished", "Your cup has finished 🏆", name+" is over and the prizes have been paid to the winners. Thanks for hosting!", "/tournaments/"+tournamentID, map[string]any{"tournamentId": tournamentID})
+		}
+		return nil
 	}
 	split := DefaultSplit(format)
 	if len(splitJSON) > 0 {
@@ -568,7 +580,9 @@ func (p FixedPrizes) Places() int {
 	return n
 }
 
-func finishWithFixedPrizes(ctx context.Context, tx pgx.Tx, tournamentID, name string, order []string, prizes FixedPrizes) error {
+// convertFrom, when set, is the currency a host cup's pool is held in: a
+// winner whose wallet is in another currency is paid the converted amount.
+func finishWithFixedPrizes(ctx context.Context, tx pgx.Tx, tournamentID, name string, order []string, prizes FixedPrizes, convertFrom string) error {
 	type award struct {
 		amount   int64
 		currency string
@@ -581,14 +595,23 @@ func finishWithFixedPrizes(ctx context.Context, tx pgx.Tx, tournamentID, name st
 		var cur string
 		tx.QueryRow(ctx, "SELECT COALESCE(currency,'NGN') FROM users WHERE id = $1", uid).Scan(&cur)
 		list := prizes[cur]
-		if i >= len(list) || list[i] <= 0 {
+		amount := int64(0)
+		if i < len(list) {
+			amount = list[i]
+		} else if base := prizes[convertFrom]; convertFrom != "" && i < len(base) && base[i] > 0 {
+			var err error
+			if amount, err = ConvertPrize(ctx, base[i], convertFrom, cur); err != nil {
+				return fmt.Errorf("convert prize for %s: %w", uid, err)
+			}
+		}
+		if amount <= 0 {
 			continue
 		}
 		meta := fmt.Sprintf(`{"position": %d}`, i+1)
-		if err := AdjustBalance(ctx, tx, uid, list[i], "tournament_prize", tournamentID, meta); err != nil {
+		if err := AdjustBalance(ctx, tx, uid, amount, "tournament_prize", tournamentID, meta); err != nil {
 			return err
 		}
-		awards[i] = award{list[i], cur}
+		awards[i] = award{amount, cur}
 	}
 	winner := ""
 	if len(order) > 0 {

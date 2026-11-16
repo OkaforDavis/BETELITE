@@ -43,13 +43,19 @@ type tournamentView struct {
 	WinnerID         string               `json:"winnerId,omitempty"`
 	CreatedAt        time.Time            `json:"createdAt"`
 	StartedAt        *time.Time           `json:"startedAt,omitempty"`
+	HostID           string               `json:"hostId,omitempty"` // player-hosted cup: free entry, host funds the pool
+	HostName         string               `json:"hostName,omitempty"`
+	HostPool         int64                `json:"hostPool,omitempty"`
+	HostFee          int64                `json:"hostFee,omitempty"`
+	FillDeadline     *time.Time           `json:"fillDeadline,omitempty"`
 }
 
 const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon,''), t.entry_fee, t.currency, t.max_players,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id), t.status, t.current_round, t.round_hours,
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
 	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
-	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry) FROM tournaments t`
+	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry),
+	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
@@ -57,7 +63,7 @@ func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
 		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
-		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken); err != nil {
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline); err != nil {
 		return nil, err
 	}
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
@@ -100,6 +106,48 @@ func SetupTournamentRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"tournaments": list})
 	})
 
+	// What it costs me to host a cup right now.
+	tr.Get("/host-options", func(c *fiber.Ctx) error {
+		uid := middleware.GetUID(c)
+		ctx := c.Context()
+		var currency string
+		var balance int64
+		db.Pool.QueryRow(ctx, "SELECT COALESCE(currency,'NGN'), balance FROM users WHERE id = $1", uid).Scan(&currency, &balance)
+		free, _ := services.FreeCupAvailable(ctx, db.Pool, uid)
+		return utils.SendSuccess(c, fiber.Map{"enabled": config.Cfg.HostCupsEnabled, "currency": currency, "balance": balance,
+			"minPool": services.MinCupPool[currency], "maxPool": services.MaxCupPool[currency], "feePercent": services.HostFeePercent,
+			"freeCup": free, "fillDays": int(services.CupFillWindow.Hours() / 24), "maxOpen": services.MaxOpenHostCups})
+	})
+
+	// Host a cup: I fund the prize pool (+ hosting fee); players join free.
+	tr.Post("/host", middleware.RateLimitMatchCreation(), func(c *fiber.Ctx) error {
+		if !config.Cfg.HostCupsEnabled {
+			return utils.SendError(c, 409, "Hosting cups is paused right now")
+		}
+		var req services.HostCupRequest
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		id, err := services.HostCup(c.Context(), middleware.GetUID(c), req)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"tournamentId": id})
+	})
+
+	// The host cancels their own cup before it starts: pool and fee come back.
+	tr.Post("/:id/cancel", func(c *fiber.Ctx) error {
+		uid := middleware.GetUID(c)
+		var host string
+		if err := db.Pool.QueryRow(c.Context(), "SELECT COALESCE(host_id,'') FROM tournaments WHERE id = $1", c.Params("id")).Scan(&host); err != nil || host != uid {
+			return utils.SendError(c, 403, "Only the host can cancel this cup")
+		}
+		if err := services.CancelTournament(c.Context(), c.Params("id"), uid, "The host cancelled it."); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
 	tr.Get("/:id", func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		t, err := scanTournament(db.Pool.QueryRow(ctx, tournamentSelect+" WHERE t.id = $2", middleware.GetUID(c), c.Params("id")))
@@ -133,12 +181,12 @@ func SetupTournamentRoutes(api fiber.Router) {
 
 		var fee int64
 		var maxPlayers int
-		var status, game, currency, name string
+		var status, game, currency, name, host string
 		var membersUntil *time.Time
 		var earlyTier string
 		var freeSeats *int
-		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until, early_tier, free_seats FROM tournaments WHERE id = $1 FOR UPDATE", tid).
-			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil, &earlyTier, &freeSeats)
+		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until, early_tier, free_seats, COALESCE(host_id,'') FROM tournaments WHERE id = $1 FOR UPDATE", tid).
+			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil, &earlyTier, &freeSeats, &host)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return utils.SendError(c, 404, "Tournament not found")
 		}
@@ -162,7 +210,13 @@ func SetupTournamentRoutes(api fiber.Router) {
 			return utils.SendError(c, 409, "This tournament is full")
 		}
 		isFree := false
-		if fee == 0 {
+		if host != "" {
+			// Player-hosted cup: free, no entry used, no seat caps. Just 18+ on
+			// current terms, because the prizes are real money.
+			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
+				return fail(c, err)
+			}
+		} else if fee == 0 {
 			// Prize tournaments: 18+ and terms, the members' early sign-up
 			// window, and the monthly entries the player's plan allows.
 			if err := services.RequireMoneyAccess(ctx, uid); err != nil {

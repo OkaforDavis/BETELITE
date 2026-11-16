@@ -26,7 +26,8 @@ export default async function matchPage(view, { id }) {
     const mine = uid === m.homeId || uid === m.awayId;
     const opp = uid === m.homeId ? { name: m.awayName, tag: m.awayTag } : { name: m.homeName, tag: m.homeTag };
     const step = stepIndex[m.status] ?? 0;
-    const prize = m.kind === 'p2p' ? Math.floor((m.pool * 80) / 100) : 0;
+    const bounty = m.escrowKind === 'bounty';
+    const prize = m.kind === 'p2p' ? (bounty ? m.stake : Math.floor((m.pool * 80) / 100)) : 0;
 
     view.innerHTML = String(html`<div class="page">
       <a href="${m.kind === 'p2p' ? '/play?tab=mine' : '/tournaments/' + m.tournamentId}" class="row small muted" style="gap:4px;margin-bottom:12px">${ic('chevronLeft')}${m.kind === 'p2p' ? 'My matches' : m.tournamentName}</a>
@@ -51,7 +52,10 @@ export default async function matchPage(view, { id }) {
 
       <section class="section">
         <div class="list">
-          ${m.kind === 'p2p' && m.stake > 0 ? html`
+          ${m.kind === 'p2p' && m.stake > 0 && bounty ? html`
+            <div class="list-row"><div class="icon-tile brand">${ic('zap')}</div><div class="grow muted">Bounty by ${m.homeId === uid ? 'you' : m.homeName}</div><b class="num brand-text">${money(prize, m.currency)}</b></div>
+            <div class="list-row"><div class="icon-tile">${ic('info')}</div><div class="grow small muted">${m.awayId === uid ? 'Win and the bounty is yours. Lose or draw and it goes back to the host.' : 'If your challenger wins they take the bounty; otherwise it comes back to you.'}</div></div>`
+          : m.kind === 'p2p' && m.stake > 0 ? html`
             <div class="list-row"><div class="icon-tile">${ic('coins')}</div><div class="grow muted">Stake (each)</div><b class="num">${money(m.stake, m.currency)}</b></div>
             <div class="list-row"><div class="icon-tile brand">${ic('trophy')}</div><div class="grow muted">Winner gets</div><b class="num brand-text">${money(prize, m.currency)}</b></div>` : ''}
           <div class="list-row"><div class="icon-tile">${ic('hash')}</div><div class="grow muted">Match ID</div>
@@ -95,14 +99,21 @@ export default async function matchPage(view, { id }) {
       case 'confirmed': {
         const won = m.winnerId === uid;
         const draw = !m.winnerId;
-        const prize = m.kind === 'p2p' ? Math.floor((m.pool * 80) / 100) : 0;
+        const bounty = m.escrowKind === 'bounty';
+        const prize = m.kind === 'p2p' ? (bounty ? m.stake : Math.floor((m.pool * 80) / 100)) : 0;
+        const host = bounty && uid === m.homeId;
+        const outcome = bounty
+          ? (won && !host ? `${money(prize, m.currency)} bounty was added to your wallet (converted if your wallet is in another currency).`
+            : host && (won || draw) ? `Your ${money(prize, m.currency)} bounty is back in your wallet.`
+            : host ? `Your challenger took the ${money(prize, m.currency)} bounty.` : 'The bounty went back to the host. Ready for a rematch?')
+          : won && prize ? `${money(prize, m.currency)} was added to your wallet.` : draw && m.kind === 'p2p' ? (m.stake > 0 ? 'Both stakes were refunded.' : 'Honours even. Ready for a rematch?') : won ? 'You advance in the tournament.' : 'Better luck next time. Ready for a rematch?';
         return html`<div class="notice ${won ? 'brand' : ''}">${ic(won ? 'trophy' : draw ? 'scale' : 'checkCircle')}<div>
           <b>${won ? 'You won!' : draw ? 'Draw' : 'Match finished'}</b>
-          <div class="small">${won && prize ? html`${money(prize, m.currency)} was added to your wallet.` : draw && m.kind === 'p2p' ? (m.stake > 0 ? 'Both stakes were refunded.' : 'Honours even. Ready for a rematch?') : won ? 'You advance in the tournament.' : 'Better luck next time. Ready for a rematch?'}</div></div></div>
+          <div class="small">${outcome}</div></div></div>
           ${m.kind === 'p2p' ? html`<a class="btn secondary block" href="/play" style="margin-top:12px">${ic('swords')} Play again</a>` : ''}`;
       }
       case 'void':
-        return html`<div class="notice">${ic('xCircle')}<div><b>Match cancelled</b><div class="small">${m.disputeReason || 'No result was submitted in time.'} Stakes were refunded.</div></div></div>`;
+        return html`<div class="notice">${ic('xCircle')}<div><b>Match cancelled</b><div class="small">${m.disputeReason || 'No result was submitted in time.'} ${m.escrowKind === 'bounty' ? 'The bounty and hosting fee went back to the host.' : m.stake > 0 ? 'Stakes were refunded.' : ''}</div></div></div>`;
     }
     return '';
   }
