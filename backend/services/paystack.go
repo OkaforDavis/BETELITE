@@ -100,6 +100,24 @@ func PaystackVerify(ctx context.Context, currency, reference string) (*PaystackT
 	return &t, err
 }
 
+// PaystackBalance is the available balance transfers are paid from, in
+// minor units, for a currency (each Paystack business has one per currency).
+func PaystackBalance(ctx context.Context, currency string) (int64, error) {
+	var list []struct {
+		Currency string `json:"currency"`
+		Balance  int64  `json:"balance"`
+	}
+	if err := paystack(ctx, currency, "GET", "/balance", nil, &list); err != nil {
+		return 0, err
+	}
+	for _, b := range list {
+		if b.Currency == currency {
+			return b.Balance, nil
+		}
+	}
+	return 0, fmt.Errorf("no %s balance on this Paystack business", currency)
+}
+
 // Bank is a payout destination offered to users.
 type Bank struct {
 	Name string `json:"name"`

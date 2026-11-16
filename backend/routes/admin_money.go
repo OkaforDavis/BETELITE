@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v2"
 
 	"betelite-go/config"
@@ -40,7 +42,20 @@ func setupAdminMoney(admin fiber.Router) {
 		}
 		rate, _ := services.NGNPerGHS(ctx)
 		return utils.SendSuccess(c, fiber.Map{"currencies": out, "ngnPerGhs": rate, "marginPct": config.Cfg.FXMarginPct,
-			"providers": fiber.Map{"NGN": services.ProvidersFor("NGN"), "GHS": services.ProvidersFor("GHS")}})
+			"providers":        fiber.Map{"NGN": services.ProvidersFor("NGN"), "GHS": services.ProvidersFor("GHS")},
+			"paystackBalances": paystackBalances(ctx), "autoPayoutLimit": config.Cfg.AutoPayoutLimit})
+	})
+
+	// Live Paystack balances (what transfers are paid from) next to what's waiting.
+	admin.Get("/payout-balances", func(c *fiber.Ctx) error {
+		ctx := c.Context()
+		waiting := map[string]int64{}
+		for _, cur := range []string{"NGN", "GHS"} {
+			var w int64
+			db.Pool.QueryRow(ctx, "SELECT COALESCE(SUM(amount - fee),0) FROM withdrawals WHERE currency = $1 AND status IN ('pending','processing')", cur).Scan(&w)
+			waiting[cur] = w
+		}
+		return utils.SendSuccess(c, fiber.Map{"paystack": paystackBalances(ctx), "flutterwave": flutterwaveBalances(ctx), "waiting": waiting, "autoPayoutLimit": config.Cfg.AutoPayoutLimit})
 	})
 
 	// Move a player's wallet to another country (after a complaint); skips the 30/90-day rules.
@@ -58,4 +73,39 @@ func setupAdminMoney(admin fiber.Router) {
 		services.NotifyAdmins(c.Context(), "Wallet country changed", middleware.GetEmail(c)+" moved a player's wallet to "+req.Currency)
 		return utils.SendSuccess(c, fiber.Map{"balance": balance})
 	})
+}
+
+// paystackBalances fetches each currency's Paystack balance; an error is
+// reported as a message so the admin page can show why.
+func paystackBalances(ctx context.Context) map[string]fiber.Map {
+	out := map[string]fiber.Map{}
+	for _, cur := range []string{"NGN", "GHS"} {
+		if services.PaystackSecret(cur) == "" {
+			continue
+		}
+		bal, err := services.PaystackBalance(ctx, cur)
+		if err != nil {
+			out[cur] = fiber.Map{"error": err.Error()}
+			continue
+		}
+		out[cur] = fiber.Map{"balance": bal}
+	}
+	return out
+}
+
+// flutterwaveBalances fetches each currency's Flutterwave wallet balance.
+func flutterwaveBalances(ctx context.Context) map[string]fiber.Map {
+	out := map[string]fiber.Map{}
+	if !services.FlutterwaveReady() {
+		return out
+	}
+	for _, cur := range []string{"NGN", "GHS"} {
+		bal, err := services.FlutterwaveBalance(ctx, cur)
+		if err != nil {
+			out[cur] = fiber.Map{"error": err.Error()}
+			continue
+		}
+		out[cur] = fiber.Map{"balance": bal}
+	}
+	return out
 }

@@ -97,9 +97,13 @@ async function review(body, redraw) {
 }
 
 async function withdrawals(body, redraw) {
-  const { withdrawals: list } = await get('/admin/withdrawals?status=pending');
-  if (!list.length) { body.innerHTML = String(html`<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); return; }
-  body.innerHTML = String(html`<div class="stack">${list.map((w) => html`<div class="card">
+  const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=pending'), get('/admin/payout-balances').catch(() => null)]);
+  const balances = bal ? html`<div class="card" style="margin-bottom:12px"><div class="h3">Provider balances (transfers are paid from these)</div>
+    <div class="list" style="margin-top:8px">${[['Paystack', bal.paystack], ['Flutterwave', bal.flutterwave]].flatMap(([name, m]) => Object.entries(m || {}).map(([cur, b]) => [name + ' ' + cur, cur, b])).map(([label, cur, b]) => html`<div class="list-row"><div class="grow muted">${label}${b.error ? html` <span class="tiny danger-text">${b.error}</span>` : ''}</div>
+      <b class="num ${b.balance != null && b.balance < (bal.waiting?.[cur] || 0) ? 'danger-text' : ''}">${b.balance != null ? money(b.balance, cur) : '—'}</b><span class="tiny faint" style="margin-left:8px">waiting ${money(bal.waiting?.[cur] || 0, cur)}</span></div>`)}</div>
+    <p class="tiny faint" style="margin-top:8px">Automatic payouts: ${['NGN', 'GHS'].map((c) => `${c} up to ${bal.autoPayoutLimit?.[c] ? money(bal.autoPayoutLimit[c], c) : 'off'}`).join(' · ')} (AUTO_PAYOUT_LIMIT_NGN / _GHS in Render). If the balance is below "waiting", top up on the Paystack dashboard (Balance → Top up).</p></div>` : '';
+  if (!list.length) { body.innerHTML = String(html`${balances}<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); return; }
+  body.innerHTML = String(html`${balances}<div class="stack">${list.map((w) => html`<div class="card">
     <div class="row between"><div><div class="h2 num">${money(w.payout ?? w.amount, w.currency)}</div>${w.fee ? html`<div class="tiny faint">${money(w.amount, w.currency)} minus ${money(w.fee, w.currency)} transfer fee</div>` : ""}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
     <div class="small" style="margin-top:8px"><b>${w.accountName}</b> · ${w.bankName} · ${w.accountNumber}</div>
     <div class="small muted">${w.username} (${w.email})</div>
@@ -128,7 +132,10 @@ async function withdrawals(body, redraw) {
   body.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = async () => {
     const w = list.find((x) => x.id === b.dataset.approve);
     if (await confirmSheet({ title: 'Send ' + money(w.payout ?? w.amount, w.currency) + '?', message: `Paystack will transfer the money to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))
-      busy(b, async () => { await post(`/admin/withdrawals/${w.id}/approve`); toast('Transfer started'); redraw(); });
+      busy(b, async () => {
+        try { await post(`/admin/withdrawals/${w.id}/approve`); toast('Transfer started'); redraw(); }
+        catch (e) { sheet(String(html`${sheetHead('Transfer refused')}<div class="notice danger">${ic('alert')}<div class="small">${e.message}</div></div><div class="sheet-actions"><button class="btn secondary block" data-close>Close</button></div>`), { label: 'Transfer refused' }); }
+      });
   }));
   body.querySelectorAll('[data-reject]').forEach((b) => (b.onclick = () => {
     sheet(String(html`${sheetHead('Reject withdrawal')}<form id="rj"><label class="field"><span class="label">Reason shown to the player</span>

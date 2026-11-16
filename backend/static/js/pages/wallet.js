@@ -254,7 +254,8 @@ export default async function wallet(view, { query }) {
           const amount = (parseInt(f.amount.value.replace(/\D/g, ''), 10) || 0) * 100;
           const bank = banks[select.value];
           if (!bank) return toast('Choose your bank', 'err');
-          if (amount < w.limits.minWithdrawal || amount > w.balance) return toast('Enter an amount within your available balance', 'err');
+          if (amount < w.limits.minWithdrawal) return toast(`The minimum withdrawal is ${money(w.limits.minWithdrawal, cur)}.`, 'err');
+          if (amount > w.balance) return toast(`You can withdraw up to ${money(w.balance, cur)}.`, 'err');
           if (cur === 'NGN' && !resolved) return toast('Enter a valid 10-digit account number', 'err');
           busy(f.querySelector('[type=submit]'), async () => {
             await post('/wallet/withdraw', {
