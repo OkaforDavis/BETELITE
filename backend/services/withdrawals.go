@@ -16,6 +16,24 @@ import (
 // RefundWithdrawal returns held withdrawal money to the wallet and marks the
 // request rejected/failed. fromStatus guards against double refunds.
 func RefundWithdrawal(ctx context.Context, id, reason, fromStatus string) error {
+	newStatus := "failed"
+	if fromStatus == "pending" {
+		newStatus = "rejected"
+	}
+	return refundWithdrawal(ctx, id, reason, newStatus, fromStatus)
+}
+
+// RefundReversedWithdrawal returns the money when the bank sends a transfer
+// back. Paystack often reports "success" first and "reversed" minutes later,
+// so a withdrawal already marked paid is refunded too (status "reversed").
+func RefundReversedWithdrawal(ctx context.Context, id, reason string) error {
+	if err := refundWithdrawal(ctx, id, reason, "failed", "processing"); err != nil {
+		return err
+	}
+	return refundWithdrawal(ctx, id, reason, "reversed", "paid")
+}
+
+func refundWithdrawal(ctx context.Context, id, reason, newStatus, fromStatus string) error {
 	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -24,10 +42,6 @@ func RefundWithdrawal(ctx context.Context, id, reason, fromStatus string) error 
 
 	var uid, currency string
 	var amount int64
-	newStatus := "failed"
-	if fromStatus == "pending" {
-		newStatus = "rejected"
-	}
 	err = tx.QueryRow(ctx, `UPDATE withdrawals SET status = $3, note = $2, updated_at = NOW()
 		WHERE id = $1 AND status = $4 RETURNING user_id, amount, currency`, id, reason, newStatus, fromStatus).Scan(&uid, &amount, &currency)
 	if errors.Is(err, pgx.ErrNoRows) {

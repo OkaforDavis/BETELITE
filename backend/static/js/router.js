@@ -2,6 +2,7 @@
 // Shows the page's skeleton immediately, then the real content; a failed page
 // shows an error with "Try again" instead of hanging.
 import * as progress from './progress.js';
+import { closeSheets } from './ui.js';
 
 const routes = [];
 let cleanup = null;
@@ -32,6 +33,7 @@ export async function render() {
   const m = path.match(r.re);
   const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
   params.query = Object.fromEntries(new URLSearchParams(location.search));
+  closeSheets();
   if (typeof cleanup === 'function') cleanup();
   cleanup = null;
   onChange(r.tab);

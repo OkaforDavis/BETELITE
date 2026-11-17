@@ -1,6 +1,6 @@
 import { get, post } from '../api.js';
 import { store } from '../store.js';
-import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet } from '../ui.js';
+import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet, shareLink } from '../ui.js';
 import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
@@ -16,7 +16,12 @@ export default async function tournamentPage(view, { id }) {
 
   async function load() {
     try { data = await get('/tournaments/' + encodeURIComponent(id)); }
-    catch (e) { view.innerHTML = String(html`<div class="page">${empty('alert', 'Tournament not found', e.message)}</div>`); return; }
+    catch (e) {
+      view.innerHTML = String(html`<div class="page">${empty('alert', e.status === 404 ? 'Tournament not found' : "Couldn't load this tournament", e.message,
+        html`<div class="row" style="gap:8px;justify-content:center"><a class="btn secondary" href="/tournaments">${ic('chevronLeft')} Tournaments</a>${e.status === 404 ? '' : html`<button class="btn primary" data-retry>${ic('refresh')} Try again</button>`}</div>`)}</div>`);
+      view.querySelector('[data-retry]')?.addEventListener('click', load);
+      return;
+    }
     draw();
   }
 
@@ -58,6 +63,7 @@ export default async function tournamentPage(view, { id }) {
                 <button class="btn ghost block" id="leave" style="margin-top:8px">Leave tournament${t.entryFee ? ' (refund)' : ''}</button>`
             : html`<button class="btn primary block" id="join">${ic('trophy')} Join${t.entryFee ? ' for ' + money(t.entryFee, t.currency) : t.hostId ? ' free' : ' (uses 1 entry)'}</button>
                 ${t.entryFee || t.hostId ? '' : html`<a class="small muted row" href="/membership" style="gap:4px;margin-top:10px;justify-content:center">${ic('sparkles')}Entries and plans</a>`}`}
+            <button class="btn secondary block" id="share" style="margin-top:8px">${ic('share')} ${isHost ? 'Share your cup' : 'Share with friends'}</button>
             ${isHost ? html`<button class="btn ghost block" id="cancel-cup" style="margin-top:8px">Cancel my cup (full refund)</button>` : ''}</div>` : ''}
       </div>
 
@@ -74,6 +80,14 @@ export default async function tournamentPage(view, { id }) {
 
     view.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; drawTab(); }));
     view.querySelector('#join')?.addEventListener('click', (e) => join(t, e.currentTarget));
+    view.querySelector('#share')?.addEventListener('click', () => {
+      const top = prizes.list[0];
+      shareLink({
+        title: t.name,
+        text: `Join "${t.name}" on CrestArena: ${t.gameName}, ${t.maxPlayers} players${top ? `, ${money(top, prizes.cur)} for 1st` : ''}. Free to join.`,
+        url: `${location.origin}/tournaments/${t.id}`,
+      });
+    });
     view.querySelector('#cancel-cup')?.addEventListener('click', async (e) => {
       if (!(await confirmSheet({ title: 'Cancel your cup?', message: 'Everyone who joined is told, and the prize pool and hosting fee go back to your wallet.', confirm: 'Cancel cup', danger: true }))) return;
       busy(e.currentTarget, async () => { await post(`/tournaments/${t.id}/cancel`); toast('Cup cancelled and refunded'); refreshProfile(); navigate('/tournaments'); });
