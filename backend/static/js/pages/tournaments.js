@@ -64,7 +64,7 @@ export default async function tournaments(view) {
     };
     let split = 0;
     const HINTS = {
-      knockout: 'Lose once and you are out. Draws go to penalties.',
+      knockout: 'Lose once and you are out. Every match needs a winner (penalties in football games).',
       swiss: 'Everyone plays every round against players on similar points. Top of the table wins.',
       league: 'Everyone plays everyone once. Best for small groups.',
     };

@@ -1,5 +1,5 @@
 import { get, post } from '../api.js';
-import { store } from '../store.js';
+import { store, gameInfo, resultScreen } from '../store.js';
 import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet } from '../ui.js';
 import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
@@ -135,7 +135,9 @@ function overview(t) {
     swiss: html`<li class="ok">${ic('check')}<span>${t.totalRounds} rounds. Each round you play one match against a player on similar points, never the same opponent twice.</span></li>
                 <li class="ok">${ic('check')}<span>Win = 3 pts, draw = 1. Nobody is knocked out; the top of the table wins.</span></li>
                 <li class="ok">${ic('check')}<span>Ties are split by goal difference, then goals scored.</span></li>`,
-    knockout: html`<li class="ok">${ic('check')}<span>Lose once and you're out. Draws go to penalties.</span></li>
+    knockout: gameInfo(t.game).football === false
+      ? html`<li class="ok">${ic('check')}<span>Lose once and you're out. Every match needs a winner: play a deciding round if it's level.</span></li>`
+      : html`<li class="ok">${ic('check')}<span>Lose once and you're out. Draws go to penalties.</span></li>
                    <li class="ok">${ic('check')}<span>Upload the screen that shows the penalty shoot-out if there is one.</span></li>`,
   };
   return html`
@@ -154,7 +156,7 @@ function overview(t) {
     <div class="card" style="margin-top:12px"><div class="h3">How it works</div>
       <ul class="checklist" style="margin-top:12px">
         ${rules[t.format] || rules.knockout}
-        <li class="ok">${ic('check')}<span>Each round has ${t.roundHours} hours. Play your match and upload the full-time screen.</span></li>
+        <li class="ok">${ic('check')}<span>Each round has ${t.roundHours} hours. Play your match and upload the ${resultScreen(t.game)}.</span></li>
         <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute. Disputes are decided by an admin.</span></li>
         <li class="ok">${ic('check')}<span>Prizes are paid to your wallet automatically when the tournament ends.</span></li>
       </ul></div>`;
