@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"betelite-go/config"
 	"betelite-go/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -16,7 +17,7 @@ import (
 // applies per IP, which still stops floods of fake tokens from one address.
 func RateLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:          3000,
+		Max:          config.Cfg.RateLimitPerIP, // RATE_LIMIT_PER_IP, default 3000
 		Expiration:   time.Minute,
 		KeyGenerator: func(c *fiber.Ctx) string { return "ip:" + c.IP() },
 		LimitReached: func(c *fiber.Ctx) error {
@@ -28,7 +29,7 @@ func RateLimiter() fiber.Handler {
 // RateLimiterUser is the per-user part of the global limit (see RateLimiter).
 func RateLimiterUser() fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:          300,
+		Max:          config.Cfg.RateLimitPerUser, // RATE_LIMIT_PER_USER, default 300
 		Expiration:   time.Minute,
 		KeyGenerator: requesterKey,
 		LimitReached: func(c *fiber.Ctx) error {
