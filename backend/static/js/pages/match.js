@@ -1,6 +1,6 @@
 import { get, post, upload } from '../api.js';
 import { store, gameName, gameInfo, resultScreen } from '../store.js';
-import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet } from '../ui.js';
+import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet, copyText } from '../ui.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 
@@ -68,8 +68,7 @@ export default async function matchPage(view, { id }) {
     </div>`);
 
     view.querySelector('[data-copy]')?.addEventListener('click', (e) => {
-      navigator.clipboard?.writeText(e.currentTarget.dataset.copy);
-      toast('Match ID copied');
+      copyText(e.currentTarget.dataset.copy, 'Match ID copied');
     });
     bindActions(uid);
     const ev = view.querySelector('#evidence');

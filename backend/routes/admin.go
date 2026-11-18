@@ -169,9 +169,13 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	admin.Get("/withdrawals", func(c *fiber.Ctx) error {
 		status := c.Query("status", "pending")
+		order := "w.created_at" // oldest first: the approval queue
+		if status != "pending" {
+			order = "w.updated_at DESC"
+		}
 		rows, err := db.Pool.Query(c.Context(), `SELECT w.id, w.user_id, COALESCE(u.username,''), COALESCE(u.email,''), w.amount, w.fee, w.currency,
 			COALESCE(w.bank_name,''), w.account_number, COALESCE(w.account_name,''), w.status, COALESCE(w.note,''), w.created_at
-			FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id WHERE w.status = $1 ORDER BY w.created_at LIMIT 100`, status)
+			FROM withdrawals w LEFT JOIN users u ON u.id = w.user_id WHERE w.status = $1 ORDER BY `+order+` LIMIT 100`, status)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -223,6 +227,36 @@ func SetupAdminRoutes(api fiber.Router) {
 		if err := services.RefundWithdrawal(c.Context(), c.Params("id"), req.Reason, "pending"); err != nil {
 			return fail(c, err)
 		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// Give the money back for a payout that is stuck ("processing") or that the
+	// bank returned after it showed as paid. Never for money that really arrived.
+	admin.Post("/withdrawals/:id/refund", func(c *fiber.Ctx) error {
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		c.BodyParser(&req)
+		if len(strings.TrimSpace(req.Reason)) < 3 {
+			return utils.SendError(c, 400, "Say why (the player sees it)")
+		}
+		var status string
+		if err := db.Pool.QueryRow(c.Context(), "SELECT status FROM withdrawals WHERE id = $1", c.Params("id")).Scan(&status); err != nil {
+			return utils.SendError(c, 404, "Withdrawal not found")
+		}
+		var err error
+		switch status {
+		case "processing":
+			err = services.RefundWithdrawal(c.Context(), c.Params("id"), req.Reason, "processing")
+		case "paid":
+			err = services.RefundReversedWithdrawal(c.Context(), c.Params("id"), req.Reason)
+		default:
+			return utils.SendError(c, 409, "Only sending or paid withdrawals can be refunded here")
+		}
+		if err != nil {
+			return fail(c, err)
+		}
+		log.Printf("[ADMIN] %s refunded withdrawal %s (%s): %s", middleware.GetEmail(c), c.Params("id"), status, req.Reason)
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 

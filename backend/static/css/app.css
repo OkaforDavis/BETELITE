@@ -397,6 +397,8 @@ button.list-row:active { background: var(--surface-2); }
   display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: var(--r-lg);
   background: rgba(18, 26, 43, 0.97); border: 1px solid var(--brand-line); box-shadow: var(--shadow); animation: toast-in 0.3s var(--ease);
 }
+.banner .grow { min-width: 0; }
+.banner > .btn, .banner > .icon-btn, .banner > .icon-tile { flex: none; }
 .banner .grow b { display: block; font-size: 15px; }
 .banner .grow span { font-size: 13px; color: var(--text-2); }
 .banner.cookie { border-color: var(--line-2); z-index: 55; }
@@ -537,3 +539,18 @@ button.list-row:active { background: var(--surface-2); }
 .made-by .wc-w { color: #1e8fff; text-shadow: 0 0 8px rgba(30, 143, 255, 0.45); }
 .made-by .wc-rest { background: linear-gradient(180deg, #f4f7fb 0%, #aab4c3 55%, #e3e8ef 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .made-by:hover .wc-rest { background: linear-gradient(180deg, #fff, #c9d2de); -webkit-background-clip: text; background-clip: text; }
+
+/* ── Password show/hide, search fields, pick lists ─────── */
+.pw-wrap { position: relative; }
+.pw-wrap .input { padding-right: 52px; }
+.pw-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; display: grid; place-items: center; border-radius: 10px; color: var(--text-3); }
+.pw-toggle:active { background: var(--surface-2); }
+.pw-toggle svg { width: 20px; height: 20px; }
+.search-input { position: relative; }
+.search-input > svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--text-3); pointer-events: none; }
+.search-input .input { padding-left: 42px; }
+.search-input .input::-webkit-search-cancel-button { display: none; }
+.pick-list { margin-top: 6px; max-height: 260px; overflow-y: auto; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--surface); overscroll-behavior: contain; }
+.pick-list button { display: block; width: 100%; text-align: left; min-height: 46px; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; }
+.pick-list button:last-child { border-bottom: 0; }
+.pick-list button:active, .pick-list button:focus-visible { background: var(--brand-soft); }

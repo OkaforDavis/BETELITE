@@ -83,14 +83,33 @@ export function toast(message, type = 'ok', title = '') {
 export const toastError = (e) => toast(e?.message || String(e), 'err');
 
 // ── Sheets (bottom modals) ────────────────────────────────────
+// The phone's back button closes the top sheet instead of changing the page
+// behind it. This listener is registered before the router's, so it can stop
+// the router from seeing the "back".
+const openSheets = [];
+window.addEventListener('popstate', (e) => {
+  const top = openSheets[openSheets.length - 1];
+  if (!top) return;
+  e.stopImmediatePropagation();
+  history.pushState(history.state, '', top.url); // stay on the page the sheet belongs to
+  if (top.dismissable) top.close();
+});
+// Close sheets left open when the page changes (consent and forced updates stay).
+export function closeSheets() {
+  [...openSheets].reverse().forEach((s) => s.dismissable && s.close());
+}
+
 export function sheet(content, { onMount, onClose, dismissable = true, label = "Dialog" } = {}) {
   const back = document.createElement('div');
   back.className = 'sheet-backdrop';
   back.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(label)}">${content}</div>`;
   let closed = false;
+  const entry = { url: location.pathname + location.search, dismissable };
   const close = () => {
     if (closed) return;
     closed = true;
+    const i = openSheets.indexOf(entry);
+    if (i >= 0) openSheets.splice(i, 1);
     back.remove();
     document.removeEventListener("keydown", onKey);
     onClose?.();
@@ -99,6 +118,8 @@ export function sheet(content, { onMount, onClose, dismissable = true, label = "
   if (dismissable) back.addEventListener('click', (e) => { if (e.target === back) close(); });
   back.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); });
   document.addEventListener('keydown', onKey);
+  entry.close = close;
+  openSheets.push(entry);
   document.body.append(back);
   const root = back.firstElementChild;
   onMount?.(root, close);
@@ -128,6 +149,46 @@ export async function busy(btn, fn) {
   try { return await fn(); }
   catch (e) { toastError(e); return undefined; }
   finally { btn?.classList.remove('loading'); btn && (btn.disabled = false); }
+}
+
+// ── Password fields with a show/hide eye ─────────────────────
+export const passwordInput = ({ name = 'password', autocomplete = 'current-password', placeholder = '', minlength = 0, value = '' } = {}) => html`
+  <div class="pw-wrap"><input class="input" name="${name}" type="password" autocomplete="${autocomplete}" placeholder="${placeholder}" ${minlength ? raw(`minlength="${minlength}"`) : ''} value="${value}" required autocapitalize="off" spellcheck="false">
+  <button type="button" class="pw-toggle" data-pw-toggle aria-label="Show password" aria-pressed="false">${ic('eye')}</button></div>`;
+export function bindPasswordToggles(root) {
+  root.querySelectorAll('[data-pw-toggle]').forEach((b) => (b.onclick = () => {
+    const input = b.parentElement.querySelector('input');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    b.innerHTML = icon(show ? 'eyeOff' : 'eye');
+    b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    b.setAttribute('aria-pressed', String(show));
+    input.focus({ preventScroll: true });
+    const end = input.value.length;
+    try { input.setSelectionRange(end, end); } catch { /* not supported */ }
+  }));
+}
+
+// ── Copy & share ──────────────────────────────────────────────
+// Copies text; if the phone blocks it, shows the text so it can be copied by hand.
+export async function copyText(text, done = 'Copied') {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    sheet(String(html`${sheetHead('Copy this')}<input class="input" readonly value="${text}" style="font-size:15px" data-copy-box>
+      <p class="hint">Press and hold the text to copy it.</p><div class="sheet-actions"><button class="btn secondary block" data-close>Done</button></div>`), {
+      label: 'Copy', onMount: (root) => { const i = root.querySelector('[data-copy-box]'); i.focus(); i.select(); },
+    });
+  }
+}
+// Opens the phone's share menu (WhatsApp, TikTok…), or copies the link.
+export async function shareLink({ title = 'CrestArena', text = '', url }) {
+  if (navigator.share) {
+    try { await navigator.share({ title, text, url }); return; }
+    catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  copyText(text ? `${text} ${url}` : url, 'Link copied. Paste it anywhere to share.');
 }
 
 // ── Shared fragments ──────────────────────────────────────────

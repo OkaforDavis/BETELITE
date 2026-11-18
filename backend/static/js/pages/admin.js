@@ -96,20 +96,86 @@ async function review(body, redraw) {
   }));
 }
 
+let wdStatus = 'pending';
+const WD_TABS = [['pending', 'Waiting'], ['processing', 'Sending'], ['paid', 'Paid'], ['reversed', 'Returned'], ['failed', 'Failed']];
+
 async function withdrawals(body, redraw) {
-  const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=pending'), get('/admin/payout-balances').catch(() => null)]);
+  const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=' + wdStatus), get('/admin/payout-balances').catch(() => null)]);
+  const seg = html`<div class="chips" style="margin-bottom:12px">${WD_TABS.map(([k, l]) => html`<button class="chip ${k === wdStatus ? 'active' : ''}" data-wds="${k}">${l}</button>`)}</div>`;
+  const bindSeg = () => body.querySelectorAll('[data-wds]').forEach((b) => (b.onclick = () => { wdStatus = b.dataset.wds; redraw(); }));
+  if (wdStatus !== 'pending') {
+    body.innerHTML = String(html`${seg}${list.length ? html`<div class="stack">${list.map((w) => html`<div class="card">
+      <div class="row between"><div class="h2 num">${money(w.payout ?? w.amount, w.currency)}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
+      <div class="small" style="margin-top:8px"><b>${w.accountName}</b> · ${w.bankName} · ${w.accountNumber}</div>
+      <div class="small muted">${w.username} (${w.email})</div>
+      ${w.note ? html`<div class="tiny faint" style="margin-top:6px">${w.note}</div>` : ''}
+      ${wdStatus === 'processing' || wdStatus === 'paid' ? html`<div class="grid-2" style="margin-top:12px">
+        ${wdStatus === 'processing' ? html`<button class="btn secondary sm" data-manual="${w.id}">Mark paid</button>` : html`<span></span>`}
+        <button class="btn danger sm" data-refund="${w.id}">Refund to wallet</button></div>` : ''}
+    </div>`)}</div>` : html`<div class="card flat">${empty('bank', 'Nothing here', 'Withdrawals with this status appear here.')}</div>`}`);
+    bindSeg();
+    bindManual(body, list, redraw);
+    body.querySelectorAll('[data-refund]').forEach((b) => (b.onclick = () => {
+      const w = list.find((x) => x.id === b.dataset.refund);
+      sheet(String(html`${sheetHead('Refund to wallet', money(w.amount, w.currency) + ' back to ' + w.username)}
+        <div class="notice warn">${ic('alert')}<div class="small">${wdStatus === 'paid'
+          ? html`Only if the money <b>did not arrive</b>: check that the Paystack or Flutterwave dashboard shows this transfer as <b>reversed</b> or failed. Refunding a payout that arrived pays the player twice.`
+          : html`Use this when a transfer is stuck or was blocked (e.g. "IP address not whitelisted"). Check the provider dashboard first: if it went through, use "Mark paid" instead.`}</div></div>
+        <form id="rf" style="margin-top:14px"><label class="field"><span class="label">Reason shown to the player</span>
+          <input class="input" name="reason" required minlength="3" value="${wdStatus === 'paid' ? 'Your bank sent the transfer back. The money is back in your wallet.' : 'The transfer could not be completed. The money is back in your wallet.'}"></label>
+          <div class="sheet-actions"><button class="btn danger block">Refund ${money(w.amount, w.currency)}</button></div></form>`), {
+        label: 'Refund withdrawal',
+        onMount(root, close) {
+          root.querySelector('#rf').onsubmit = (e) => {
+            e.preventDefault();
+            busy(e.target.querySelector('button'), async () => {
+              await post(`/admin/withdrawals/${w.id}/refund`, { reason: new FormData(e.target).get('reason') });
+              close(); toast('Refunded. The player has been notified.'); redraw();
+            });
+          };
+        },
+      });
+    }));
+    return;
+  }
+
   const balances = bal ? html`<div class="card" style="margin-bottom:12px"><div class="h3">Provider balances (transfers are paid from these)</div>
     <div class="list" style="margin-top:8px">${[['Paystack', bal.paystack], ['Flutterwave', bal.flutterwave]].flatMap(([name, m]) => Object.entries(m || {}).map(([cur, b]) => [name + ' ' + cur, cur, b])).map(([label, cur, b]) => html`<div class="list-row"><div class="grow muted">${label}${b.error ? html` <span class="tiny danger-text">${b.error}</span>` : ''}</div>
       <b class="num ${b.balance != null && b.balance < (bal.waiting?.[cur] || 0) ? 'danger-text' : ''}">${b.balance != null ? money(b.balance, cur) : '—'}</b><span class="tiny faint" style="margin-left:8px">waiting ${money(bal.waiting?.[cur] || 0, cur)}</span></div>`)}</div>
     <p class="tiny faint" style="margin-top:8px">Automatic payouts: ${['NGN', 'GHS'].map((c) => `${c} up to ${bal.autoPayoutLimit?.[c] ? money(bal.autoPayoutLimit[c], c) : 'off'}`).join(' · ')} (AUTO_PAYOUT_LIMIT_NGN / _GHS in Render). If the balance is below "waiting", top up on the Paystack dashboard (Balance → Top up).</p></div>` : '';
-  if (!list.length) { body.innerHTML = String(html`${balances}<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); return; }
-  body.innerHTML = String(html`${balances}<div class="stack">${list.map((w) => html`<div class="card">
+  if (!list.length) { body.innerHTML = String(html`${seg}${balances}<div class="card flat">${empty('bank', 'No pending withdrawals', 'New requests appear here for approval.')}</div>`); bindSeg(); return; }
+  body.innerHTML = String(html`${seg}${balances}<div class="stack">${list.map((w) => html`<div class="card">
     <div class="row between"><div><div class="h2 num">${money(w.payout ?? w.amount, w.currency)}</div>${w.fee ? html`<div class="tiny faint">${money(w.amount, w.currency)} minus ${money(w.fee, w.currency)} transfer fee</div>` : ""}</div><span class="small faint">${timeAgo(w.createdAt)}</span></div>
     <div class="small" style="margin-top:8px"><b>${w.accountName}</b> · ${w.bankName} · ${w.accountNumber}</div>
     <div class="small muted">${w.username} (${w.email})</div>
-    <div class="grid-3" style="margin-top:12px"><button class="btn danger sm" data-reject="${w.id}">Reject</button><button class="btn secondary sm" data-manual="${w.id}">Mark paid</button><button class="btn primary sm" data-approve="${w.id}">Paystack</button></div>
-    <p class="tiny faint" style="margin-top:8px">"Paystack" sends the money automatically. "Mark paid" is for when you sent the bank transfer yourself.</p>
+    <div class="grid-3" style="margin-top:12px"><button class="btn danger sm" data-reject="${w.id}">Reject</button><button class="btn secondary sm" data-manual="${w.id}">Mark paid</button><button class="btn primary sm" data-approve="${w.id}">Send now</button></div>
+    <p class="tiny faint" style="margin-top:8px">"Send now" pays through Paystack or Flutterwave automatically. "Mark paid" is for when you sent the bank transfer yourself.</p>
   </div>`)}</div>`);
+  bindSeg();
+  bindManual(body, list, redraw);
+  body.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = async () => {
+    const w = list.find((x) => x.id === b.dataset.approve);
+    if (await confirmSheet({ title: 'Send ' + money(w.payout ?? w.amount, w.currency) + '?', message: `The money is transferred to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))
+      busy(b, async () => {
+        try { await post(`/admin/withdrawals/${w.id}/approve`); toast('Transfer started'); redraw(); }
+        catch (e) { sheet(String(html`${sheetHead('Transfer refused')}<div class="notice danger">${ic('alert')}<div class="small">${e.message}</div></div><div class="sheet-actions"><button class="btn secondary block" data-close>Close</button></div>`), { label: 'Transfer refused' }); }
+      });
+  }));
+  body.querySelectorAll('[data-reject]').forEach((b) => (b.onclick = () => {
+    sheet(String(html`${sheetHead('Reject withdrawal')}<form id="rj"><label class="field"><span class="label">Reason shown to the player</span>
+      <input class="input" name="reason" required placeholder="e.g. Account name doesn't match your profile"></label>
+      <div class="sheet-actions"><button class="btn danger block">Reject & refund</button></div></form>`), {
+      onMount(root, close) {
+        root.querySelector('#rj').onsubmit = (e) => {
+          e.preventDefault();
+          busy(e.target.querySelector('button'), async () => { await post(`/admin/withdrawals/${b.dataset.reject}/reject`, { reason: new FormData(e.target).get('reason') }); close(); toast('Rejected and refunded'); redraw(); });
+        };
+      },
+    });
+  }));
+}
+
+function bindManual(body, list, redraw) {
   body.querySelectorAll('[data-manual]').forEach((b) => (b.onclick = () => {
     const w = list.find((x) => x.id === b.dataset.manual);
     sheet(String(html`${sheetHead('Mark as paid', money(w.payout ?? w.amount, w.currency) + ' to ' + w.accountName)}
@@ -125,26 +191,6 @@ async function withdrawals(body, redraw) {
             await post(`/admin/withdrawals/${w.id}/mark-paid`, { note: new FormData(e.target).get('note') });
             close(); toast('Marked as paid. The player has been notified.'); redraw();
           });
-        };
-      },
-    });
-  }));
-  body.querySelectorAll('[data-approve]').forEach((b) => (b.onclick = async () => {
-    const w = list.find((x) => x.id === b.dataset.approve);
-    if (await confirmSheet({ title: 'Send ' + money(w.payout ?? w.amount, w.currency) + '?', message: `Paystack will transfer the money to ${w.accountName} (${w.bankName}).`, confirm: 'Approve & send' }))
-      busy(b, async () => {
-        try { await post(`/admin/withdrawals/${w.id}/approve`); toast('Transfer started'); redraw(); }
-        catch (e) { sheet(String(html`${sheetHead('Transfer refused')}<div class="notice danger">${ic('alert')}<div class="small">${e.message}</div></div><div class="sheet-actions"><button class="btn secondary block" data-close>Close</button></div>`), { label: 'Transfer refused' }); }
-      });
-  }));
-  body.querySelectorAll('[data-reject]').forEach((b) => (b.onclick = () => {
-    sheet(String(html`${sheetHead('Reject withdrawal')}<form id="rj"><label class="field"><span class="label">Reason shown to the player</span>
-      <input class="input" name="reason" required placeholder="e.g. Account name doesn't match your profile"></label>
-      <div class="sheet-actions"><button class="btn danger block">Reject & refund</button></div></form>`), {
-      onMount(root, close) {
-        root.querySelector('#rj').onsubmit = (e) => {
-          e.preventDefault();
-          busy(e.target.querySelector('button'), async () => { await post(`/admin/withdrawals/${b.dataset.reject}/reject`, { reason: new FormData(e.target).get('reason') }); close(); toast('Rejected and refunded'); redraw(); });
         };
       },
     });
