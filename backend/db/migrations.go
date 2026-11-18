@@ -338,6 +338,13 @@ var migrations = []string{
 	);
 	CREATE INDEX IF NOT EXISTS tips_from_idx ON tips(from_id, created_at DESC);
 	CREATE INDEX IF NOT EXISTS tips_to_idx ON tips(to_id, created_at DESC);`,
+
+	// 13: members-only host cups, and the host commission on a new player's
+	// first membership (host_ref = the host whose cup brought them in).
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS members_only BOOLEAN NOT NULL DEFAULT FALSE;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_ref TEXT REFERENCES users(id);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_ref_at TIMESTAMPTZ;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_commission_at TIMESTAMPTZ;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

@@ -45,24 +45,25 @@ export default async function tournamentPage(view, { id }) {
           ${formatBadge(t)}
           <span class="badge">${t.gameName}</span>
           ${t.hostId ? html`<span class="badge info">${ic('users')}Hosted by ${isHost ? 'you' : t.hostName}</span>` : ''}
+          ${t.membersOnly ? html`<span class="badge tier-pro">${ic('sparkles')}Members only</span>` : ''}
           ${t.status === 'active' ? html`<span class="badge live info">${roundLabel}</span>` : ''}
           ${t.status === 'finished' ? html`<span class="badge">Finished</span>` : ''}
         </div>
         <div class="h1" style="margin-top:12px">${t.name}</div>
         <div class="grid-3" style="margin-top:18px">
-          <div class="stat"><div class="v num">${t.entryFee ? money(t.entryFee, t.currency) : t.hostId ? 'Free' : '1 entry'}</div><div class="k">Entry</div></div>
+          <div class="stat"><div class="v num">${t.entryFee ? money(t.entryFee, t.currency) : t.membersOnly ? 'Members' : t.hostId ? 'Free' : '1 entry'}</div><div class="k">Entry</div></div>
           <div class="stat"><div class="v num brand-text">${money(prizes.list[0] || 0, prizes.cur)}</div><div class="k">1st prize</div></div>
           <div class="stat"><div class="v num">${t.playerCount}/${t.maxPlayers}</div><div class="k">Players</div></div>
         </div>
         ${t.status === 'open' ? html`
           <div class="progress" style="margin-top:16px"><span style="width:${pct}%"></span></div>
           <div class="small muted" style="margin-top:8px">${t.maxPlayers - t.playerCount} spots left${t.freeSeats != null ? html` · free spots ${Math.max(t.freeSeats - t.freeTaken, 0)} of ${t.freeSeats}` : ''} · starts automatically when full${fillBy ? html` · fills by ${fillBy.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} or it's cancelled` : ''}</div>
-          ${isHost ? html`<div class="notice" style="margin-top:12px">${ic('info')}<div class="small"><b>You're hosting.</b> Prize pool ${money(t.hostPool, t.currency)}${t.hostFee ? ` + ${money(t.hostFee, t.currency)} fee` : ' · no fee (Elite)'}. Share the link to fill it up.</div></div>` : ''}
+          ${isHost ? html`<div class="notice" style="margin-top:12px">${ic('info')}<div class="small"><b>You're hosting.</b> Prize pool ${money(t.hostPool, t.currency)}${t.hostFee ? ` + ${money(t.hostFee, t.currency)} fee` : ' · no fee (Elite)'}. Share the link to fill it up. New players who join and get their first membership earn you a commission.</div></div>` : ''}
           ${membersUntil && !t.joined ? html`<div class="notice brand" style="margin-top:12px">${ic('sparkles')}<div class="small"><b>${t.earlyTier === 'elite' ? 'Elite' : 'Members'}' early sign-up</b> until ${membersUntil.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Then it opens to everyone.</div></div>` : ''}
           <div style="margin-top:16px">${t.joined
             ? html`<div class="notice brand">${ic('checkCircle')}<div><b>You're registered</b><div class="small">We'll notify you when it starts.</div></div></div>
                 <button class="btn ghost block" id="leave" style="margin-top:8px">Leave tournament${t.entryFee ? ' (refund)' : ''}</button>`
-            : html`<button class="btn primary block" id="join">${ic('trophy')} Join${t.entryFee ? ' for ' + money(t.entryFee, t.currency) : t.hostId ? ' free' : ' (uses 1 entry)'}</button>
+            : html`<button class="btn primary block" id="join">${ic('trophy')} Join${t.entryFee ? ' for ' + money(t.entryFee, t.currency) : t.membersOnly ? ' (members)' : t.hostId ? ' free' : ' (uses 1 entry)'}</button>
                 ${t.entryFee || t.hostId ? '' : html`<a class="small muted row" href="/membership" style="gap:4px;margin-top:10px;justify-content:center">${ic('sparkles')}Entries and plans</a>`}`}
             <button class="btn secondary block" id="share" style="margin-top:8px">${ic('share')} ${isHost ? 'Share your cup' : 'Share with friends'}</button>
             ${isHost ? html`<button class="btn ghost block" id="cancel-cup" style="margin-top:8px">Cancel my cup (full refund)</button>` : ''}</div>` : ''}
@@ -89,7 +90,7 @@ export default async function tournamentPage(view, { id }) {
       const top = prizes.list[0];
       shareLink({
         title: t.name,
-        text: `Join "${t.name}" on CrestArena: ${t.gameName}, ${t.maxPlayers} players${top ? `, ${money(top, prizes.cur)} for 1st` : ''}. Free to join.`,
+        text: `Join "${t.name}" on CrestArena: ${t.gameName}, ${t.maxPlayers} players${top ? `, ${money(top, prizes.cur)} for 1st` : ''}. ${t.membersOnly ? 'For members.' : 'Free to join.'}`,
         url: `${location.origin}/tournaments/${t.id}`,
       });
     });

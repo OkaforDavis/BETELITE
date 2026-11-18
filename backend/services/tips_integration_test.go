@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"betelite-go/db"
 )
@@ -28,7 +29,7 @@ func TestTips(t *testing.T) {
 		db.Pool.Exec(ctx, `INSERT INTO users (id, email, username, currency, terms_version, birth_date, balance)
 			VALUES ($1, $1 || '@t.io', $1, 'NGN', $2, '1995-01-01', 0) ON CONFLICT DO NOTHING`, id, TermsVersion)
 	}
-	db.Pool.Exec(ctx, "UPDATE users SET balance = 60000_00 WHERE id = $1", from)
+	db.Pool.Exec(ctx, "UPDATE users SET balance = 6000000 WHERE id = $1", from)
 	cup := p + "-cup"
 	db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, entry_fee, currency, max_players, prize_pool, created_by, status, host_id)
 		VALUES ($1, 'Tip cup', 'fc_mobile', 'knockout', 'knockout', 0, 'NGN', 4, 0, $2, 'open', $2)`, cup, host)
@@ -68,5 +69,44 @@ func TestTips(t *testing.T) {
 	}
 	if bal(from)+bal(host) != 60_000_00 {
 		t.Fatalf("money created or lost: %d + %d", bal(from), bal(host))
+	}
+}
+
+// Runs only with a real database: TEST_DATABASE_URL=postgres://... go test ./services/
+func TestHostCommission(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	ctx := context.Background()
+	if err := db.Connect(ctx, url); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RunMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+	p := fmt.Sprintf("test-com-%d", os.Getpid())
+	host, player, other := p+"-h", p+"-p", p+"-o"
+	for _, id := range []string{host, player, other} {
+		db.Pool.Exec(ctx, `INSERT INTO users (id, email, username, currency, terms_version, birth_date, balance)
+			VALUES ($1, $1 || '@t.io', $1, 'NGN', $2, '1995-01-01', 2000000) ON CONFLICT DO NOTHING`, id, TermsVersion)
+	}
+	bal := func(id string) (b int64) {
+		db.Pool.QueryRow(ctx, "SELECT balance FROM users WHERE id = $1", id).Scan(&b)
+		return
+	}
+	RecordHostRef(ctx, db.Pool, player, host)
+	RecordHostRef(ctx, db.Pool, player, other) // first host keeps the player
+	RecordHostRef(ctx, db.Pool, host, host)    // hosts can't refer themselves
+	if _, err := BuyMembership(ctx, player, "pro"); err != nil {
+		t.Fatal(err)
+	}
+	want := int64(20000_00) + TierByID("pro").Prices["NGN"]*HostCommissionPercent/100
+	for i := 0; i < 50 && bal(host) != want; i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	RewardHostCommission(ctx, player) // a second call must not pay again
+	if bal(host) != want || bal(other) != 20000_00 {
+		t.Fatalf("host %d (want %d), other host %d", bal(host), want, bal(other))
 	}
 }

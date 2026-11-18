@@ -82,9 +82,12 @@ export default async function tournaments(view) {
           <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="pool" inputmode="numeric" pattern="[0-9]*" value="${o.minPool / 100}" aria-label="Prize pool"></div>
           <span class="hint">Between ${money(o.minPool, cur)} and ${money(o.maxPool, cur)}</span></div>
         <div class="field"><span class="label">Prize split</span><div class="chips" id="splits"></div></div>
+        <label class="card flat row" style="margin-top:14px;gap:12px;cursor:pointer"><input type="checkbox" name="membersOnly" style="width:20px;height:20px;flex:none">
+          <div class="grow"><div class="h3">Members only</div><div class="small muted">Only players with a plan can join.</div></div></label>
+        <div class="notice brand" style="margin-top:12px">${ic('coins')}<div class="small"><b>Earn as a host.</b> When a new player joins your cup and buys their first membership within ${o.commissionDays} days, you get <b>${o.commissionPercent}%</b> of it. Players can also tip you.</div></div>
         <div class="card flat" style="margin-top:14px" id="summary"></div>
         <ul class="checklist" style="margin-top:14px">
-          <li class="ok">${ic('check')}<span>Players join <b>free</b>. It starts automatically when full.</span></li>
+          <li class="ok">${ic('check')}<span>Players join <b>free</b> (members only if you tick it). It starts automatically when full.</span></li>
           <li class="ok">${ic('check')}<span>Prizes are paid to the winners' wallets automatically when it ends.</span></li>
           <li class="ok">${ic('check')}<span>Not full in ${o.fillDays} days? Everything, fee included, comes back to you. You can also cancel before it starts.</span></li>
           <li class="ok">${ic('check')}<span>You can play in your own cup.</span></li>
@@ -135,7 +138,7 @@ export default async function tournaments(view) {
             return navigate('/wallet?deposit=' + Math.ceil((total - o.balance) / 100));
           }
           busy(root.querySelector('#go'), async () => {
-            const { tournamentId } = await post('/tournaments/host', { name: f.name.value, game, format, maxPlayers: +maxSel.value, pool, split: SPLITS[format][split][1], roundHours: +f.hours.value });
+            const { tournamentId } = await post('/tournaments/host', { name: f.name.value, game, format, maxPlayers: +maxSel.value, pool, split: SPLITS[format][split][1], roundHours: +f.hours.value, membersOnly: f.membersOnly.checked });
             close();
             toast('Your cup is live. Share it so it fills up!', 'ok');
             refreshProfile();
