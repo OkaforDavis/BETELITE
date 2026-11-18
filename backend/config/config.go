@@ -47,6 +47,8 @@ type Config struct {
 	FXMarginPct                float64  // margin on cross-currency payments and home-country switches
 	FXNGNPerGHS                float64  // optional fixed rate; 0 = fetch the market rate
 	FirebaseAuthDomain         string   // host that serves /__/auth (the app itself once set up), else <project>.firebaseapp.com
+	RateLimitPerIP             int      // API requests per minute from one network address (carrier NAT shares one IP)
+	RateLimitPerUser           int      // API requests per minute per signed-in user
 }
 
 var Cfg Config
@@ -102,6 +104,14 @@ func Load() {
 		PaymentProviders:       splitList(getEnv("PAYMENT_PROVIDERS", "flutterwave,paystack")),
 		FXMarginPct:            parseFloat(getEnv("FX_MARGIN_PCT", "3"), 3),
 		FXNGNPerGHS:            parseFloat(getEnv("FX_NGN_PER_GHS", "0"), 0),
+		RateLimitPerIP:         int(parseFloat(getEnv("RATE_LIMIT_PER_IP", "3000"), 3000)),
+		RateLimitPerUser:       int(parseFloat(getEnv("RATE_LIMIT_PER_USER", "300"), 300)),
+	}
+	if Cfg.RateLimitPerIP < 100 {
+		Cfg.RateLimitPerIP = 3000
+	}
+	if Cfg.RateLimitPerUser < 30 {
+		Cfg.RateLimitPerUser = 300
 	}
 }
 
