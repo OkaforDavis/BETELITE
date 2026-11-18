@@ -26,7 +26,7 @@ import (
 var (
 	minDeposit    = map[string]int64{"NGN": 100_00, "GHS": 10_00}
 	maxDeposit    = map[string]int64{"NGN": 1_000_000_00, "GHS": 50_000_00}
-	minWithdrawal = map[string]int64{"NGN": 1_000_00, "GHS": 50_00}
+	minWithdrawal = map[string]int64{"NGN": 500_00, "GHS": 5_00}
 )
 
 var accountNumberRe = regexp.MustCompile(`^[0-9]{6,20}$`)
