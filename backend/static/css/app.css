@@ -470,6 +470,10 @@ button.list-row:active { background: var(--surface-2); }
 }
 
 /* ── Screenshot evidence ─────────────────────────────────── */
+.sponsor-pics { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.sponsor-pics::-webkit-scrollbar { display: none; }
+.sponsor-pics img, .sponsor-pics video { flex: 0 0 auto; height: 160px; max-width: 85%; object-fit: cover; border-radius: 10px; border: 1px solid var(--line-2); scroll-snap-align: start; background: #000; }
+.sponsor-video { display: block; width: 100%; max-height: 320px; border-radius: 12px; background: #000; }
 .evidence { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .evidence-item { display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--text-2); }
 .evidence-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line-2); background: #000; }

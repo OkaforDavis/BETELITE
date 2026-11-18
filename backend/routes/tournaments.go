@@ -167,7 +167,11 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
-		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches})
+		var sponsor *services.Sponsor
+		if t.HostID != "" {
+			sponsor = services.GetSponsor(ctx, t.ID, t.HostID == middleware.GetUID(c) || middleware.IsAdminCtx(c))
+		}
+		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches, "sponsor": sponsor})
 	})
 
 	tr.Post("/:id/join", func(c *fiber.Ctx) error {
