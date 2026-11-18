@@ -4,6 +4,7 @@ import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheet
 import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 import { tipButton, bindTipButtons } from '../tips.js';
+import { roomSlot, mountRoom } from '../room.js';
 
 const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
@@ -48,6 +49,7 @@ export default async function matchPage(view, { id }) {
         ${m.status !== 'void' ? html`<div class="steps" aria-label="Match progress">${STEPS.map((s, i) => html`<div class="step ${i < step ? 'done' : i === step ? (m.status === 'confirmed' ? 'done' : 'now') : ''}">${s}</div>`)}</div>` : ''}
       </div>
 
+      ${mine && m.status === 'ready' && m.awayId ? roomSlot(m) : ''}
       <section class="section" id="action">${mine ? actionArea(m, uid, opp) : spectatorNote(m)}</section>
       ${(mine || store.get().profile.isAdmin) && m.status !== 'ready' ? html`<section class="section"><div class="section-head"><h2 class="h2">Screenshots</h2></div><div id="evidence">${skeleton(90)}</div></section>` : ''}
 
@@ -72,6 +74,7 @@ export default async function matchPage(view, { id }) {
     </div>`);
 
     bindTipButtons(view);
+    if (mine && m.status === 'ready' && m.awayId) mountRoom(view, m, uid, opp);
     view.querySelector('[data-copy]')?.addEventListener('click', (e) => {
       copyText(e.currentTarget.dataset.copy, 'Match ID copied');
     });
@@ -242,9 +245,11 @@ export default async function matchPage(view, { id }) {
   }
 
   const onUpdate = (e) => { if (e.detail.id === id) { m = e.detail; if (!view.querySelector('#file')?.files?.length) draw(); } };
+  const onRoom = (e) => { if (e.detail?.matchId === id && m) { const uid = store.get().profile.id; mountRoom(view, m, uid, uid === m.homeId ? { name: m.awayName, tag: m.awayTag } : { name: m.homeName, tag: m.homeTag }); } };
   document.addEventListener('match_update', onUpdate);
+  document.addEventListener('match_room', onRoom);
   await load();
-  return () => document.removeEventListener('match_update', onUpdate);
+  return () => { document.removeEventListener('match_update', onUpdate); document.removeEventListener('match_room', onRoom); };
 }
 
 // Phone screenshots are often 2–5 MB PNGs. Re-encode large ones as a JPEG

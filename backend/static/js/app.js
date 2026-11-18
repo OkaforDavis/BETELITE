@@ -121,6 +121,7 @@ function wireRealtime() {
     if (m.homeId === me || m.awayId === me) refreshCurrent();
     document.dispatchEvent(new CustomEvent('match_update', { detail: m }));
   });
+  rt.on('match_room', (d) => document.dispatchEvent(new CustomEvent('match_room', { detail: d })));
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data?.type === 'push') refreshUnread();
   });

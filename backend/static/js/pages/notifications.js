@@ -7,6 +7,7 @@ import { pushState, enablePush } from '../pwa.js';
 const ICONS = {
   result_submitted: ['clock', 'warn'], result_disputed: ['flag', 'danger'], result_confirmed: ['trophy', 'brand'],
   challenge_accepted: ['swords', 'brand'], challenge_expired: ['refresh', 'info'], match_void: ['xCircle', ''],
+  match_room: ['gamepad', 'brand'],
   deposit: ['arrowDown', 'brand'], withdrawal: ['bank', 'info'],
   tournament_started: ['trophy', 'brand'], tournament_round: ['trophy', 'info'], tournament_finished: ['crown', 'brand'],
   tournament_cancelled: ['xCircle', 'danger'], admin_review: ['shield', 'warn'],
