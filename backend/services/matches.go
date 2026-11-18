@@ -301,7 +301,7 @@ func SubmitResult(ctx context.Context, matchID, uid string, img []byte) (*MatchV
 	case !res.IsVersusHuman:
 		return nil, userErr(422, "This screenshot is not from a match against another player (%s). Upload your %s player-vs-player result.", nonEmpty(res.Mode, "vs AI / scenario"), game.Short)
 	case !res.IsResultScreen:
-		return nil, userErr(422, "This is not the final result screen. %s", nonEmpty(res.RejectReason, "Upload the full-time screen that shows both player names and the score."))
+		return nil, userErr(422, "This is not the final result screen. %s", nonEmpty(res.RejectReason, "Upload the "+game.ResultScreen+" that shows both player names and the score."))
 	case res.Confidence < MinOCRConfidence:
 		return nil, userErr(422, "The screenshot is not clear enough to read the score. Upload a sharper, uncropped screenshot.")
 	}
@@ -330,7 +330,10 @@ func SubmitResult(ctx context.Context, matchID, uid string, img []byte) (*MatchV
 		var format string
 		db.Pool.QueryRow(ctx, "SELECT format FROM tournaments WHERE id = $1", m.TournamentID).Scan(&format)
 		if format == "knockout" {
-			return nil, userErr(422, "Knockout matches need a winner. Upload the screen that shows the penalty shoot-out result.")
+			if game.Football {
+				return nil, userErr(422, "Knockout matches need a winner. Upload the screen that shows the penalty shoot-out result.")
+			}
+			return nil, userErr(422, "Knockout matches need a winner. Play a deciding round and upload that result.")
 		}
 	}
 

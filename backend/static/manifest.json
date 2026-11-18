@@ -2,7 +2,7 @@
   "id": "/",
   "name": "CrestArena",
   "short_name": "CrestArena",
-  "description": "Play FC Mobile, eFootball and DLS matches for real prizes. Verified results, instant payouts.",
+  "description": "Play FC Mobile, eFootball, DLS, Call of Duty: Mobile and Free Fire against real players. Verified results and fixed-prize tournaments.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

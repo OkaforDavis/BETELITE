@@ -100,7 +100,7 @@ export default async function play(view, { query }) {
     }
     const ok = await confirmSheet({
       title: `Accept ${money(c.amount, c.currency)} challenge?`,
-      message: `You and ${c.creatorName} each stake ${money(c.amount, c.currency)}. The winner gets ${money(c.prize, c.currency)}. Play ${gameName(c.game)} within 3 hours and upload the full-time screen showing both usernames.`,
+      message: `You and ${c.creatorName} each stake ${money(c.amount, c.currency)}. The winner gets ${money(c.prize, c.currency)}. Play ${gameName(c.game)} within 3 hours and upload the final result screen showing both names.`,
       confirm: 'Accept & lock stake',
     });
     if (!ok) return;
@@ -120,7 +120,7 @@ export default async function play(view, { query }) {
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptBounty(c, btn));
     const ok = await confirmSheet({
       title: `Take on ${c.creatorName}'s bounty?`,
-      message: `Free to accept. Beat ${c.creatorName} at ${gameName(c.game)} and ${money(c.prize, c.currency)} is yours${profile.currency !== c.currency ? ` (paid in ${profile.currency} at the market rate)` : ''}. Lose or draw and nothing is taken from you. Play within 3 hours and upload the full-time screen showing both usernames.`,
+      message: `Free to accept. Beat ${c.creatorName} at ${gameName(c.game)} and ${money(c.prize, c.currency)} is yours${profile.currency !== c.currency ? ` (paid in ${profile.currency} at the market rate)` : ''}. Lose or draw and nothing is taken from you. Play within 3 hours and upload the final result screen showing both names.`,
       confirm: 'Accept bounty',
     });
     if (!ok) return;
@@ -136,7 +136,7 @@ export default async function play(view, { query }) {
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptFree(c, btn));
     const ok = await confirmSheet({
       title: `Play ${c.creatorName}?`,
-      message: `A free friendly match. Play ${gameName(c.game)} within 3 hours and upload the full-time screen showing both usernames.`,
+      message: `A free friendly match. Play ${gameName(c.game)} within 3 hours and upload the final result screen showing both names.`,
       confirm: 'Accept challenge',
     });
     if (!ok) return;
@@ -175,8 +175,8 @@ function createChallenge(onDone) {
       </div>
       <div class="card flat" style="margin-top:18px" id="summary"></div>
       <ul class="checklist" style="margin-top:16px">
-        <li class="ok">${ic('check')}<span>Play a <b>player-vs-player</b> match (not vs AI or a scenario)</span></li>
-        <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>
+        <li class="ok">${ic('check')}<span>Play a <b>1v1 against a real player</b> (not vs AI, bots or a scenario)</span></li>
+        <li class="ok">${ic('check')}<span>Upload the <b>final result screen</b> showing both names within 3 hours</span></li>
         <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute, then you're paid automatically</span></li>
       </ul>
       <div class="sheet-actions"><button class="btn primary block" type="submit">Post challenge</button></div>
@@ -266,9 +266,9 @@ function createFreeOrBounty(onDone) {
           <li class="ok">${ic('check')}<span>Anyone can accept <b>for free</b>. If they beat you, they take the bounty.</span></li>
           <li class="ok">${ic('check')}<span>If you win or draw, the bounty <b>comes back to you</b>. You can never win money from a bounty.</span></li>
           <li class="ok">${ic('check')}<span>The ${feePct}% hosting fee is kept only if the match is played. Cancelled or expired bounties are refunded in full.</span></li>
-          <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>` : html`
-          <li class="ok">${ic('check')}<span>Play a <b>player-vs-player</b> match (not vs AI or a scenario)</span></li>
-          <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>
+          <li class="ok">${ic('check')}<span>Upload the <b>final result screen</b> showing both names within 3 hours</span></li>` : html`
+          <li class="ok">${ic('check')}<span>Play a <b>1v1 against a real player</b> (not vs AI, bots or a scenario)</span></li>
+          <li class="ok">${ic('check')}<span>Upload the <b>final result screen</b> showing both names within 3 hours</span></li>
           <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute, then the result is final</span></li>`);
         summary.innerHTML = String(html`
           <div class="row between small"><span class="muted">Bounty for the winner</span><b class="num">${money(prize, cur)}</b></div>
@@ -324,8 +324,8 @@ function createFreeChallenge(onDone) {
       <span class="label">Game</span>
       <div id="games">${gameChips(game)}</div>
       <ul class="checklist" style="margin-top:18px">
-        <li class="ok">${ic('check')}<span>Play a <b>player-vs-player</b> match (not vs AI or a scenario)</span></li>
-        <li class="ok">${ic('check')}<span>Upload the <b>full-time screen</b> showing both usernames within 3 hours</span></li>
+        <li class="ok">${ic('check')}<span>Play a <b>1v1 against a real player</b> (not vs AI, bots or a scenario)</span></li>
+        <li class="ok">${ic('check')}<span>Upload the <b>final result screen</b> showing both names within 3 hours</span></li>
         <li class="ok">${ic('check')}<span>Your opponent has 15 minutes to dispute, then the result is final</span></li>
       </ul>
       <div class="sheet-actions"><button class="btn primary block" type="submit">Post challenge</button></div>

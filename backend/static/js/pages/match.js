@@ -1,5 +1,5 @@
 import { get, post, upload } from '../api.js';
-import { store, gameName } from '../store.js';
+import { store, gameName, gameInfo, resultScreen } from '../store.js';
 import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet, copyText } from '../ui.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
@@ -119,21 +119,23 @@ export default async function matchPage(view, { id }) {
 
   function uploadArea(m, opp) {
     const myTag = store.get().profile.gameProfiles.find((g) => g.game === m.game)?.gamertag;
+    const g = gameInfo(m.game);
+    const football = g.football !== false;
     return html`<div class="card">
       <div class="row between"><div class="h2">Upload the result</div>
         ${m.playDeadline ? html`<span class="badge warn">${ic('clock')}<span class="num" data-countdown="${m.playDeadline}">${timeLeft(m.playDeadline)}</span></span>` : ''}</div>
-      <p class="muted small" style="margin-top:6px">After the final whistle, take a screenshot of the <b>full-time result screen</b> and upload it here. Either player can upload.</p>
+      <p class="muted small" style="margin-top:6px">${football ? 'After the final whistle' : 'When the match ends'}, take a screenshot of the <b>${resultScreen(m.game)}</b> and upload it here. Either player can upload.</p>
 
       <div class="notice brand" style="margin-top:14px">${ic('users')}<div class="small">The screenshot must show both names:
         <b>${myTag || 'your name'}</b> and <b>${opp.tag || opp.name}</b></div></div>
 
       <div class="grid-2" style="margin-top:14px">
-        <ul class="checklist"><li class="ok">${ic('checkCircle')}<span>Full-time / final result screen</span></li>
-          <li class="ok">${ic('checkCircle')}<span>Player vs player (H2H, friendly, online)</span></li>
+        <ul class="checklist"><li class="ok">${ic('checkCircle')}<span>${football ? 'Full-time / final result screen' : 'Final scoreboard after the match'}</span></li>
+          <li class="ok">${ic('checkCircle')}<span>${g.modeHint || 'Player vs player'}</span></li>
           <li class="ok">${ic('checkCircle')}<span>Whole screen, not cropped</span></li></ul>
-        <ul class="checklist"><li class="no">${ic('xCircle')}<span>Scenarios, events or vs AI</span></li>
-          <li class="no">${ic('xCircle')}<span>Pause menu (Resume / Quit)</span></li>
-          <li class="no">${ic('xCircle')}<span>Screens without usernames</span></li></ul>
+        <ul class="checklist"><li class="no">${ic('xCircle')}<span>${football ? 'Scenarios, events or vs AI' : 'Battle royale, bots or training'}</span></li>
+          <li class="no">${ic('xCircle')}<span>${football ? 'Pause menu (Resume / Quit)' : 'Screens during a round'}</span></li>
+          <li class="no">${ic('xCircle')}<span>Screens without both names</span></li></ul>
       </div>
 
       <label class="dropzone" style="margin-top:16px" id="drop">

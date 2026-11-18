@@ -29,3 +29,6 @@ export const store = {
 };
 
 export const gameName = (id) => state.games.find((g) => g.id === id)?.short || id;
+export const gameInfo = (id) => state.games.find((g) => g.id === id) || {};
+// What to screenshot for a game, e.g. "full-time result screen".
+export const resultScreen = (id) => gameInfo(id).resultScreen || 'final result screen';

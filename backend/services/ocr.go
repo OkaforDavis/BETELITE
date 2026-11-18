@@ -77,7 +77,7 @@ var playerSchema = &genai.Schema{
 	Properties: map[string]*genai.Schema{
 		"name":          {Type: genai.TypeString, Description: "Username / club name exactly as displayed"},
 		"ingame_id":     {Type: genai.TypeString, Description: "Player ID number if displayed, else empty"},
-		"score":         {Type: genai.TypeInteger, Description: "Final goals scored (excluding penalty shoot-out)"},
+		"score":         {Type: genai.TypeInteger, Description: "Final score for this side (goals; or rounds/points as the game notes say), excluding any penalty shoot-out"},
 		"penalty_score": {Type: genai.TypeInteger, Description: "Penalty shoot-out goals, only if a shoot-out happened", Nullable: genai.Ptr(true)},
 		"side":          {Type: genai.TypeString, Enum: []string{"LEFT", "RIGHT"}},
 	},
@@ -87,7 +87,7 @@ var playerSchema = &genai.Schema{
 var resultSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
-		"is_result_screen": {Type: genai.TypeBoolean, Description: "True only for the final full-time result screen of a completed match"},
+		"is_result_screen": {Type: genai.TypeBoolean, Description: "True only for the final result screen of a completed match"},
 		"is_versus_human":  {Type: genai.TypeBoolean, Description: "True only if both sides are human players (not CPU/AI, not a scenario/event/campaign)"},
 		"mode":             {Type: genai.TypeString, Description: "Game mode shown, e.g. Head-to-Head, Friend Match, Scenario, vs AI"},
 		"ingame_match_id":  {Type: genai.TypeString, Description: "Match ID / code shown by the game, else empty"},
@@ -119,7 +119,7 @@ Game: %s
 Registered players for this match:
 %s
 Read the screenshot and report exactly what is displayed. Do not guess or invent names, IDs or scores; if something is unreadable, lower the confidence and explain in notes.
-- is_result_screen: true only for the final full-time result of a finished match.
+- is_result_screen: true only for the final result screen of a finished match (full time for football games).
 - is_versus_human: false for CPU/AI opponents, scenarios, events, campaigns or objectives (e.g. "TARGET: WIN BY 2").
 - players: the two sides as displayed (LEFT first), with the names exactly as shown.
 - If the screen shows only national/club team names and not the players' usernames (where the game normally shows usernames), set is_result_screen=false and explain in reject_reason.`,
