@@ -239,6 +239,7 @@ func BuyMembership(ctx context.Context, uid, tierID string) (*Membership, error)
 	forgetTier(uid)
 	Notify(uid, "membership", tier.Name+" membership active ⭐", msg, "/membership", nil)
 	go RewardReferral(context.Background(), uid) // a first membership unlocks invite rewards
+	go RewardHostCommission(context.Background(), uid)
 	return m, nil
 }
 

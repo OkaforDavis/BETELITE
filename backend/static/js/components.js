@@ -96,13 +96,13 @@ export function tournamentCard(t) {
   return html`
   <a class="card tap" href="/tournaments/${t.id}" style="display:block;color:inherit">
     <div class="row between">
-      <span class="row" style="gap:6px">${formatBadge(t)}${t.hostId ? html`<span class="badge info">${ic('users')}Host cup</span>` : ''}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
+      <span class="row" style="gap:6px">${formatBadge(t)}${t.hostId ? html`<span class="badge info">${ic('users')}Host cup</span>` : ''}${t.membersOnly ? html`<span class="badge tier-pro">${ic('sparkles')}Members</span>` : ''}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
       <span class="badge ${status[1]}">${status[0]}</span>
     </div>
     <div class="h3" style="margin-top:12px">${t.name}</div>
     <div class="small muted">${t.gameName}${t.hostId ? html` · Hosted by ${t.hostId === me() ? 'you' : t.hostName}` : ''}${t.joined ? html` · <span class="brand-text">You're in</span>` : ''}</div>
     <div class="grid-3" style="margin-top:14px">
-      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : t.hostId ? 'Free' : '1 entry'}</div></div>
+      <div><div class="tiny faint">ENTRY</div><div class="h3 num">${t.entryFee ? money(t.entryFee, t.currency) : t.membersOnly ? 'Members' : t.hostId ? 'Free' : '1 entry'}</div></div>
       <div><div class="tiny faint">1ST PRIZE</div><div class="h3 num brand-text">${top ? money(top, prizes.cur) : '—'}</div></div>
       <div><div class="tiny faint">PLAYERS</div><div class="h3 num">${t.playerCount}/${t.maxPlayers}</div></div>
     </div>

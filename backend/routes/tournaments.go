@@ -48,6 +48,7 @@ type tournamentView struct {
 	HostPool         int64                `json:"hostPool,omitempty"`
 	HostFee          int64                `json:"hostFee,omitempty"`
 	FillDeadline     *time.Time           `json:"fillDeadline,omitempty"`
+	MembersOnly      bool                 `json:"membersOnly,omitempty"` // host cup only paid members can join
 }
 
 const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon,''), t.entry_fee, t.currency, t.max_players,
@@ -55,7 +56,7 @@ const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
 	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry),
-	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline FROM tournaments t`
+	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
@@ -63,7 +64,7 @@ func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
 		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
-		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline); err != nil {
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly); err != nil {
 		return nil, err
 	}
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
@@ -116,7 +117,8 @@ func SetupTournamentRoutes(api fiber.Router) {
 		free, _ := services.FreeCupAvailable(ctx, db.Pool, uid)
 		return utils.SendSuccess(c, fiber.Map{"enabled": config.Cfg.HostCupsEnabled, "currency": currency, "balance": balance,
 			"minPool": services.MinCupPool[currency], "maxPool": services.MaxCupPool[currency], "feePercent": services.HostFeePercent,
-			"freeCup": free, "fillDays": int(services.CupFillWindow.Hours() / 24), "maxOpen": services.MaxOpenHostCups})
+			"freeCup": free, "fillDays": int(services.CupFillWindow.Hours() / 24), "maxOpen": services.MaxOpenHostCups,
+			"commissionPercent": services.HostCommissionPercent, "commissionDays": int(services.HostCommissionWindow.Hours() / 24)})
 	})
 
 	// Host a cup: I fund the prize pool (+ hosting fee); players join free.
@@ -185,8 +187,9 @@ func SetupTournamentRoutes(api fiber.Router) {
 		var membersUntil *time.Time
 		var earlyTier string
 		var freeSeats *int
-		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until, early_tier, free_seats, COALESCE(host_id,'') FROM tournaments WHERE id = $1 FOR UPDATE", tid).
-			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil, &earlyTier, &freeSeats, &host)
+		var membersOnly bool
+		err = tx.QueryRow(ctx, "SELECT entry_fee, max_players, status, game, currency, name, members_only_until, early_tier, free_seats, COALESCE(host_id,''), members_only FROM tournaments WHERE id = $1 FOR UPDATE", tid).
+			Scan(&fee, &maxPlayers, &status, &game, &currency, &name, &membersUntil, &earlyTier, &freeSeats, &host, &membersOnly)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return utils.SendError(c, 404, "Tournament not found")
 		}
@@ -216,6 +219,13 @@ func SetupTournamentRoutes(api fiber.Router) {
 			if err := services.RequireMoneyAccess(ctx, uid); err != nil {
 				return fail(c, err)
 			}
+			if membersOnly && host != uid && !services.HasPaidPlan(ctx, uid) {
+				// Remember who brought them: the host earns a commission if
+				// they now buy their first membership.
+				services.RecordHostRef(ctx, db.Pool, uid, host)
+				return utils.SendError(c, 403, "Members only: this cup is for players with a plan. Get any plan to join.")
+			}
+			services.RecordHostRef(ctx, tx, uid, host)
 		} else if fee == 0 {
 			// Prize tournaments: 18+ and terms, the members' early sign-up
 			// window, and the monthly entries the player's plan allows.

@@ -33,6 +33,7 @@ const TX = {
   currency_switch: ['Wallet moved to new country', 'refresh', 'info'],
   tip_sent: ['Tip sent', 'coins', ''],
   tip_received: ['Tip received', 'coins', 'brand'],
+  host_commission: ['Host commission', 'coins', 'brand'],
   admin_adjustment: ['Balance adjustment', 'settings', ''],
 };
 const WD_STATUS = { pending: ['Awaiting approval', 'warn'], processing: ['Sending', 'info'], paid: ['Paid', 'brand'], rejected: ['Rejected', 'danger'], failed: ['Failed, refunded', 'danger'], reversed: ['Bank returned it, refunded', 'danger'] };
