@@ -5,6 +5,7 @@ import { sk } from '../skeletons.js';
 import { gameChips } from '../components.js';
 import { navigate } from '../router.js';
 import * as rt from '../realtime.js';
+import { tipButton, bindTipButtons } from '../tips.js';
 
 const LIVEKIT_SRC = 'https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js';
 const canShareScreen = !!navigator.mediaDevices?.getDisplayMedia && !/android|iphone|ipad/i.test(navigator.userAgent);
@@ -94,7 +95,9 @@ async function room(view, id) {
     const { token, isHost, url } = await post(`/streams/${id}/token`);
     const { streams } = await get('/streams');
     const s = streams.find((x) => x.id === id);
-    view.querySelector('#meta').innerHTML = String(html`<div class="h3 ellipsis">${s?.title || 'Live'}</div><div class="small muted">${s?.hostName || ''} <span class="badge danger live" style="margin-left:6px">Live</span></div>`);
+    view.querySelector('#meta').innerHTML = String(html`<div class="row" style="gap:10px"><div class="grow" style="min-width:0"><div class="h3 ellipsis">${s?.title || 'Live'}</div><div class="small muted">${s?.hostName || ''} <span class="badge danger live" style="margin-left:6px">Live</span></div></div>
+      ${s && !isHost ? tipButton({ to: s.hostId, name: s.hostName, context: 'stream', refId: s.id }) : ''}</div>`);
+    bindTipButtons(view.querySelector('#meta'));
 
     const L = window.LivekitClient;
     lk = new L.Room({ adaptiveStream: true, dynacast: true });
