@@ -1,11 +1,11 @@
 import { api, get, put, del } from '../api.js';
 import { store } from '../store.js';
-import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError } from '../ui.js';
+import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError, shareLink, copyText, passwordInput, bindPasswordToggles } from '../ui.js';
 import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
 import { tierBadge, TIER_NAMES } from '../components.js';
 import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
-import { signOut, sendVerification, reloadVerification } from '../auth.js';
+import { signOut, sendVerification, reloadVerification, hasPassword, changePassword, sendPasswordReset } from '../auth.js';
 import { refreshProfile } from '../app.js';
 
 export default async function profilePage(view, { query }) {
@@ -118,6 +118,8 @@ export default async function profilePage(view, { query }) {
         <div class="list">
           ${[['Terms of Service', 'terms'], ['Privacy Policy', 'privacy'], ['Cookie Policy', 'cookies'], ['Responsible Gaming', 'responsible-gaming']].map(([t, f]) =>
             html`<a class="list-row" href="/legal/${f}.html" target="_blank" style="color:inherit"><div class="icon-tile">${ic('file')}</div><div class="grow h3">${t}</div>${ic('external', 'chev')}</a>`)}
+          ${hasPassword() ? html`<button class="list-row" id="password"><div class="icon-tile">${ic('lock')}</div>
+            <div class="grow"><div class="h3">Change password</div><div class="small muted">Keep your account safe</div></div>${ic('chevronRight', 'chev')}</button>` : ''}
           <button class="list-row" id="export"><div class="icon-tile">${ic('download')}</div>
             <div class="grow"><div class="h3">Download my data</div><div class="small muted">Everything we store about you, as a file</div></div></button>
           <button class="list-row" id="delete"><div class="icon-tile danger">${ic('trash')}</div>
@@ -164,13 +166,11 @@ export default async function profilePage(view, { query }) {
     view.querySelector('#email').onchange = (e) => api('POST', '/user/settings/update', { emailEnabled: e.target.checked }).then(refreshProfile).catch(toastError);
     view.querySelector('#share')?.addEventListener('click', () => {
       const url = inviteLink(ref.code);
-      const text = `Join me on CrestArena and play FC Mobile, eFootball & DLS for prizes. Sign up with my link and we both get a bonus after your first match:`;
-      if (navigator.share) navigator.share({ title: 'CrestArena', text, url }).catch(() => {});
-      else { navigator.clipboard?.writeText(`${text} ${url}`); toast('Invite copied to clipboard'); }
+      const text = `Join me on CrestArena: free 1v1s and tournaments with real prizes. Sign up with my link and get ${money(ref.friendReward, ref.currency)} when you buy your first membership:`;
+      shareLink({ title: 'CrestArena', text, url });
     });
     view.querySelector('#copy-link')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText(inviteLink(ref.code));
-      toast('Invite link copied');
+      copyText(inviteLink(ref.code), 'Invite link copied');
     });
     view.querySelector('#claim')?.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -199,6 +199,7 @@ export default async function profilePage(view, { query }) {
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     });
     view.querySelector('#delete').onclick = () => deleteAccount();
+    view.querySelector('#password')?.addEventListener('click', passwordSheet);
     view.querySelector('#logout').onclick = () => signOut();
   }
 
@@ -224,6 +225,33 @@ function editProfile(onDone) {
           close(); toast('Profile updated'); onDone();
         });
       };
+    },
+  });
+}
+
+function passwordSheet() {
+  sheet(String(html`${sheetHead('Change password')}
+    <form id="pw">
+      <label class="field" style="margin-top:0"><span class="label">Current password</span>${passwordInput({ name: 'current', autocomplete: 'current-password' })}</label>
+      <label class="field"><span class="label">New password</span>${passwordInput({ name: 'next', autocomplete: 'new-password', placeholder: 'At least 8 characters', minlength: 8 })}</label>
+      <div class="sheet-actions"><button class="btn primary block" type="submit">Save new password</button>
+        <button class="btn ghost block" type="button" id="forgot">Forgot your current password?</button></div>
+    </form>`), {
+    label: 'Change password',
+    onMount(root, close) {
+      bindPasswordToggles(root);
+      root.querySelector('#pw').onsubmit = (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        busy(e.target.querySelector('[type=submit]'), async () => {
+          await changePassword(String(f.get('current')), String(f.get('next')));
+          close(); toast('Password changed');
+        });
+      };
+      root.querySelector('#forgot').onclick = (e) => busy(e.currentTarget, async () => {
+        await sendPasswordReset();
+        close(); toast('We sent a reset link to your email.', 'ok', 'Check your inbox');
+      });
     },
   });
 }

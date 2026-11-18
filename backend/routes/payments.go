@@ -359,13 +359,27 @@ func paystackWebhook(c *fiber.Ctx) error {
 		if err == nil {
 			services.Notify(uid, "withdrawal", "Withdrawal sent", services.FormatMoney(amount, cur)+" has been sent to your bank account.", "/wallet", nil)
 		}
-	case "transfer.failed", "transfer.reversed":
+	case "transfer.failed":
 		if err := services.RefundWithdrawal(ctx, ev.Data.Reference, "Bank transfer failed: "+ev.Data.Reason, "processing"); err != nil {
+			log.Printf("[PAYMENTS] refund withdrawal %s: %v", ev.Data.Reference, err)
+			return c.SendStatus(500)
+		}
+	case "transfer.reversed":
+		if err := services.RefundReversedWithdrawal(ctx, ev.Data.Reference, reversalReason(ev.Data.Reason)); err != nil {
 			log.Printf("[PAYMENTS] refund withdrawal %s: %v", ev.Data.Reference, err)
 			return c.SendStatus(500)
 		}
 	}
 	return c.SendStatus(200)
+}
+
+// reversalReason is what the player reads when their bank sent a payout back.
+func reversalReason(provider string) string {
+	msg := "Your bank sent the transfer back. Check the account number and name, or try another bank."
+	if strings.TrimSpace(provider) != "" {
+		msg += " (" + strings.TrimSpace(provider) + ")"
+	}
+	return msg
 }
 
 // appURL is the public base URL used for Paystack redirects.

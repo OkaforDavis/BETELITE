@@ -1,5 +1,5 @@
 // Firebase is used for sign-in only. Money and profile live in the Go API.
-import { html, ic, $, busy, toast } from './ui.js';
+import { html, ic, $, busy, toast, passwordInput, bindPasswordToggles } from './ui.js';
 import { pendingInvite, setPendingInvite } from './invite.js';
 
 // The server stamps FIREBASE_AUTH_DOMAIN into index.html. Serving the sign-in
@@ -58,9 +58,9 @@ function friendly(e) {
   return map[e?.code] || e?.message || 'Something went wrong. Please try again.';
 }
 
-export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
+export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin', keep = {}) {
   const signup = mode === 'signup';
-  const invite = pendingInvite();
+  const invite = keep.invite ?? pendingInvite();
   root.innerHTML = String(html`
   <main class="auth">
     <img class="wordmark" src="/icons/wordmark.png" alt="CrestArena" height="34">
@@ -75,11 +75,12 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
 
     <form id="auth-form" novalidate>
       ${signup ? html`<label class="field"><span class="label">Display name</span>
-        <input class="input" name="name" autocomplete="nickname" maxlength="24" placeholder="What players will see" required></label>` : ''}
+        <input class="input" name="name" autocomplete="nickname" maxlength="24" placeholder="What players will see" value="${keep.name || ''}" required>
+        <span class="hint">3 to 24 characters. You can change it later.</span></label>` : ''}
       <label class="field"><span class="label">Email</span>
-        <input class="input" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+        <input class="input" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${keep.email || ''}" required></label>
       <label class="field"><span class="label">Password</span>
-        <input class="input" name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? 'At least 8 characters' : 'Your password'}" required></label>
+        ${passwordInput({ autocomplete: signup ? 'new-password' : 'current-password', placeholder: signup ? 'At least 8 characters' : 'Your password', value: keep.password || '' })}</label>
       ${signup ? html`<label class="field"><span class="label">Invite code <span class="faint">(optional)</span></span>
         <input class="input" name="invite" maxlength="12" autocapitalize="characters" autocomplete="off" value="${invite}" placeholder="e.g. UT802R6Q"></label>` : ''}
       <div class="form-error" id="auth-error" role="alert" hidden></div>
@@ -100,7 +101,13 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
     <p class="center" style="margin-top:14px"><a class="made-by" href="https://webcrest.app" target="_blank" rel="noopener">Designed by <span class="wc"><span class="wc-w">W</span><span class="wc-rest">ebCrest</span></span></a></p>
   </main>`);
 
-  root.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => renderAuth(root, b.dataset.mode)));
+  // Switching between "Sign in" and "Create account" keeps what was typed.
+  root.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => {
+    const f = new FormData($('#auth-form', root));
+    const v = (k) => (f.has(k) ? String(f.get(k)) : undefined);
+    renderAuth(root, b.dataset.mode, { email: v('email'), password: v('password'), name: v('name') ?? keep.name, invite: v('invite') ?? keep.invite });
+  }));
+  bindPasswordToggles(root);
   const err = $('#auth-error', root);
   const showErr = (e) => { err.textContent = friendly(e); err.hidden = false; };
 
@@ -158,6 +165,23 @@ export function renderAuth(root, mode = pendingInvite() ? 'signup' : 'signin') {
     try { await navigator.clipboard.writeText(location.href); toast('Link copied. Paste it in your browser.'); }
     catch { toast(location.href, 'info'); }
   });
+}
+
+// Email-and-password accounts can change their password (Google accounts can't).
+export const hasPassword = () => !!auth?.currentUser?.providerData?.some((p) => p.providerId === 'password');
+export async function changePassword(current, next) {
+  const u = auth?.currentUser;
+  if (!u) throw new Error('Please sign in again.');
+  if (next.length < 8) throw new Error('Use at least 8 characters for the new password.');
+  try {
+    await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, current));
+    await u.updatePassword(next);
+  } catch (e) { throw new Error(friendly(e)); }
+}
+export async function sendPasswordReset() {
+  const u = auth?.currentUser;
+  if (!u?.email) throw new Error('Please sign in again.');
+  await auth.sendPasswordResetEmail(u.email);
 }
 
 // Email verification (needed for admin access; recommended for withdrawals).
