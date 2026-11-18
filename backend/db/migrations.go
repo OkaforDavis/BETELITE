@@ -366,6 +366,14 @@ var migrations = []string{
 		position INT NOT NULL DEFAULT 0
 	);
 	CREATE INDEX IF NOT EXISTS cup_sponsor_media_idx ON cup_sponsor_media(tournament_id, position);`,
+
+	// 15: the in-game room for a match (room number / code, password or join
+	// link) that one player posts for the other, or that CrestArena makes up.
+	`ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_code TEXT;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_pass TEXT;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_link TEXT;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_by TEXT;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_at TIMESTAMPTZ;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

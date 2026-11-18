@@ -12,7 +12,8 @@ export function gameIdSheet(gameId, onSaved) {
       <label class="field"><span class="label">In-game name</span>
         <input class="input" name="gamertag" maxlength="32" required value="${existing?.gamertag || ''}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
       <label class="field"><span class="label">In-game ID number <span class="faint">(optional)</span></span>
-        <input class="input" name="inGameId" maxlength="40" value="${existing?.inGameId || ''}" autocomplete="off" inputmode="text"></label>
+        <input class="input" name="inGameId" maxlength="40" value="${existing?.inGameId || ''}" autocomplete="off" inputmode="text">
+        <span class="hint">${game.idHint || 'Helps your opponent find you in the game.'}</span></label>
       <div class="notice warn" style="margin-top:16px">${ic('lock')}<div class="small">Your name is <b>locked after your first match</b> to prevent cheating. Double-check the spelling.</div></div>
       <div class="sheet-actions"><button class="btn primary block" type="submit">Save</button></div>
     </form>`), {

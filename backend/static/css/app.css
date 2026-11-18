@@ -558,3 +558,10 @@ button.list-row:active { background: var(--surface-2); }
 .pick-list button { display: block; width: 100%; text-align: left; min-height: 46px; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--text); font-size: 15px; }
 .pick-list button:last-child { border-bottom: 0; }
 .pick-list button:active, .pick-list button:focus-visible { background: var(--brand-soft); }
+
+/* Match room: how to meet in the game + the room code */
+.howto { margin: 12px 0 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; color: var(--text-2); }
+.howto li::marker { color: var(--brand); font-weight: 700; }
+.room-box { border: 1px dashed var(--line-2, var(--line)); border-radius: 14px; padding: 12px 14px; background: var(--surface-2); }
+.room-code { font: 700 22px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .08em; word-break: break-all; }
+.room-pass { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .04em; }

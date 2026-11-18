@@ -50,6 +50,26 @@ func SetupMatchRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"match": match})
 	})
 
+	// The in-game room (code, password or join link): only the two players see it.
+	m.Get("/:id/room", func(c *fiber.Ctx) error {
+		room, err := services.GetRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"room": room})
+	})
+	m.Post("/:id/room", func(c *fiber.Ctx) error {
+		var in services.RoomInput
+		if err := c.BodyParser(&in); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		room, err := services.SetRoom(c.Context(), c.Params("id"), middleware.GetUID(c), in)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"room": room})
+	})
+
 	// Upload the final result screenshot for this match (multipart "image").
 	m.Post("/:id/result", middleware.RateLimitOCR(), func(c *fiber.Ctx) error {
 		fh, err := c.FormFile("image")
