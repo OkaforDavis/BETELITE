@@ -7,6 +7,8 @@ import { tierBadge, TIER_NAMES } from '../components.js';
 import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification, hasPassword, changePassword, sendPasswordReset } from '../auth.js';
 import { refreshProfile } from '../app.js';
+import { resetTours } from '../tour.js';
+import { navigate } from '../router.js';
 
 export default async function profilePage(view, { query }) {
   const [{ matches }, ref] = await Promise.all([
@@ -108,6 +110,8 @@ export default async function profilePage(view, { query }) {
           <a class="list-row" href="/support" style="color:inherit"><div class="icon-tile">${ic('flag')}</div><div class="grow"><div class="h3">Help &amp; complaints</div><div class="small muted">Message an admin about a match, payment or player</div></div>${ic('chevronRight', 'chev')}</a>
           <a class="list-row" href="/membership" style="color:inherit"><div class="icon-tile brand">${ic('sparkles')}</div><div class="grow"><div class="h3">Membership</div><div class="small muted">${TIER_NAMES[p.tier] || 'Free'} plan · tournament entries</div></div>${ic('chevronRight', 'chev')}</a>
           <a class="list-row" href="/watch" style="color:inherit"><div class="icon-tile">${ic('radio')}</div><div class="grow h3">Live streams</div>${ic('chevronRight', 'chev')}</a>
+          <button class="list-row" id="tours-reset"><div class="icon-tile">${ic('info')}</div>
+            <div class="grow" style="text-align:left"><div class="h3">Show app tips again</div><div class="small muted">Replay the quick guides on each page</div></div>${ic('chevronRight', 'chev')}</button>
           <button class="list-row" id="update"><div class="icon-tile">${ic('refresh')}</div>
             <div class="grow"><div class="h3">Check for updates</div><div class="small muted">Version ${APP_VERSION}</div></div></button>
         </div>
@@ -183,6 +187,7 @@ export default async function profilePage(view, { query }) {
     });
     view.querySelector('#install')?.addEventListener('click', promptInstall);
     view.querySelector('#paysettings')?.addEventListener('click', async () => (await import('../paysettings.js')).paySettingsSheet());
+    view.querySelector('#tours-reset').onclick = () => { resetTours(); toast('Tips are back on. Each page shows its guide again.'); navigate('/'); };
     view.querySelector('#update').onclick = async () => {
       const reg = await navigator.serviceWorker?.getRegistration();
       await reg?.update().catch(() => {});

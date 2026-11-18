@@ -3,6 +3,7 @@
 // shows an error with "Try again" instead of hanging.
 import * as progress from './progress.js';
 import { closeSheets } from './ui.js';
+import { pageReady } from './tour.js';
 
 const routes = [];
 let cleanup = null;
@@ -45,7 +46,7 @@ export async function render() {
     const mod = await r.loader();
     if (seq !== renderSeq) return; // the user already moved on
     const c = await mod.default(view, params);
-    if (seq === renderSeq) cleanup = c;
+    if (seq === renderSeq) { cleanup = c; pageReady(path); }
     else if (typeof c === 'function') c();
   } catch (e) {
     if (seq !== renderSeq) return;
