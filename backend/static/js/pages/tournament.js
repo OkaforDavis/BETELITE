@@ -6,6 +6,7 @@ import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
 import { navigate } from '../router.js';
 import { tipButton, bindTipButtons } from '../tips.js';
+import { sponsorCard, bindSponsor } from '../sponsors.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 
 const ordinal = (n) => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n] || 'th');
@@ -27,7 +28,7 @@ export default async function tournamentPage(view, { id }) {
   }
 
   function draw() {
-    const { tournament: t, standings, matches } = data;
+    const { tournament: t, standings, matches, sponsor } = data;
     const uid = store.get().profile.id;
     const myMatch = matches.find((m) => (m.homeId === uid || m.awayId === uid) && ['ready', 'submitted', 'disputed', 'review'].includes(m.status));
     const pct = Math.round((t.playerCount / t.maxPlayers) * 100);
@@ -69,6 +70,8 @@ export default async function tournamentPage(view, { id }) {
             ${isHost ? html`<button class="btn ghost block" id="cancel-cup" style="margin-top:8px">Cancel my cup (full refund)</button>` : ''}</div>` : ''}
       </div>
 
+      ${t.hostId ? sponsorCard(sponsor, { isHost, open: ['open', 'active'].includes(t.status) }) : ''}
+
       ${t.hostId && !isHost ? html`<div class="card row" style="margin-top:12px;gap:12px"><div class="icon-tile">${ic('coins')}</div>
         <div class="grow"><div class="h3">Enjoying ${t.hostName}'s cup?</div><div class="small muted">Send a free tip. The host gets all of it.</div></div>
         ${tipButton({ to: t.hostId, name: t.hostName, context: 'tournament', refId: t.id, role: 'host', label: 'Tip host' })}</div>` : ''}
@@ -103,6 +106,7 @@ export default async function tournamentPage(view, { id }) {
       busy(e.currentTarget, async () => { await post(`/tournaments/${t.id}/leave`); toast('You left the tournament'); refreshProfile(); load(); });
     });
     bindTipButtons(view);
+    bindSponsor(view, t.id, load);
     drawTab();
 
     function drawTab() {

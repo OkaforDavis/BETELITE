@@ -108,6 +108,7 @@ func main() {
 	routes.SetupPaymentRoutes(api)
 	routes.SetupMatchRoutes(api)
 	routes.SetupLobbyRoutes(api, hub)
+	routes.SetupSponsorRoutes(api)
 	routes.SetupTournamentRoutes(api)
 	routes.SetupMembershipRoutes(api)
 	routes.SetupSupportRoutes(api)

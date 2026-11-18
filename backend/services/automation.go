@@ -54,6 +54,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	ReconcileDeposits(ctx)
 	RemindExpiringMemberships(ctx)
 	purgeOldEvidence(ctx)
+	purgeSponsors(ctx)
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)
 	cleanupStaleChallenges(ctx, hub, cfg.ChallengeExpireDuration)

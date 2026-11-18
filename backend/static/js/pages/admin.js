@@ -3,8 +3,9 @@ import { store, gameName } from '../store.js';
 import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
+import { adminSponsors } from '../sponsors.js';
 
-const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
+const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['sponsors', 'Sponsors'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
 
 export default async function admin(view, { query }) {
   if (!store.get().profile?.isAdmin) {
@@ -22,7 +23,7 @@ export default async function admin(view, { query }) {
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     body.innerHTML = String(sk.adminRows());
-    try { await ({ overview, review, withdrawals, tournaments, support, money: moneyTab, users, ocr })[tab](body, draw); }
+    try { await ({ overview, review, withdrawals, tournaments, sponsors: adminSponsors, support, money: moneyTab, users, ocr })[tab](body, draw); }
     catch (e) { body.innerHTML = String(empty('alert', 'Could not load', e.message)); }
   }
   await draw();

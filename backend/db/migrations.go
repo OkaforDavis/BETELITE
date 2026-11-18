@@ -345,6 +345,27 @@ var migrations = []string{
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_ref TEXT REFERENCES users(id);
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_ref_at TIMESTAMPTZ;
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS host_commission_at TIMESTAMPTZ;`,
+
+	// 14: cup sponsors (approved by an admin; deleted a day after the cup ends).
+	`CREATE TABLE IF NOT EXISTS cup_sponsors (
+		tournament_id TEXT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		link TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL DEFAULT 'pending',
+		reason TEXT NOT NULL DEFAULT '',
+		reviewed_by TEXT,
+		reviewed_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE TABLE IF NOT EXISTS cup_sponsor_media (
+		id BIGSERIAL PRIMARY KEY,
+		tournament_id TEXT NOT NULL REFERENCES cup_sponsors(tournament_id) ON DELETE CASCADE,
+		kind TEXT NOT NULL,
+		content_type TEXT NOT NULL,
+		data BYTEA NOT NULL,
+		position INT NOT NULL DEFAULT 0
+	);
+	CREATE INDEX IF NOT EXISTS cup_sponsor_media_idx ON cup_sponsor_media(tournament_id, position);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.
