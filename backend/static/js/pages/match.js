@@ -3,6 +3,7 @@ import { store, gameName, gameInfo, resultScreen } from '../store.js';
 import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet, copyText } from '../ui.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
+import { tipButton, bindTipButtons } from '../tips.js';
 
 const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
@@ -58,6 +59,9 @@ export default async function matchPage(view, { id }) {
           : m.kind === 'p2p' && m.stake > 0 ? html`
             <div class="list-row"><div class="icon-tile">${ic('coins')}</div><div class="grow muted">Stake (each)</div><b class="num">${money(m.stake, m.currency)}</b></div>
             <div class="list-row"><div class="icon-tile brand">${ic('trophy')}</div><div class="grow muted">Winner gets</div><b class="num brand-text">${money(prize, m.currency)}</b></div>` : ''}
+          ${[[m.homeId, m.homeName], [m.awayId, m.awayName]].filter(([id]) => id && id !== uid).map(([id, name]) => html`
+            <div class="list-row"><div class="icon-tile">${ic('coins')}</div><div class="grow"><div>Tip ${name}</div><div class="small muted">Free. They get the full amount.</div></div>
+            ${tipButton({ to: id, name, context: 'match', refId: m.id })}</div>`)}
           <div class="list-row"><div class="icon-tile">${ic('hash')}</div><div class="grow muted">Match ID</div>
             <button class="row small" data-copy="${m.id}" style="gap:6px">${m.id.slice(-8).toUpperCase()} ${ic('copy')}</button></div>
           ${m.inGameMatchId ? html`<div class="list-row"><div class="icon-tile">${ic('gamepad')}</div><div class="grow muted">In-game match ID</div><span class="small">${m.inGameMatchId}</span></div>` : ''}
@@ -67,6 +71,7 @@ export default async function matchPage(view, { id }) {
       </section>
     </div>`);
 
+    bindTipButtons(view);
     view.querySelector('[data-copy]')?.addEventListener('click', (e) => {
       copyText(e.currentTarget.dataset.copy, 'Match ID copied');
     });

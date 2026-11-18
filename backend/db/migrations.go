@@ -322,6 +322,22 @@ var migrations = []string{
 	CREATE INDEX IF NOT EXISTS tournaments_host_idx ON tournaments(host_id, created_at DESC);
 	ALTER TABLE escrow ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'stake';
 	ALTER TABLE escrow ADD COLUMN IF NOT EXISTS fee BIGINT NOT NULL DEFAULT 0;`,
+
+	// 12: tips (free: the full amount goes to the player tipped).
+	`CREATE TABLE IF NOT EXISTS tips (
+		id TEXT PRIMARY KEY,
+		from_id TEXT NOT NULL REFERENCES users(id),
+		to_id TEXT NOT NULL REFERENCES users(id),
+		amount BIGINT NOT NULL,
+		currency TEXT NOT NULL,
+		received BIGINT NOT NULL,
+		received_currency TEXT NOT NULL,
+		context TEXT NOT NULL,
+		ref_id TEXT NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS tips_from_idx ON tips(from_id, created_at DESC);
+	CREATE INDEX IF NOT EXISTS tips_to_idx ON tips(to_id, created_at DESC);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

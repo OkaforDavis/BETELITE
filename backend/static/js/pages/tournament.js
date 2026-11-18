@@ -5,6 +5,7 @@ import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } fr
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
 import { navigate } from '../router.js';
+import { tipButton, bindTipButtons } from '../tips.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 
 const ordinal = (n) => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n] || 'th');
@@ -67,6 +68,10 @@ export default async function tournamentPage(view, { id }) {
             ${isHost ? html`<button class="btn ghost block" id="cancel-cup" style="margin-top:8px">Cancel my cup (full refund)</button>` : ''}</div>` : ''}
       </div>
 
+      ${t.hostId && !isHost ? html`<div class="card row" style="margin-top:12px;gap:12px"><div class="icon-tile">${ic('coins')}</div>
+        <div class="grow"><div class="h3">Enjoying ${t.hostName}'s cup?</div><div class="small muted">Send a free tip. The host gets all of it.</div></div>
+        ${tipButton({ to: t.hostId, name: t.hostName, context: 'tournament', refId: t.id, role: 'host', label: 'Tip host' })}</div>` : ''}
+
       ${myMatch ? html`<a class="notice brand" href="/match/${myMatch.id}" style="margin-top:16px;color:inherit">${ic('gamepad')}<div class="grow"><b>Your Round ${myMatch.round} match is ready</b>
         <div class="small">vs ${myMatch.homeId === uid ? myMatch.awayName : myMatch.homeName} · tap to play & upload the result</div></div>${ic('chevronRight')}</a>` : ''}
 
@@ -96,6 +101,7 @@ export default async function tournamentPage(view, { id }) {
       if (!(await confirmSheet({ title: 'Leave tournament?', message: t.entryFee ? 'Your entry fee will be refunded to your wallet.' : 'You can join again while spots are open.', confirm: 'Leave', danger: true }))) return;
       busy(e.currentTarget, async () => { await post(`/tournaments/${t.id}/leave`); toast('You left the tournament'); refreshProfile(); load(); });
     });
+    bindTipButtons(view);
     drawTab();
 
     function drawTab() {

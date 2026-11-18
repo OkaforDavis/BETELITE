@@ -9,6 +9,7 @@ import (
 	"github.com/livekit/protocol/auth"
 
 	"betelite-go/config"
+	"betelite-go/db"
 	"betelite-go/middleware"
 	"betelite-go/services"
 	"betelite-go/utils"
@@ -40,6 +41,37 @@ func SetupStreamRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		streamsMu.RUnlock()
 		return utils.SendSuccess(c, fiber.Map{"streams": list})
+	})
+
+	// Tips: free thank-yous to a host or player, sent from a cup, match or stream.
+	tips := api.Group("/tips", middleware.AuthRequired(), dbRequired)
+	tips.Get("/options", func(c *fiber.Ctx) error {
+		var currency string
+		var balance int64
+		db.Pool.QueryRow(c.Context(), "SELECT COALESCE(currency,'NGN'), balance FROM users WHERE id = $1", middleware.GetUID(c)).Scan(&currency, &balance)
+		return utils.SendSuccess(c, fiber.Map{"currency": currency, "balance": balance, "min": services.MinTip[currency], "max": services.MaxTip[currency],
+			"daily": services.MaxTipDaily[currency], "presets": services.TipPresets[currency]})
+	})
+	tips.Post("/", func(c *fiber.Ctx) error {
+		var req services.TipRequest
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		if req.Context == "stream" {
+			streamsMu.RLock()
+			s, ok := streams[req.RefID]
+			streamsMu.RUnlock()
+			if !ok || s.HostID != req.To {
+				return utils.SendError(c, 400, "This stream has ended")
+			}
+		} else if err := services.TipAllowed(c.Context(), req); err != nil {
+			return fail(c, err)
+		}
+		res, err := services.SendTip(c.Context(), middleware.GetUID(c), req)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"tip": res})
 	})
 
 	st := api.Group("/streams", middleware.AuthRequired())
