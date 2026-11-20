@@ -134,6 +134,7 @@ async function travelPrompt() {
   const { profile, location } = store.get();
   const local = location?.currency;
   if (!location?.country || !local || local === profile.currency || !['NGN', 'GHS'].includes(local)) return;
+  if (profile.country && profile.country === location.country) return; // at home: never ask
   try { if (sessionStorage.getItem('crestarena.travelAsked')) return; sessionStorage.setItem('crestarena.travelAsked', '1'); } catch { return; }
   const names = { NGN: ['Nigeria', 'naira'], GHS: ['Ghana', 'cedis'] };
   const { confirmSheet } = await import('./ui.js');

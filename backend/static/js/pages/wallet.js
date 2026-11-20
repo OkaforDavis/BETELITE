@@ -2,7 +2,7 @@ import { get, post, quietPost, quietGet } from '../api.js';
 import { store } from '../store.js';
 import { html, ic, money, sym, timeAgo, sheet, sheetHead, busy, toast, empty, skeleton } from '../ui.js';
 import { needsConsent, consentGate } from '../consent.js';
-import { grossUp, transferFee, payCurrency, openCheckout } from '../components.js';
+import { grossUp, transferFee, payCurrency, openCheckout, awayFromHome } from '../components.js';
 import { refreshProfile } from '../app.js';
 
 const TX = {
@@ -99,7 +99,9 @@ export default async function wallet(view, { query }) {
   function deposit(prefill) {
     if (!gate()) return;
     const cur = w.currency;
-    const payCurs = (w.payCurrencies || []).filter((c) => ['NGN', 'GHS'].includes(c));
+    // Only offer another currency when travelling, or if the player chose one in Profile.
+    const offerOther = awayFromHome() || (payCurrency() && payCurrency() !== cur);
+    const payCurs = offerOther ? (w.payCurrencies || []).filter((c) => ['NGN', 'GHS'].includes(c)) : [];
     let payCur = payCurrency() || cur;
     if (!payCurs.includes(payCur)) payCur = cur;
     const CUR_NAME = { NGN: 'Naira (₦)', GHS: 'Cedis (₵)' };
