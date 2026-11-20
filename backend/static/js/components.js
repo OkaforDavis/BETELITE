@@ -177,6 +177,16 @@ export function transferFee(amount, cur, bankType, provider = 'paystack') {
 
 // The currency this player pays in: this visit's choice, then their saved
 // preference (Profile → Payment currency), else their wallet currency.
+// True when the player is in another supported country than their wallet's
+// (e.g. a Ghana wallet in Nigeria). At home we never offer another currency.
+export function awayFromHome() {
+  const { profile, location } = store.get();
+  const local = location?.currency;
+  if (!profile || !location?.country || !['NGN', 'GHS'].includes(local)) return false;
+  if (profile.country && profile.country === location.country) return false;
+  return local !== profile.currency;
+}
+
 export function payCurrency() {
   const { profile, payCurrencies } = store.get();
   let pick = null;
