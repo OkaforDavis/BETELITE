@@ -136,6 +136,13 @@ func SetupMeRoutes(api fiber.Router) {
 		if err := c.BodyParser(&req); err != nil || !req.Accept {
 			return utils.SendError(c, 400, "You must accept the Terms and Privacy Policy")
 		}
+		// Terms update: the date of birth is already on file, so it isn't asked again.
+		if req.BirthDate == "" {
+			if err := services.AcceptTermsUpdate(c.Context(), middleware.GetUID(c)); err != nil {
+				return fail(c, err)
+			}
+			return utils.SendSuccess(c, fiber.Map{})
+		}
 		birth, err := time.Parse("2006-01-02", req.BirthDate)
 		if err != nil {
 			return utils.SendError(c, 400, "Please enter your date of birth")
