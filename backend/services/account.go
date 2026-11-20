@@ -127,6 +127,18 @@ func AcceptTerms(ctx context.Context, uid string, birth time.Time, marketing boo
 	return err
 }
 
+// AcceptTermsUpdate records consent to new terms for a player whose age is
+// already on file, without asking for their date of birth again.
+func AcceptTermsUpdate(ctx context.Context, uid string) error {
+	var birth *time.Time
+	db.Pool.QueryRow(ctx, "SELECT birth_date FROM users WHERE id = $1", uid).Scan(&birth)
+	if birth == nil || age(*birth) < MinAge {
+		return userErr(400, "Please enter your date of birth")
+	}
+	_, err := db.Pool.Exec(ctx, `UPDATE users SET terms_version = $2, terms_accepted_at = NOW(), updated_at = NOW() WHERE id = $1`, uid, TermsVersion)
+	return err
+}
+
 // ExportUserData collects everything stored about a user (data portability).
 func ExportUserData(ctx context.Context, uid string) (map[string]any, error) {
 	out := map[string]any{"exportedAt": time.Now().UTC()}
