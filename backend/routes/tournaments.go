@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -20,6 +21,7 @@ import (
 type tournamentView struct {
 	ID               string               `json:"id"`
 	Name             string               `json:"name"`
+	Description      string               `json:"description,omitempty"`
 	Game             string               `json:"game"`
 	GameName         string               `json:"gameName"`
 	Format           string               `json:"format"`
@@ -56,7 +58,7 @@ const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
 	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry),
-	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only FROM tournaments t`
+	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only, COALESCE(t.description,'') FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
@@ -64,7 +66,7 @@ func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
 		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
-		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly); err != nil {
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly, &t.Description); err != nil {
 		return nil, err
 	}
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
@@ -148,6 +150,23 @@ func SetupTournamentRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{})
+	})
+
+	// Edit a cup after posting: the host, or an admin. Prizes never change.
+	tr.Post("/:id/edit", func(c *fiber.Ctx) error {
+		var req services.EditTournamentRequest
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		tid, uid := c.Params("id"), middleware.GetUID(c)
+		changes, err := services.EditTournament(c.Context(), tid, uid, middleware.IsAdminCtx(c), req)
+		if err != nil {
+			return fail(c, err)
+		}
+		if len(changes) > 0 {
+			go notifyTournamentEdit(tid, uid, strings.Join(changes, ", "))
+		}
+		return utils.SendSuccess(c, fiber.Map{"changed": len(changes) > 0})
 	})
 
 	tr.Get("/:id", func(c *fiber.Ctx) error {
@@ -330,6 +349,22 @@ func SetupTournamentRoutes(api fiber.Router) {
 		}
 		return utils.SendSuccess(c, fiber.Map{})
 	})
+}
+
+// notifyTournamentEdit tells the players who joined what the host changed.
+func notifyTournamentEdit(tid, editor, what string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	var name string
+	db.Pool.QueryRow(ctx, "SELECT name FROM tournaments WHERE id = $1", tid).Scan(&name)
+	rows, err := db.Pool.Query(ctx, "SELECT user_id FROM tournament_players WHERE tournament_id = $1 AND user_id <> $2", tid, editor)
+	if err != nil {
+		return
+	}
+	ids, _ := pgx.CollectRows(rows, pgx.RowTo[string])
+	for _, id := range ids {
+		services.Notify(id, "tournament_update", "Cup updated: "+name, "Changed: "+what+". Prizes stay the same.", "/tournaments/"+tid, map[string]any{"tournamentId": tid})
+	}
 }
 
 func notifyTournamentStart(tid, name string) {

@@ -1,6 +1,6 @@
 import { get, post } from '../api.js';
 import { store, gameInfo, resultScreen } from '../store.js';
-import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet, shareLink } from '../ui.js';
+import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet, shareLink, sheet, sheetHead } from '../ui.js';
 import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
 import { needsConsent, consentGate } from '../consent.js';
@@ -37,6 +37,7 @@ export default async function tournamentPage(view, { id }) {
     const membersUntil = t.membersOnlyUntil && new Date(t.membersOnlyUntil) > new Date() ? new Date(t.membersOnlyUntil) : null;
     const roundLabel = t.totalRounds ? `Round ${t.currentRound} of ${t.totalRounds}` : `Round ${t.currentRound}`;
     const isHost = !!t.hostId && t.hostId === uid;
+    const canEdit = (isHost || store.get().profile.isAdmin) && ['open', 'active'].includes(t.status);
     const fillBy = t.fillDeadline && t.status === 'open' ? new Date(t.fillDeadline) : null;
 
     view.innerHTML = String(html`<div class="page">
@@ -50,7 +51,9 @@ export default async function tournamentPage(view, { id }) {
           ${t.status === 'active' ? html`<span class="badge live info">${roundLabel}</span>` : ''}
           ${t.status === 'finished' ? html`<span class="badge">Finished</span>` : ''}
         </div>
-        <div class="h1" style="margin-top:12px">${t.name}</div>
+        <div class="row between" style="margin-top:12px;gap:8px;align-items:flex-start"><div class="h1">${t.name}</div>
+          ${canEdit ? html`<button class="btn ghost sm" id="edit-cup">${ic('edit')} Edit</button>` : ''}</div>
+        ${t.description ? html`<p class="small muted" style="margin-top:8px;white-space:pre-line">${t.description}</p>` : ''}
         <div class="grid-3" style="margin-top:18px">
           <div class="stat"><div class="v num">${t.entryFee ? money(t.entryFee, t.currency) : t.membersOnly ? 'Members' : t.hostId ? 'Free' : '1 entry'}</div><div class="k">Entry</div></div>
           <div class="stat"><div class="v num brand-text">${money(prizes.list[0] || 0, prizes.cur)}</div><div class="k">1st prize</div></div>
@@ -97,6 +100,7 @@ export default async function tournamentPage(view, { id }) {
         url: `${location.origin}/tournaments/${t.id}`,
       });
     });
+    view.querySelector('#edit-cup')?.addEventListener('click', () => editCup(t, load));
     view.querySelector('#cancel-cup')?.addEventListener('click', async (e) => {
       if (!(await confirmSheet({ title: 'Cancel your cup?', message: 'Everyone who joined is told, and the prize pool and hosting fee go back to your wallet.', confirm: 'Cancel cup', danger: true }))) return;
       busy(e.currentTarget, async () => { await post(`/tournaments/${t.id}/cancel`); toast('Cup cancelled and refunded'); refreshProfile(); navigate('/tournaments'); });
@@ -147,6 +151,53 @@ export default async function tournamentPage(view, { id }) {
   }
 
   await load();
+}
+
+// Edit a cup after posting. Prizes, entry, game and format can't change; round
+// length, size and members-only only until the cup starts.
+const SIZES = { knockout: [4, 8, 16, 32, 64], swiss: [8, 16, 32], league: [4, 5, 6, 7, 8] };
+function editCup(t, reload) {
+  const open = t.status === 'open';
+  const hostCup = !!t.hostId;
+  const sizes = hostCup && !t.entryFee ? (SIZES[t.format] || []).filter((n) => n > t.playerCount || n === t.maxPlayers) : [];
+  sheet(String(html`${sheetHead('Edit cup', 'Prizes stay the same. Players who joined get a notification.')}
+    <form id="edit-form">
+      <label class="field"><span class="label">Name</span>
+        <input class="input" name="name" required minlength="3" maxlength="40" value="${t.name}"></label>
+      <label class="field"><span class="label">Description and rules <span class="faint">(optional)</span></span>
+        <textarea class="input" name="description" rows="4" maxlength="600" placeholder="E.g. No legendary players. 6-minute halves. Join our WhatsApp group for updates.">${t.description || ''}</textarea></label>
+      ${open ? html`
+        <label class="field"><span class="label">Time per round</span>
+          ${hostCup ? html`<select class="input" name="roundHours">${[12, 24, 48].map((h) => html`<option value="${h}" ${h === t.roundHours ? 'selected' : ''}>${h} hours</option>`)}</select>`
+            : html`<input class="input num" name="roundHours" type="number" min="1" max="168" value="${t.roundHours}">`}</label>
+        ${sizes.length > 1 ? html`<label class="field"><span class="label">Players</span>
+          <select class="input" name="maxPlayers">${sizes.map((n) => html`<option value="${n}" ${n === t.maxPlayers ? 'selected' : ''}>${n} players</option>`)}</select>
+          ${t.playerCount ? html`<span class="hint">${t.playerCount} joined already</span>` : ''}</label>` : ''}
+        ${hostCup ? html`<label class="check" style="margin-top:14px"><input type="checkbox" name="membersOnly" ${t.membersOnly ? 'checked' : ''}><span>Members only (players with a paid plan)</span></label>` : ''}`
+      : html`<p class="small muted" style="margin-top:12px">The cup has started, so only the name and description can change.</p>`}
+      <div class="notice" style="margin-top:14px">${ic('lock')}<div class="small">The prize${t.entryFee ? ', entry fee' : ''}, game and format can't be changed after posting. To change those, cancel and post a new cup.</div></div>
+      <div class="sheet-actions"><button class="btn primary block" type="submit">Save changes</button></div>
+    </form>`), {
+    label: 'Edit cup',
+    onMount(root, close) {
+      const f = root.querySelector('#edit-form');
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const d = new FormData(f);
+        busy(f.querySelector('[type=submit]'), async () => {
+          const { changed } = await post(`/tournaments/${t.id}/edit`, {
+            name: d.get('name'), description: d.get('description') || '',
+            roundHours: Number(d.get('roundHours') || t.roundHours),
+            maxPlayers: Number(d.get('maxPlayers') || t.maxPlayers),
+            membersOnly: open && hostCup ? d.get('membersOnly') === 'on' : t.membersOnly,
+          });
+          close();
+          toast(changed ? 'Cup updated' : 'Nothing changed');
+          if (changed) reload();
+        });
+      };
+    },
+  });
 }
 
 function overview(t) {

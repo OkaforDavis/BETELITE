@@ -378,6 +378,9 @@ var migrations = []string{
 	// 16: Elite members' free withdrawals. fee_waived is the transfer fee
 	// CrestArena paid instead of the player (0 = the player paid it).
 	`ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS fee_waived BIGINT NOT NULL DEFAULT 0;`,
+
+	// 17: a cup's description / rules, written by the host and editable later.
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.
