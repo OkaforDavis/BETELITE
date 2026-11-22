@@ -582,3 +582,10 @@ button.list-row:active { background: var(--surface-2); }
 .tour-tip[data-side=below] .tour-arrow { top: -8px; border-right: 0; border-bottom: 0; }
 .tour-tip[data-side=above] .tour-arrow { bottom: -8px; border-left: 0; border-top: 0; }
 @media (prefers-reduced-motion: reduce) { .tour-dot { animation: none; } .tour-ring, .tour-tip { transition: none; } }
+
+/* Cup cover pictures (16:9) */
+.cup-cover { aspect-ratio: 16 / 9; overflow: hidden; background: var(--surface); }
+.cup-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card > .cup-cover:first-child { margin: -16px -16px 14px; border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0; }
+.card.pad-lg > .cup-cover:first-child { margin: -20px -20px 16px; }
+.cover-edit { border-radius: var(--r-sm); border: 1px dashed var(--line); display: grid; place-items: center; color: var(--text-3); }
