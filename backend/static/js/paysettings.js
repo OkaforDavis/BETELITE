@@ -3,6 +3,7 @@ import { post } from './api.js';
 import { store } from './store.js';
 import { html, ic, money, sheet, sheetHead, busy, toast, confirmSheet } from './ui.js';
 import { refreshProfile } from './app.js';
+import { awayFromHome } from './components.js';
 
 const NAMES = { NGN: ['Nigeria', 'Naira (₦)'], GHS: ['Ghana', 'Cedis (₵)'] };
 
@@ -14,9 +15,10 @@ export function paySettingsSheet() {
   const hs = homeSwitch || {};
 
   sheet(String(html`${sheetHead('Payment currency & country', 'How you pay, and where your wallet lives')}
-    <label class="field" style="margin-top:0"><span class="label">Pay in</span>
+    ${awayFromHome() || pref !== 'auto' ? html`<label class="field" style="margin-top:0"><span class="label">Pay in</span>
       <select class="select" name="pref">${options.map(([v, l]) => html`<option value="${v}" ${v === pref ? 'selected' : ''}>${l}</option>`)}</select></label>
-    <p class="hint">Paying in another currency converts at today's rate with a 3% exchange margin. Your wallet, prizes and withdrawals stay in your home currency.</p>
+    <p class="hint">Paying in another currency converts at today's rate with a 3% exchange margin. Your wallet, prizes and withdrawals stay in your home currency.</p>`
+    : html`<p class="small muted" style="margin-top:0">You pay in ${NAMES[profile.currency]?.[1] || profile.currency}, your home currency. If you travel to another country we support, you can pay in its currency there.</p>`}
 
     <div class="card flat" style="margin-top:16px">
       <div class="small muted">Home country (wallet currency)</div>
@@ -30,13 +32,13 @@ export function paySettingsSheet() {
     </div>`), {
     label: 'Payment currency and country',
     onMount(root, close) {
-      root.querySelector('[name=pref]').onchange = (e) => {
+      root.querySelector('[name=pref]')?.addEventListener('change', (e) => {
         try {
           localStorage.setItem('crestarena.payCurrencyPref', e.target.value);
           sessionStorage.removeItem('crestarena.payCurrency'); // a saved choice replaces this visit's choice
         } catch { /* private mode */ }
         toast('Payment currency saved');
-      };
+      });
       root.querySelector('#move')?.addEventListener('click', async (e) => {
         const ok = await confirmSheet({
           title: `Move your wallet to ${NAMES[hs.to]?.[0]}?`,
