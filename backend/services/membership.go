@@ -54,7 +54,7 @@ var Tiers = []Tier{
 	{ID: "pro_plus", Name: "Pro Plus", Rank: 2, Entries: FreeEntries + 3, Cashback: 7, Prices: map[string]int64{"GHS": 50_00, "NGN": 5_800_00}, Perks: []string{
 		"3 tournaments + your free one", "Go live and chat in streams", "Pro Plus badge", "Early tournament sign-up", "7% cashback when you renew"}},
 	{ID: "elite", Name: "Elite", Rank: 3, Entries: FreeEntries + 5, Cashback: 10, Prices: map[string]int64{"GHS": 80_00, "NGN": 9_200_00}, Perks: []string{
-		"5 tournaments + your free one", "Host 1 cup a month with no hosting fee", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
+		"5 tournaments + your free one", "Host 1 cup a month with no hosting fee", "5 free withdrawals a month (no transfer fee)", "Go live and chat in streams", "Elite badge", "Early sign-up, including the End-of-Month Platter", "10% cashback when you renew"}},
 }
 
 // UpgradePrices is what a member on a lower plan pays to switch to Elite

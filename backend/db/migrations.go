@@ -374,6 +374,10 @@ var migrations = []string{
 	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_link TEXT;
 	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_by TEXT;
 	ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_at TIMESTAMPTZ;`,
+
+	// 16: Elite members' free withdrawals. fee_waived is the transfer fee
+	// CrestArena paid instead of the player (0 = the player paid it).
+	`ALTER TABLE withdrawals ADD COLUMN IF NOT EXISTS fee_waived BIGINT NOT NULL DEFAULT 0;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.
