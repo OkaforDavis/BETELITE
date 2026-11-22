@@ -1,4 +1,4 @@
-import { get, post } from '../api.js';
+import { get, post, api } from '../api.js';
 import { store, gameInfo, resultScreen } from '../store.js';
 import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet, shareLink, sheet, sheetHead } from '../ui.js';
 import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
@@ -43,6 +43,7 @@ export default async function tournamentPage(view, { id }) {
     view.innerHTML = String(html`<div class="page">
       <a href="/tournaments" class="row small muted" style="gap:4px;margin-bottom:12px">${ic('chevronLeft')}Tournaments</a>
       <div class="card pad-lg">
+        ${t.coverUrl ? html`<div class="cup-cover"><img src="${t.coverUrl}" alt="${t.name}"></div>` : ''}
         <div class="row" style="gap:8px">
           ${formatBadge(t)}
           <span class="badge">${t.gameName}</span>
@@ -62,7 +63,7 @@ export default async function tournamentPage(view, { id }) {
         ${t.status === 'open' ? html`
           <div class="progress" style="margin-top:16px"><span style="width:${pct}%"></span></div>
           <div class="small muted" style="margin-top:8px">${t.maxPlayers - t.playerCount} spots left${t.freeSeats != null ? html` · free spots ${Math.max(t.freeSeats - t.freeTaken, 0)} of ${t.freeSeats}` : ''} · starts automatically when full${fillBy ? html` · fills by ${fillBy.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} or it's cancelled` : ''}</div>
-          ${isHost ? html`<div class="notice" style="margin-top:12px">${ic('info')}<div class="small"><b>You're hosting.</b> Prize pool ${money(t.hostPool, t.currency)}${t.hostFee ? ` + ${money(t.hostFee, t.currency)} fee` : ' · no fee (Elite)'}. Share the link to fill it up. New players who join and get their first membership earn you a commission.</div></div>` : ''}
+          ${isHost ? html`<div class="notice" style="margin-top:12px">${ic('info')}<div class="small"><b>You're hosting.</b> Prize pool ${money(t.hostPool, t.currency)}${t.hostFee ? ` + ${money(t.hostFee, t.currency)} fee` : ' · no fee (Elite)'}. ${t.coverUrl ? '' : 'Tap Edit to add a cover picture. '}Share the link to fill it up. New players who join and get their first membership earn you a commission.</div></div>` : ''}
           ${membersUntil && !t.joined ? html`<div class="notice brand" style="margin-top:12px">${ic('sparkles')}<div class="small"><b>${t.earlyTier === 'elite' ? 'Elite' : 'Members'}' early sign-up</b> until ${membersUntil.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Then it opens to everyone.</div></div>` : ''}
           <div style="margin-top:16px">${t.joined
             ? html`<div class="notice brand">${ic('checkCircle')}<div><b>You're registered</b><div class="small">We'll notify you when it starts.</div></div></div>
@@ -161,6 +162,12 @@ function editCup(t, reload) {
   const hostCup = !!t.hostId;
   const sizes = hostCup && !t.entryFee ? (SIZES[t.format] || []).filter((n) => n > t.playerCount || n === t.maxPlayers) : [];
   sheet(String(html`${sheetHead('Edit cup', 'Prizes stay the same. Players who joined get a notification.')}
+    <div class="field"><span class="label">Cover picture <span class="faint">(optional, wide pictures look best)</span></span>
+      <div class="cup-cover cover-edit" id="cover-preview">${t.coverUrl ? html`<img src="${t.coverUrl}" alt="Cover">` : html`<span class="small">${ic('image')} No picture yet</span>`}</div>
+      <input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp" class="sr-only">
+      <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn secondary sm" id="cover-pick">${ic('image')} ${t.coverUrl ? 'Change picture' : 'Add picture'}</button>
+        <button type="button" class="btn ghost sm" id="cover-remove" ${t.coverUrl ? '' : 'hidden'}>${ic('trash')} Remove</button></div>
+      <span class="hint">Your cup logo, a game poster or a sponsor banner. No offensive pictures: they'll be removed.</span></div>
     <form id="edit-form">
       <label class="field"><span class="label">Name</span>
         <input class="input" name="name" required minlength="3" maxlength="40" value="${t.name}"></label>
@@ -180,6 +187,7 @@ function editCup(t, reload) {
     </form>`), {
     label: 'Edit cup',
     onMount(root, close) {
+      bindCover(root, t, reload);
       const f = root.querySelector('#edit-form');
       f.onsubmit = (e) => {
         e.preventDefault();
@@ -197,6 +205,51 @@ function editCup(t, reload) {
         });
       };
     },
+  });
+}
+
+// Shrinks a picture in the browser before upload (the server crops it to 16:9).
+async function coverJpeg(file, maxSide = 1600) {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) throw new Error("We couldn't open that picture. Try a JPG or PNG.");
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale) });
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+// The cover picture saves as soon as it's chosen.
+function bindCover(root, t, reload) {
+  const input = root.querySelector('#cover-file');
+  const pick = root.querySelector('#cover-pick');
+  const remove = root.querySelector('#cover-remove');
+  const preview = root.querySelector('#cover-preview');
+  pick.onclick = () => input.click();
+  input.onchange = () => {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) return toast('That picture is too large', 'err');
+    busy(pick, async () => {
+      const blob = await coverJpeg(file);
+      const fd = new FormData();
+      fd.append('image', blob, 'cover.jpg');
+      const { coverUrl } = await api('PUT', `/tournaments/${t.id}/cover`, fd, { form: true });
+      t.coverUrl = coverUrl;
+      preview.innerHTML = String(html`<img src="${coverUrl}" alt="Cover">`);
+      remove.hidden = false;
+      toast('Cover picture saved');
+      reload();
+    });
+  };
+  remove.onclick = () => busy(remove, async () => {
+    await api('DELETE', `/tournaments/${t.id}/cover`);
+    t.coverUrl = '';
+    preview.innerHTML = String(html`<span class="small">${ic('image')} No picture yet</span>`);
+    remove.hidden = true;
+    toast('Cover picture removed');
+    reload();
   });
 }
 

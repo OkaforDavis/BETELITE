@@ -381,6 +381,14 @@ var migrations = []string{
 
 	// 17: a cup's description / rules, written by the host and editable later.
 	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT;`,
+
+	// 18: a cup's cover picture (16:9 banner).
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS cover_url TEXT;
+	CREATE TABLE IF NOT EXISTS tournament_covers (
+		tournament_id TEXT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+		image BYTEA NOT NULL,
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

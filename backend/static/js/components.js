@@ -95,6 +95,7 @@ export function tournamentCard(t) {
   const status = { open: ['Registering', 'brand'], active: ['In progress', 'live info'], finished: ['Finished', ''], cancelled: ['Cancelled', 'danger'] }[t.status] || [t.status, ''];
   return html`
   <a class="card tap" href="/tournaments/${t.id}" style="display:block;color:inherit">
+    ${t.coverUrl ? html`<div class="cup-cover"><img src="${t.coverUrl}" alt="" loading="lazy" decoding="async"></div>` : ''}
     <div class="row between">
       <span class="row" style="gap:6px">${formatBadge(t)}${t.hostId ? html`<span class="badge info">${ic('users')}Host cup</span>` : ''}${t.membersOnly ? html`<span class="badge tier-pro">${ic('sparkles')}Members</span>` : ''}${early ? html`<span class="badge tier-pro">${ic('sparkles')}Members first</span>` : ''}</span>
       <span class="badge ${status[1]}">${status[0]}</span>

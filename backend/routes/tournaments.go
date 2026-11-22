@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ type tournamentView struct {
 	ID               string               `json:"id"`
 	Name             string               `json:"name"`
 	Description      string               `json:"description,omitempty"`
+	CoverURL         string               `json:"coverUrl,omitempty"`
 	Game             string               `json:"game"`
 	GameName         string               `json:"gameName"`
 	Format           string               `json:"format"`
@@ -58,7 +61,7 @@ const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
 	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry),
-	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only, COALESCE(t.description,'') FROM tournaments t`
+	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only, COALESCE(t.description,''), COALESCE(t.cover_url,'') FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
@@ -66,7 +69,7 @@ func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
 		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
-		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly, &t.Description); err != nil {
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly, &t.Description, &t.CoverURL); err != nil {
 		return nil, err
 	}
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
@@ -88,7 +91,58 @@ func scanTournament(row pgx.Row) (*tournamentView, error) {
 }
 
 func SetupTournamentRoutes(api fiber.Router) {
+	// Public: cup cover pictures (for <img> tags and link previews). The URL
+	// carries ?v=<timestamp>, so it can be cached long.
+	api.Get("/tournament-covers/:id", dbRequired, func(c *fiber.Ctx) error {
+		img, updated, err := services.LoadCover(c.Context(), c.Params("id"))
+		if err != nil {
+			return fail(c, err)
+		}
+		if img == nil {
+			return fiber.ErrNotFound
+		}
+		c.Set("Cache-Control", "public, max-age=604800, immutable")
+		c.Set("Last-Modified", updated.UTC().Format(http.TimeFormat))
+		c.Set("Content-Type", "image/jpeg")
+		return c.Send(img)
+	})
+
 	tr := api.Group("/tournaments", middleware.AuthRequired(), dbRequired)
+
+	// Cover picture: the host or an admin. Multipart "image".
+	tr.Put("/:id/cover", func(c *fiber.Ctx) error {
+		fh, err := c.FormFile("image")
+		if err != nil {
+			return utils.SendError(c, 400, "Choose a picture")
+		}
+		if fh.Size > services.CoverMaxUpload {
+			return utils.SendError(c, 400, "Choose an image under 5 MB")
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return fail(c, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(f, services.CoverMaxUpload+1))
+		f.Close()
+		if err != nil {
+			return fail(c, err)
+		}
+		jpg, err := services.ProcessCover(data)
+		if err != nil {
+			return fail(c, err)
+		}
+		url, err := services.SaveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), jpg)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"coverUrl": url})
+	})
+	tr.Delete("/:id/cover", func(c *fiber.Ctx) error {
+		if err := services.RemoveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c)); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
 
 	tr.Get("/", func(c *fiber.Ctx) error {
 		rows, err := db.Pool.Query(c.Context(), tournamentSelect+`
