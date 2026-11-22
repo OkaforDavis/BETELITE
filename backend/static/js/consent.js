@@ -52,18 +52,18 @@ export function consentGate(profile, onDone) {
           <button type="button" data-cur="GHS" class="${profile.currency === 'GHS' ? 'active' : ''}">Ghana · ₵ GHS</button>
         </div>
         <p class="hint">Your wallet currency. It can't be changed after your first deposit.</p></div>` : ''}
-      <label class="field"><span class="label">Date of birth</span>
+      ${isUpdate ? '' : html`<label class="field"><span class="label">Date of birth</span>
         <input class="input" type="date" name="birthDate" max="${maxStr}" min="1900-01-01" required>
-        <span class="hint">You must be 18 or older. We use this only to confirm your age.</span></label>
+        <span class="hint">You must be 18 or older. We use this only to confirm your age.</span></label>`}
       <div class="field stack-sm" style="margin-top:18px">
         <label class="check"><input type="checkbox" name="accept" required>
           <span>I have read and agree to the <a href="/legal/terms.html" target="_blank">Terms of Service</a>,
           <a href="/legal/privacy.html" target="_blank">Privacy Policy</a> and
           <a href="/legal/responsible-gaming.html" target="_blank">Responsible Gaming Policy</a>.</span></label>
-        <label class="check"><input type="checkbox" name="adult" required>
+        ${isUpdate ? '' : html`<label class="check"><input type="checkbox" name="adult" required>
           <span>I confirm I am 18+ and that playing skill games for money is legal where I live.</span></label>
         <label class="check"><input type="checkbox" name="marketing">
-          <span>Send me news about tournaments and promotions (optional).</span></label>
+          <span>Send me news about tournaments and promotions (optional).</span></label>`}
       </div>
       <div class="form-error" id="consent-error" role="alert" hidden></div>
       <div class="sheet-actions"><button class="btn primary block" type="submit">Continue</button></div>
@@ -82,6 +82,12 @@ export function consentGate(profile, onDone) {
         const f = new FormData(e.target);
         err.hidden = true;
         const fail = (m) => { err.textContent = m; err.hidden = false; };
+        if (isUpdate) {
+          if (!f.get('accept')) return fail('Please tick the box to continue.');
+          return busy(e.target.querySelector('[type=submit]'), async () => {
+            try { await post('/me/consent', { accept: true }); close(); onDone(); } catch (e2) { fail(e2.message); }
+          });
+        }
         if (!f.get('birthDate')) return fail('Enter your date of birth.');
         if (!f.get('accept') || !f.get('adult')) return fail('Please tick both boxes to continue.');
         busy(e.target.querySelector('[type=submit]'), async () => {
