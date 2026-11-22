@@ -10,7 +10,7 @@ const ICONS = {
   match_room: ['gamepad', 'brand'],
   deposit: ['arrowDown', 'brand'], withdrawal: ['bank', 'info'],
   tournament_started: ['trophy', 'brand'], tournament_round: ['trophy', 'info'], tournament_finished: ['crown', 'brand'],
-  tournament_cancelled: ['xCircle', 'danger'], admin_review: ['shield', 'warn'],
+  tournament_cancelled: ['xCircle', 'danger'], tournament_update: ['edit', 'info'], admin_review: ['shield', 'warn'],
 };
 
 export default async function notificationsPage(view) {
