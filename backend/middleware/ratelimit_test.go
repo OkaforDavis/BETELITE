@@ -6,11 +6,15 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+
+	"betelite-go/config"
 )
 
 // Many players behind one carrier IP must not block each other, but one
 // player making too many requests is limited.
 func TestRateLimitPerUserNotPerSharedIP(t *testing.T) {
+	// The server loads these from the environment at startup; tests use the defaults.
+	config.Cfg.RateLimitPerIP, config.Cfg.RateLimitPerUser = 3000, 300
 	app := fiber.New()
 	app.Use(RateLimiter(), RateLimiterUser())
 	app.Get("/", func(c *fiber.Ctx) error { return c.SendString("ok") })
