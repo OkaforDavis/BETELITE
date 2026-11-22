@@ -95,12 +95,22 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => {
   deferredInstall = null;
+  try { localStorage.setItem(INSTALLED, '1'); } catch { /* ignore */ }
   document.querySelector('.banner.install')?.remove();
   document.dispatchEvent(new Event('installable'));
   toast('CrestArena installed on your device');
 });
 
-export const canInstall = () => !isStandalone() && (!!deferredInstall || isIOS);
+const INSTALLED = 'crestarena.installed';
+const installedHere = () => { try { return localStorage.getItem(INSTALLED) === '1'; } catch { return false; } };
+// In-app browsers (Instagram, TikTok, Facebook…) can't install web apps.
+const inAppBrowser = () => /FBAN|FBAV|FB_IAB|Instagram|musical_ly|TikTok|BytedanceWebview|Snapchat|Line\//i.test(navigator.userAgent);
+
+// The install option stays available in any browser tab (not inside the app):
+// if Chrome's own prompt isn't ready, we show the steps to install by hand.
+// Home hides it once this device has installed the app; Profile always offers it.
+export const canInstall = () => !isStandalone() && !installedHere();
+export const canInstallAgain = () => !isStandalone();
 
 // onInstallable runs fn whenever the install state changes; returns an unsubscribe.
 export function onInstallable(fn) {
@@ -131,25 +141,77 @@ function showInstallBanner() {
 }
 
 export async function promptInstall() {
-  if (deferredInstall) {
+  if (deferredInstall && !inAppBrowser()) {
+    // Chrome allows each install prompt to be used only once, so never keep it.
     const ev = deferredInstall;
     deferredInstall = null;
-    ev.prompt();
-    const choice = await ev.userChoice.catch(() => null);
-    if (choice?.outcome !== 'accepted') deferredInstall = ev; // keep the offer if they said no
-    document.dispatchEvent(new Event('installable'));
-    return;
+    try {
+      await ev.prompt();
+      const choice = await ev.userChoice;
+      document.dispatchEvent(new Event('installable'));
+      // Accepted: Chrome installs it. Cancelled: the option stays; next tap shows the manual steps.
+      if (choice) return;
+    } catch { /* the prompt failed: fall through to the manual steps */ }
   }
-  if (isIOS) {
-    sheet(String(html`${sheetHead('Install on iPhone', 'Get match alerts and full-screen play')}
-      <ol class="list" style="list-style:none">
-        <li class="list-row"><div class="icon-tile">${ic('share')}</div><div>Tap the <b>Share</b> button in Safari's toolbar</div></li>
-        <li class="list-row"><div class="icon-tile">${ic('plus')}</div><div>Scroll down and tap <b>Add to Home Screen</b></div></li>
-        <li class="list-row"><div class="icon-tile brand">${ic('checkCircle')}</div><div>Tap <b>Add</b>, then open CrestArena from your Home Screen</div></li>
-      </ol>
-      <p class="hint" style="margin-top:12px">Must be opened in Safari. iPhone notifications need iOS 16.4 or newer and the app added to your Home Screen.</p>
-      <div class="sheet-actions"><button class="btn secondary block" data-close>Got it</button></div>`), { label: 'Install' });
+  manualInstall();
+}
+
+// Step-by-step install for when the browser's own prompt isn't available.
+function manualInstall() {
+  const ua = navigator.userAgent;
+  const row = (icon, text) => html`<li class="list-row"><div class="icon-tile">${ic(icon)}</div><div>${text}</div></li>`;
+  let title = 'Install CrestArena';
+  let steps;
+  let note = 'Already installed? Open CrestArena from your home screen or app list.';
+  if (inAppBrowser()) {
+    title = 'Open in your browser first';
+    steps = [
+      row('external', html`Tap the <b>⋮</b> or <b>…</b> menu at the top of this screen`),
+      row('external', html`Choose <b>Open in browser</b> (or Open in Chrome / Safari)`),
+      row('phone', html`Then tap <b>Install the app</b> again there`),
+    ];
+    note = "Apps like Instagram, TikTok and Facebook open links in their own viewer, which can't install apps.";
+  } else if (isIOS) {
+    title = 'Install on iPhone';
+    steps = [
+      row('share', html`Tap the <b>Share</b> button (square with an arrow) in the toolbar`),
+      row('plus', html`Scroll down and tap <b>Add to Home Screen</b>`),
+      row('checkCircle', html`Tap <b>Add</b>, then open CrestArena from your Home Screen`),
+    ];
+    note = 'Use Safari if you don’t see Add to Home Screen. iPhone notifications need iOS 16.4 or newer and the app on your Home Screen.';
+  } else if (/SamsungBrowser/i.test(ua)) {
+    steps = [
+      row('list', html`Tap the <b>☰</b> menu at the bottom right`),
+      row('plus', html`Tap <b>Add page to</b> → <b>Home screen</b>`),
+      row('checkCircle', html`Tap <b>Add</b>, then open CrestArena from your home screen`),
+    ];
+  } else if (/Android/i.test(ua)) {
+    steps = [
+      row('list', html`Tap the <b>⋮</b> menu at the top right of Chrome`),
+      row('plus', html`Tap <b>Install app</b> (or <b>Add to Home screen</b> → <b>Install</b>)`),
+      row('checkCircle', html`Open CrestArena from your home screen`),
+    ];
+    note += ' If it fails, close all CrestArena tabs, reopen crestarena.com in Chrome and try again.';
+  } else {
+    steps = [
+      row('download', html`Click the <b>install</b> icon at the right of the address bar`),
+      row('list', html`Or open the browser menu → <b>Save and share</b> / <b>Apps</b> → <b>Install CrestArena</b>`),
+      row('checkCircle', html`CrestArena opens in its own window`),
+    ];
   }
+  sheet(String(html`${sheetHead(title, 'Full screen, faster, with match alerts')}
+    <ol class="list" style="list-style:none">${steps}</ol>
+    <p class="hint" style="margin-top:12px">${note}</p>
+    <div class="sheet-actions">${inAppBrowser() ? html`<button class="btn primary block" data-copy-site>${ic('copy')} Copy the link</button>` : ''}
+      <button class="btn secondary block" data-close>Got it</button></div>`), {
+    label: 'Install',
+    onMount(root, close) {
+      root.querySelector('[data-close]').onclick = close;
+      root.querySelector('[data-copy-site]')?.addEventListener('click', () => {
+        navigator.clipboard?.writeText(location.origin).then(() => toast('Link copied. Paste it in Chrome or Safari.'), () => {});
+      });
+    },
+  });
 }
 
 // ── Push notifications ───────────────────────────────────────

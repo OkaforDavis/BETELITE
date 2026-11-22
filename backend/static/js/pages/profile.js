@@ -4,7 +4,7 @@ import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError, sha
 import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
 import { tierBadge, TIER_NAMES } from '../components.js';
-import { APP_VERSION, canInstall, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
+import { APP_VERSION, canInstallAgain, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification, hasPassword, changePassword, sendPasswordReset } from '../auth.js';
 import { refreshProfile } from '../app.js';
 import { resetTours } from '../tour.js';
@@ -103,7 +103,7 @@ export default async function profilePage(view, { query }) {
       <section class="section">
         <div class="section-head"><h2 class="h2">App</h2></div>
         <div class="list">
-          ${canInstall() ? html`<button class="list-row" id="install"><div class="icon-tile brand">${ic('phone')}</div>
+          ${canInstallAgain() ? html`<button class="list-row" id="install"><div class="icon-tile brand">${ic('phone')}</div>
             <div class="grow"><div class="h3">Install CrestArena</div><div class="small muted">${isIOS ? 'Add to your iPhone Home Screen' : 'Full-screen app with notifications'}</div></div>${ic('chevronRight', 'chev')}</button>` : ''}
           ${p.isAdmin ? html`<a class="list-row" href="/admin" style="color:inherit"><div class="icon-tile warn">${ic('shield')}</div><div class="grow h3">Admin dashboard</div>${ic('chevronRight', 'chev')}</a>` : ''}
           <button class="list-row" id="paysettings" style="color:inherit"><div class="icon-tile">${ic('coins')}</div><div class="grow" style="text-align:left"><div class="h3">Payment currency &amp; country</div><div class="small muted">Pay in naira or cedis; move your wallet if you relocate</div></div>${ic('chevronRight', 'chev')}</button>
