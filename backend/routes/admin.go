@@ -344,8 +344,8 @@ func SetupAdminRoutes(api fiber.Router) {
 			if places > req.MaxPlayers {
 				return utils.SendError(c, 400, "More paid places than players")
 			}
-			if req.Format == "knockout" && places > 2 {
-				return utils.SendError(c, 400, "Knockouts can pay 1st and 2nd only. Use Swiss or League to pay a top 3.")
+			if req.Format == "knockout" && places > 3 {
+				return utils.SendError(c, 400, "Knockouts can pay up to 3 places (the 3rd-place match decides 3rd). Use Swiss or League to pay more.")
 			}
 			b, _ := json.Marshal(map[string][]int64{"GHS": req.Prizes["GHS"], "NGN": req.Prizes["NGN"]})
 			prizesJSON = string(b)

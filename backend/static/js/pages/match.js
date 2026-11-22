@@ -36,7 +36,7 @@ export default async function matchPage(view, { id }) {
 
       <div class="card pad-lg">
         <div class="row between">
-          <span class="eyebrow">${m.kind === 'p2p' ? '1v1' : 'Round ' + m.round} · ${gameName(m.game)}</span>
+          <span class="eyebrow">${m.kind === 'p2p' ? '1v1' : m.thirdPlace ? '3rd-place match' : 'Round ' + m.round} · ${gameName(m.game)}</span>
           ${statusBadge(m.status)}
         </div>
         <div class="versus" style="margin:22px 0 18px">

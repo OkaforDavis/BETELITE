@@ -130,7 +130,7 @@ func HostCup(ctx context.Context, uid string, req HostCupRequest) (string, error
 	if GameByID(req.Game) == nil {
 		return "", userErr(400, "Choose a supported game")
 	}
-	places := 2
+	places := 3 // knockout: final + 3rd-place match
 	switch req.Format {
 	case "knockout":
 		if req.MaxPlayers != 4 && req.MaxPlayers != 8 && req.MaxPlayers != 16 && req.MaxPlayers != 32 && req.MaxPlayers != 64 {

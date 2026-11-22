@@ -389,6 +389,10 @@ var migrations = []string{
 		image BYTEA NOT NULL,
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);`,
+
+	// 19: knockout 3rd-place match (the two semi-final losers), played
+	// alongside the final.
+	`ALTER TABLE matches ADD COLUMN IF NOT EXISTS third_place BOOLEAN NOT NULL DEFAULT FALSE;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

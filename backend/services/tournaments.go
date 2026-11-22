@@ -289,7 +289,7 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 		return tx.Commit(ctx)
 	}
 
-	rows, err := tx.Query(ctx, "SELECT winner_id FROM matches WHERE tournament_id = $1 AND round = $2 AND winner_id IS NOT NULL ORDER BY slot", tournamentID, round)
+	rows, err := tx.Query(ctx, "SELECT winner_id FROM matches WHERE tournament_id = $1 AND round = $2 AND winner_id IS NOT NULL AND NOT third_place ORDER BY slot", tournamentID, round)
 	if err != nil {
 		return err
 	}
@@ -303,21 +303,10 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 	rows.Close()
 
 	if len(winners) <= 1 {
-		// Final played. Champion first, then everyone else by round reached.
-		order := winners
-		rest, err := tx.Query(ctx, `SELECT tp.user_id FROM tournament_players tp
-			LEFT JOIN matches m ON m.tournament_id = tp.tournament_id AND (m.home_id = tp.user_id OR m.away_id = tp.user_id)
-			WHERE tp.tournament_id = $1 GROUP BY tp.user_id ORDER BY MAX(COALESCE(m.round,0)) DESC, MAX(tp.goals) DESC`, tournamentID)
+		order, err := knockoutOrder(ctx, tx, tournamentID, round)
 		if err != nil {
 			return err
 		}
-		for rest.Next() {
-			var id string
-			if rest.Scan(&id) == nil && (len(order) == 0 || id != order[0]) {
-				order = append(order, id)
-			}
-		}
-		rest.Close()
 		if err := finishTournament(ctx, tx, tournamentID, order); err != nil {
 			return err
 		}
@@ -328,8 +317,26 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 		hours = 24
 	}
 	next := round + 1
-	if err := createKnockoutRound(ctx, tx, tournamentID, game, next, winners, time.Now().Add(time.Duration(hours)*time.Hour)); err != nil {
+	deadline := time.Now().Add(time.Duration(hours) * time.Hour)
+	if err := createKnockoutRound(ctx, tx, tournamentID, game, next, winners, deadline); err != nil {
 		return err
+	}
+	// Going into the final: the two semi-final losers play for 3rd place,
+	// with the same deadline as the final.
+	var thirdPair []string
+	if len(winners) == 2 {
+		if thirdPair, err = semiFinalLosers(ctx, tx, tournamentID, round); err != nil {
+			return err
+		}
+		if len(thirdPair) == 2 {
+			id, err := CreateMatch(ctx, tx, "tournament", game, thirdPair[0], thirdPair[1], "", tournamentID, next, 1, deadline)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, "UPDATE matches SET third_place = TRUE WHERE id = $1", id); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err := tx.Exec(ctx, "UPDATE tournaments SET current_round = $2 WHERE id = $1", tournamentID, next); err != nil {
 		return err
@@ -342,8 +349,83 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 	for _, w := range winners {
 		Notify(w, "tournament_round", name+": "+stage, "Your next match is ready. Play it and upload the result before the deadline.", "/tournaments/"+tournamentID, map[string]any{"tournamentId": tournamentID})
 	}
+	if len(thirdPair) == 2 {
+		for _, p := range thirdPair {
+			Notify(p, "tournament_round", name+": 3rd-place match", "You're still in the running for 3rd place. Play your 3rd-place match and upload the result before the deadline.", "/tournaments/"+tournamentID, map[string]any{"tournamentId": tournamentID})
+		}
+	}
 	// A bye in the new round is already final; keep going if that ended the round.
 	return advanceIfByesOnly(ctx, tournamentID)
+}
+
+// semiFinalLosers returns the players who lost a real match (not a bye or a
+// void match) in the given round.
+func semiFinalLosers(ctx context.Context, tx pgx.Tx, tournamentID string, round int) ([]string, error) {
+	rows, err := tx.Query(ctx, `SELECT CASE WHEN winner_id = home_id THEN away_id ELSE home_id END FROM matches
+		WHERE tournament_id = $1 AND round = $2 AND NOT third_place AND status = 'confirmed'
+		AND away_id IS NOT NULL AND winner_id IS NOT NULL ORDER BY slot`, tournamentID, round)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// knockoutOrder ranks a finished knockout: the final's winner and loser, then
+// the 3rd-place match's winner and loser, then everyone else by the round
+// they reached (and goals scored).
+func knockoutOrder(ctx context.Context, tx pgx.Tx, tournamentID string, finalRound int) ([]string, error) {
+	var order []string
+	seen := map[string]bool{}
+	add := func(ids ...string) {
+		for _, id := range ids {
+			if id != "" && !seen[id] {
+				seen[id] = true
+				order = append(order, id)
+			}
+		}
+	}
+	rows, err := tx.Query(ctx, `SELECT third_place, COALESCE(winner_id,''), home_id, COALESCE(away_id,'') FROM matches
+		WHERE tournament_id = $1 AND round = $2 AND status = 'confirmed' ORDER BY third_place, slot`, tournamentID, finalRound)
+	if err != nil {
+		return nil, err
+	}
+	type res struct{ winner, loser string }
+	var final, third *res
+	for rows.Next() {
+		var tp bool
+		var w, h, a string
+		if rows.Scan(&tp, &w, &h, &a) != nil || w == "" {
+			continue
+		}
+		l := h
+		if w == h {
+			l = a
+		}
+		if tp {
+			third = &res{w, l}
+		} else if final == nil {
+			final = &res{w, l}
+		}
+	}
+	rows.Close()
+	if final != nil {
+		add(final.winner, final.loser)
+	}
+	if third != nil {
+		add(third.winner, third.loser)
+	}
+	rest, err := tx.Query(ctx, `SELECT tp.user_id FROM tournament_players tp
+		LEFT JOIN matches m ON m.tournament_id = tp.tournament_id AND (m.home_id = tp.user_id OR m.away_id = tp.user_id) AND NOT m.third_place
+		WHERE tp.tournament_id = $1 GROUP BY tp.user_id ORDER BY MAX(COALESCE(m.round,0)) DESC, MAX(tp.goals) DESC`, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rest, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	add(ids...)
+	return order, nil
 }
 
 func advanceIfByesOnly(ctx context.Context, tournamentID string) error {

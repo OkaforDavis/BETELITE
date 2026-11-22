@@ -246,7 +246,7 @@ async function tournaments(body, redraw) {
         const f = root.querySelector('#ct');
         const hint = root.querySelector('#fmt-hint');
         const HINTS = {
-          knockout: 'Lose once and you are out. Pays 1st (and optionally 2nd).',
+          knockout: 'Lose once and you are out. Pays up to 3 places: the semi-final losers play a 3rd-place match.',
           swiss: 'Everyone plays every round (8 players: 3 rounds, 16: 4, 32: 5, 64: 6) against players on similar points. Top 3 by points win.',
           league: 'Everyone plays everyone once. Best for 8 players or fewer (up to 20).',
         };
