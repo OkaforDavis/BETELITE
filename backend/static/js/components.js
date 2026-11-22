@@ -168,7 +168,7 @@ export function grossUp(net, rule) {
 }
 export function transferFee(amount, cur, bankType, provider = 'paystack') {
   if (provider === 'flutterwave') {
-    if (cur === 'GHS') return Math.max(Math.floor(amount * 15 / 1000), 100);
+    if (cur === 'GHS') return Math.max(Math.ceil(amount * 15 / 1000), 1);
     return amount <= 500000 ? 1075 : amount <= 5000000 ? 2688 : 5375;
   }
   if (cur === 'GHS') return bankType === 'mobile_money' ? 100 : 800;

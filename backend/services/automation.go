@@ -52,6 +52,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	}()
 	ctx := context.Background()
 	ReconcileDeposits(ctx)
+	alertStuckWithdrawals(ctx)
 	RemindExpiringMemberships(ctx)
 	purgeOldEvidence(ctx)
 	purgeSponsors(ctx)

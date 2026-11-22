@@ -179,6 +179,10 @@ func SetupPaymentRoutes(api fiber.Router) {
 			BankType      string `json:"bankType"`
 			AccountNumber string `json:"accountNumber"`
 			AccountName   string `json:"accountName"`
+			// FeeOnTop: Amount is what the player receives and the fee is added
+			// on top. Older app versions (still open during an update) send the
+			// total instead, with the fee taken out of it.
+			FeeOnTop bool `json:"feeOnTop"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -208,8 +212,9 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Enter the account holder's name")
 		}
 
-		// The provider's transfer fee comes out of the amount sent, unless the
-		// player is on Elite and has free withdrawals left: then CrestArena pays it.
+		// The player gets exactly what they asked for: the provider's transfer
+		// fee is added on top, unless they're on Elite with free withdrawals
+		// left (then CrestArena pays it).
 		fee := services.TransferFeeFor(provider, req.Amount, currency, req.BankType)
 
 		id := "wd_" + utils.GenerateBaseID()
@@ -228,31 +233,38 @@ func SetupPaymentRoutes(api fiber.Router) {
 		} else if left > 0 {
 			waived, fee = fee, 0
 		}
-		if req.Amount <= fee {
+		// total is what leaves the wallet; total - fee is what is sent.
+		total := req.Amount
+		if req.FeeOnTop {
+			total = req.Amount + fee
+		} else if req.Amount <= fee {
 			return utils.SendError(c, 400, "The amount must be more than the transfer fee of "+services.FormatMoney(fee, currency))
 		}
-		if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "withdrawal_hold", id); err != nil {
+		if err := services.AdjustBalance(ctx, tx, uid, -total, "withdrawal_hold", id); err != nil {
 			if errors.Is(err, services.ErrInsufficientFunds) {
+				if fee > 0 {
+					return utils.SendError(c, 400, "You need "+services.FormatMoney(total, currency)+" in your wallet for this (including the "+services.FormatMoney(fee, currency)+" transfer fee)")
+				}
 				return utils.SendError(c, 400, "Insufficient balance")
 			}
 			return fail(c, err)
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee, provider, fee_waived)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee, provider, waived)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, uid, total, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee, provider, waived)
 		if err != nil {
 			return fail(c, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return fail(c, err)
 		}
-		if limit := config.Cfg.AutoPayoutLimit[currency]; limit > 0 && req.Amount <= limit {
+		if limit := config.Cfg.AutoPayoutLimit[currency]; limit > 0 && total <= limit {
 			// Small withdrawals go out by themselves; admins hear only if it fails.
-			go services.AutoApproveWithdrawal(context.Background(), id, req.Amount, currency)
+			services.Background(func() { services.AutoApproveWithdrawal(context.Background(), id, total, currency) })
 		} else {
 			services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
-				services.FormatMoney(req.Amount-fee, currency), req.AccountName, req.BankName))
+				services.FormatMoney(total-fee, currency), req.AccountName, req.BankName))
 		}
-		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "feeWaived": waived, "payout": req.Amount - fee})
+		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "feeWaived": waived, "payout": total - fee, "total": total})
 	})
 
 	wallet.Get("/withdrawals", func(c *fiber.Ctx) error {

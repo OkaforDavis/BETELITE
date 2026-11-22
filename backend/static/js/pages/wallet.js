@@ -200,7 +200,7 @@ export default async function wallet(view, { query }) {
     if (w.balance < w.limits.minWithdrawal) return toast(`The minimum withdrawal is ${money(w.limits.minWithdrawal, cur)}.`, 'info');
     sheet(String(html`${sheetHead('Withdraw', cur === 'GHS' ? 'To your bank or mobile money' : 'To your bank account')}
       <form id="wd-form">
-        <label class="field"><span class="label">Amount</span>
+        <label class="field"><span class="label">Amount you'll receive</span>
           <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="amount" inputmode="numeric" pattern="[0-9]*" aria-label="Amount"></div>
           <span class="hint">Available ${money(w.balance, cur)} · Min ${money(w.limits.minWithdrawal, cur)} <button type="button" class="link-btn" data-max>Max</button></span></label>
         <div class="field"><label class="label" for="bank-search">${cur === 'GHS' ? 'Bank or mobile money' : 'Bank'}</label>
@@ -217,7 +217,9 @@ export default async function wallet(view, { query }) {
       label: 'Withdraw',
       async onMount(root, close) {
         const f = root.querySelector('#wd-form');
-        root.querySelector('[data-max]').onclick = () => { f.amount.value = Math.floor(w.balance / 100); showFee(); };
+        // Max: the most you can receive once the fee is added on top.
+        const feeFor = (amount) => (w.freeWithdrawals > 0 ? 0 : transferFee(amount, cur, banks[bankIdx]?.type, payoutProvider));
+        root.querySelector('[data-max]').onclick = () => { f.amount.value = Math.max(Math.floor((w.balance - feeFor(w.balance)) / 100), 0); showFee(); };
         let banks = [];
         let bankIdx = -1;
         let payoutProvider = w.payoutProvider || 'paystack';
@@ -265,18 +267,20 @@ export default async function wallet(view, { query }) {
           } catch (e) { f.accountName.value = ''; toast(e.message, 'err'); }
         };
         const wdSum = root.querySelector('#wd-sum');
-        // Paystack's transfer fee is taken from the amount sent.
+        // The player receives exactly the amount typed; the fee is added on top.
         function showFee() {
           const amount = (parseInt(f.amount.value.replace(/\D/g, ''), 10) || 0) * 100;
           const bank = banks[bankIdx];
           wdSum.hidden = !amount;
           if (!amount) return;
           const free = w.freeWithdrawals > 0;
-          const fee = free ? 0 : transferFee(amount, cur, bank?.type, payoutProvider);
+          const fee = feeFor(amount);
           const momoCheaper = !free && cur === 'GHS' && payoutProvider === 'paystack' && bank?.type !== 'mobile_money';
           wdSum.innerHTML = String(html`<div class="row between small"><span class="muted">Transfer fee</span>
               ${free ? html`<span><b style="color:var(--brand)">Free</b> <span class="faint">· Elite, ${w.freeWithdrawals} of ${w.freeWithdrawalsMax} left this month</span></span>` : html`<span class="num">${money(fee, cur)}</span>`}</div>
-            <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(Math.max(amount - fee, 0), cur)}</b></div>
+            <div class="row between small" style="margin-top:6px"><span class="muted">Taken from your wallet</span><span class="num">${money(amount + fee, cur)}</span></div>
+            <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(amount, cur)}</b></div>
+            ${amount + fee > w.balance ? html`<p class="tiny" style="margin-top:8px;color:var(--danger)">That's more than your balance of ${money(w.balance, cur)}. Tap Max for the most you can take out.</p>` : ''}
             ${momoCheaper ? html`<p class="tiny faint" style="margin-top:8px">Tip: sending to mobile money costs only ${money(100, cur)}.</p>` : ''}
             ${!free && !w.freeWithdrawalsMax ? '' : !free ? html`<p class="tiny faint" style="margin-top:8px">Elite members get ${w.freeWithdrawalsMax} free withdrawals a month. <a href="/membership">See plans</a></p>` : ''}`);
         }
@@ -289,12 +293,13 @@ export default async function wallet(view, { query }) {
           const bank = banks[bankIdx];
           if (!bank) { search.focus(); return toast('Choose your bank from the list', 'err'); }
           if (amount < w.limits.minWithdrawal) return toast(`The minimum withdrawal is ${money(w.limits.minWithdrawal, cur)}.`, 'err');
-          if (amount > w.balance) return toast(`You can withdraw up to ${money(w.balance, cur)}.`, 'err');
+          const fee = feeFor(amount);
+          if (amount + fee > w.balance) return toast(`You need ${money(amount + fee, cur)} for this, including the ${money(fee, cur)} fee. Tap Max for the most you can take out.`, 'err');
           if (cur === 'NGN' && !resolved) return toast('Enter a valid 10-digit account number', 'err');
           busy(f.querySelector('[type=submit]'), async () => {
             await post('/wallet/withdraw', {
               amount, bankCode: bank.code, bankName: bank.name, bankType: bank.type,
-              accountNumber: f.account.value, accountName: f.accountName.value,
+              accountNumber: f.account.value, accountName: f.accountName.value, feeOnTop: true,
             });
             close();
             toast("Withdrawal requested. We'll notify you when it's sent.");

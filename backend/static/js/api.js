@@ -15,7 +15,17 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(method, path, body, { form = false, raw = false, quiet = false } = {}) {
+// Requests still waiting for an answer, so an app update never reloads the
+// page in the middle of a withdrawal, payment or upload.
+let inflight = 0;
+export const requestsInFlight = () => inflight;
+
+export async function api(method, path, body, opts = {}) {
+  inflight++;
+  try { return await callApi(method, path, body, opts); } finally { inflight--; }
+}
+
+async function callApi(method, path, body, { form = false, raw = false, quiet = false } = {}) {
   if (!quiet) progress.start();
   try {
     return await request(method, path, body, { form, raw });

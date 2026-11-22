@@ -1,5 +1,5 @@
 // Service worker, "new version" prompt, install prompt and Web Push.
-import { quietGet, quietPost, post } from './api.js';
+import { quietGet, quietPost, post, requestsInFlight } from './api.js';
 import { html, ic, sheet, sheetHead, toast, toastError } from './ui.js';
 
 export const APP_VERSION = window.APP_VERSION || 'dev';
@@ -26,11 +26,14 @@ export async function registerSW() {
       if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdate();
     });
   });
+  // The new version took over (this tab, or another tab, tapped Update).
+  // Reload, but never while the player is busy here.
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloading) return;
     reloading = true;
-    location.reload();
+    if (updateAsked) location.reload();
+    else whenIdle(() => location.reload());
   });
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type === 'navigate' && e.data.url) {
@@ -54,13 +57,34 @@ async function checkVersion() {
   } catch { /* offline */ }
 }
 
+// The player is in the middle of something: a sheet is open (withdraw,
+// deposit, tip, result upload…), they're typing, or a request hasn't answered.
+let forceShown = false;
+function isBusy() {
+  const a = document.activeElement;
+  return !!document.querySelector('.sheet-backdrop')
+    || (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)))
+    || requestsInFlight() > 0;
+}
+// Runs fn once the player isn't busy (checks every 2 seconds).
+function whenIdle(fn) {
+  if (!isBusy()) return fn();
+  const t = setInterval(() => { if (!isBusy()) { clearInterval(t); fn(); } }, 2000);
+}
+
+let updateAsked = false; // this tab tapped Update: reload straight away
 function applyUpdate() {
+  updateAsked = true;
   if (reg?.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
   else location.reload();
 }
 
 function showUpdate(force = false) {
+  // A required update still waits until the player finishes what they're doing.
   if (force) {
+    if (forceShown) return;
+    forceShown = true;
+    if (isBusy()) return whenIdle(() => { forceShown = false; showUpdate(true); });
     sheet(String(html`<div class="center" style="padding:8px 0">
       <div class="icon-tile brand" style="width:64px;height:64px;margin:0 auto 16px">${ic('sparkles')}</div>
       <div class="h2">Update required</div>
