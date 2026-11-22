@@ -74,7 +74,7 @@ export default async function tournamentPage(view, { id }) {
             ${isHost ? html`<button class="btn ghost block" id="cancel-cup" style="margin-top:8px">Cancel my cup (full refund)</button>` : ''}</div>` : ''}
       </div>
 
-      ${t.hostId ? sponsorCard(sponsor, { isHost, open: ['open', 'active'].includes(t.status) }) : ''}
+      ${sponsorCard(sponsor, { isHost: isHost || !!store.get().profile.isAdmin, open: ['open', 'active'].includes(t.status) })}
 
       ${t.hostId && !isHost ? html`<div class="card row" style="margin-top:12px;gap:12px"><div class="icon-tile">${ic('coins')}</div>
         <div class="grow"><div class="h3">Enjoying ${t.hostName}'s cup?</div><div class="small muted">Send a free tip. The host gets all of it.</div></div>

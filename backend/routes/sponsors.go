@@ -44,7 +44,7 @@ func SetupSponsorRoutes(api fiber.Router) {
 			}
 			video = &services.SponsorUpload{Data: data}
 		}
-		if err := services.SetSponsor(c.Context(), middleware.GetUID(c), c.Params("id"), c.FormValue("name"), c.FormValue("link"), images, video); err != nil {
+		if err := services.SetSponsor(c.Context(), middleware.GetUID(c), middleware.IsAdminCtx(c), c.Params("id"), c.FormValue("name"), c.FormValue("link"), images, video); err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"sponsor": services.GetSponsor(c.Context(), c.Params("id"), true)})
