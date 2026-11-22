@@ -44,3 +44,13 @@ func TestTransferFee(t *testing.T) {
 		t.Error("GHS transfer fees")
 	}
 }
+
+func TestFlutterwaveFeesMatchDashboard(t *testing.T) {
+	// From the Flutterwave dashboard: ₵0.06 on ₵4, and ₦10 + ₦0.75 VAT on ₦989.25.
+	if got := TransferFeeFor(ProviderFlutterwave, 4_00, "GHS", "mobile_money"); got != 6 {
+		t.Errorf("GHS 4 fee = %d, want 6", got)
+	}
+	if got := TransferFeeFor(ProviderFlutterwave, 1_000_00, "NGN", ""); got != 10_75 {
+		t.Errorf("NGN 1000 fee = %d, want 1075", got)
+	}
+}

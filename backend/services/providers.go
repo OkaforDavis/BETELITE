@@ -88,13 +88,13 @@ func ruleFee(r FeeRule, gross int64) int64 {
 
 // TransferFeeFor is the provider's fee for sending a withdrawal.
 // Flutterwave (Nigeria): ₦10.75 up to ₦5,000, ₦26.88 up to ₦50,000, ₦53.75 above;
-// Ghana mobile money about 1.5% (minimum ₵1).
+// Ghana: 1.5%, rounded up to the pesewa (the dashboard showed ₵0.06 on ₵4).
 func TransferFeeFor(provider string, amount int64, currency, bankType string) int64 {
 	if provider != ProviderFlutterwave {
 		return TransferFee(amount, currency, bankType)
 	}
 	if currency == "GHS" {
-		return max(amount*15/1000, 1_00)
+		return max((amount*15+999)/1000, 1)
 	}
 	switch {
 	case amount <= 5_000_00:

@@ -136,6 +136,8 @@ func main() {
 	<-stop
 	log.Println("Shutting down...")
 	app.ShutdownWithTimeout(20 * time.Second)
+	// Let payouts already being sent finish (Render allows ~30s after SIGTERM).
+	services.WaitBackground(8 * time.Second)
 }
 
 func securityHeaders(c *fiber.Ctx) error {
