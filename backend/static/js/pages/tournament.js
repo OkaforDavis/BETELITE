@@ -307,11 +307,12 @@ function bracket(t, matches, uid) {
   const rounds = [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b);
   const name = (id, n) => (id === uid ? 'You' : id ? n : 'Bye');
   const roundTitle = (r) => {
-    const n = matches.filter((m) => m.round === r).length;
+    const n = matches.filter((m) => m.round === r && !m.thirdPlace).length;
     return n === 1 ? 'Final' : n === 2 ? 'Semi-finals' : n <= 4 ? 'Quarter-finals' : 'Round ' + r;
   };
+  // The 3rd-place match sits under the final, with its own label.
   return html`<div class="bracket">${rounds.map((r) => html`<div class="round"><div class="round-title">${roundTitle(r)}</div>
-    ${matches.filter((m) => m.round === r).map((m) => html`<a class="tie" href="/match/${m.id}" style="color:inherit">
+    ${matches.filter((m) => m.round === r).sort((a, b) => a.thirdPlace - b.thirdPlace).map((m) => html`${m.thirdPlace ? html`<div class="round-title" style="margin-top:12px">3rd place</div>` : ''}<a class="tie" href="/match/${m.id}" style="color:inherit">
       <div class="${m.winnerId && m.winnerId === m.homeId ? 'won' : ''}"><span class="ellipsis">${name(m.homeId, m.homeName)}</span><b class="num">${m.scoreHome ?? ''}</b></div>
       <div class="${m.winnerId && m.winnerId === m.awayId ? 'won' : ''}"><span class="ellipsis">${name(m.awayId, m.awayName)}</span><b class="num">${m.scoreAway ?? ''}</b></div>
     </a>`)}</div>`)}</div>`;

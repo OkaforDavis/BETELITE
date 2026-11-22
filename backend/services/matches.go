@@ -67,6 +67,7 @@ type MatchView struct {
 	TournamentID    string     `json:"tournamentId,omitempty"`
 	TournamentName  string     `json:"tournamentName,omitempty"`
 	Round           int        `json:"round,omitempty"`
+	ThirdPlace      bool       `json:"thirdPlace,omitempty"` // knockout 3rd-place match
 	Status          string     `json:"status"`
 	ScoreHome       *int       `json:"scoreHome"`
 	ScoreAway       *int       `json:"scoreAway"`
@@ -95,7 +96,7 @@ SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.ga
        COALESCE(m.submitted_by,''), m.dispute_deadline, m.play_deadline,
        COALESCE(m.disputed_by,''), COALESCE(m.dispute_reason,''), COALESCE(m.ingame_match_id,''),
        COALESCE(e.amount,0), COALESCE(e.pool,0), COALESCE(e.kind,''), COALESCE(e.currency, t.currency, 'NGN'),
-       m.created_at, m.settled_at
+       m.created_at, m.settled_at, m.third_place
 FROM matches m
 LEFT JOIN users hu ON hu.id = m.home_id
 LEFT JOIN users au ON au.id = m.away_id
@@ -112,7 +113,7 @@ func scanMatch(row pgx.Row) (*MatchView, error) {
 		&m.ScoreHome, &m.ScoreAway, &m.PensHome, &m.PensAway, &m.WinnerID,
 		&m.SubmittedBy, &m.DisputeDeadline, &m.PlayDeadline,
 		&m.DisputedBy, &m.DisputeReason, &m.InGameMatchID,
-		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt)
+		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt, &m.ThirdPlace)
 	if err != nil {
 		return nil, err
 	}

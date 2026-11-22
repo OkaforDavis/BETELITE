@@ -58,7 +58,7 @@ export default async function tournaments(view) {
     let format = 'knockout';
     const SIZES = { knockout: [4, 8, 16, 32, 64], swiss: [8, 16, 32], league: [4, 6, 8] };
     const SPLITS = {
-      knockout: [['Winner takes all', [100]], ['70 / 30', [70, 30]]],
+      knockout: [['Winner takes all', [100]], ['70 / 30', [70, 30]], ['60 / 25 / 15', [60, 25, 15]]],
       swiss: [['50 / 30 / 20', [50, 30, 20]], ['60 / 40', [60, 40]], ['Winner takes all', [100]]],
       league: [['50 / 30 / 20', [50, 30, 20]], ['60 / 40', [60, 40]], ['Winner takes all', [100]]],
     };

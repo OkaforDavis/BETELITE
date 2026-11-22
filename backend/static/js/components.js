@@ -32,7 +32,7 @@ export function matchHero(m) {
   return html`
   <a class="card highlight tap" href="/match/${m.id}" style="display:block;color:inherit">
     <div class="row between">
-      <span class="eyebrow">${m.kind === 'p2p' ? '1v1 match' : m.tournamentName + ' · Round ' + m.round} · ${gameName(m.game)}</span>
+      <span class="eyebrow">${m.kind === 'p2p' ? '1v1 match' : m.tournamentName + (m.thirdPlace ? ' · 3rd-place match' : ' · Round ' + m.round)} · ${gameName(m.game)}</span>
       ${statusBadge(m.status)}
     </div>
     <div class="versus" style="margin:18px 0 14px">
