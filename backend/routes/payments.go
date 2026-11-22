@@ -63,7 +63,9 @@ func SetupPaymentRoutes(api fiber.Router) {
 			feeRule = services.FeeRuleFor(list[0], currency)
 		}
 		_, detected := requestCountry(c)
+		freeLeft, _ := services.FreeWithdrawalsLeft(ctx, db.Pool, uid)
 		return utils.SendSuccess(c, fiber.Map{
+			"freeWithdrawals": freeLeft, "freeWithdrawalsMax": services.EliteFreeWithdrawals,
 			"balance": balance, "inPlay": held, "currency": currency,
 			"limits":           fiber.Map{"minDeposit": minDeposit[currency], "maxDeposit": maxDeposit[currency], "minWithdrawal": minWithdrawal[currency]},
 			"feeRule":          feeRule,
@@ -206,11 +208,9 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Enter the account holder's name")
 		}
 
-		// The provider's transfer fee comes out of the amount sent.
+		// The provider's transfer fee comes out of the amount sent, unless the
+		// player is on Elite and has free withdrawals left: then CrestArena pays it.
 		fee := services.TransferFeeFor(provider, req.Amount, currency, req.BankType)
-		if req.Amount <= fee {
-			return utils.SendError(c, 400, "The amount must be more than the transfer fee of "+services.FormatMoney(fee, currency))
-		}
 
 		id := "wd_" + utils.GenerateBaseID()
 		tx, err := db.Pool.Begin(ctx)
@@ -218,14 +218,27 @@ func SetupPaymentRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
+		// Lock the player so two quick withdrawals can't both use the last free one.
+		if _, err := tx.Exec(ctx, "SELECT 1 FROM users WHERE id = $1 FOR UPDATE", uid); err != nil {
+			return fail(c, err)
+		}
+		var waived int64
+		if left, err := services.FreeWithdrawalsLeft(ctx, tx, uid); err != nil {
+			return fail(c, err)
+		} else if left > 0 {
+			waived, fee = fee, 0
+		}
+		if req.Amount <= fee {
+			return utils.SendError(c, 400, "The amount must be more than the transfer fee of "+services.FormatMoney(fee, currency))
+		}
 		if err := services.AdjustBalance(ctx, tx, uid, -req.Amount, "withdrawal_hold", id); err != nil {
 			if errors.Is(err, services.ErrInsufficientFunds) {
 				return utils.SendError(c, 400, "Insufficient balance")
 			}
 			return fail(c, err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee, provider)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee, provider)
+		_, err = tx.Exec(ctx, `INSERT INTO withdrawals (id, user_id, amount, currency, bank_code, bank_name, account_number, account_name, note, fee, provider, fee_waived)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, uid, req.Amount, currency, req.BankCode, req.BankName, req.AccountNumber, req.AccountName, req.BankType, fee, provider, waived)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -239,7 +252,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 			services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
 				services.FormatMoney(req.Amount-fee, currency), req.AccountName, req.BankName))
 		}
-		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "payout": req.Amount - fee})
+		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "feeWaived": waived, "payout": req.Amount - fee})
 	})
 
 	wallet.Get("/withdrawals", func(c *fiber.Ctx) error {

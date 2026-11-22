@@ -271,9 +271,14 @@ export default async function wallet(view, { query }) {
           const bank = banks[bankIdx];
           wdSum.hidden = !amount;
           if (!amount) return;
-          const fee = transferFee(amount, cur, bank?.type, payoutProvider);
-          wdSum.innerHTML = String(html`<div class="row between small"><span class="muted">Transfer fee</span><span class="num">${money(fee, cur)}</span></div>
-            <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(Math.max(amount - fee, 0), cur)}</b></div>`);
+          const free = w.freeWithdrawals > 0;
+          const fee = free ? 0 : transferFee(amount, cur, bank?.type, payoutProvider);
+          const momoCheaper = !free && cur === 'GHS' && payoutProvider === 'paystack' && bank?.type !== 'mobile_money';
+          wdSum.innerHTML = String(html`<div class="row between small"><span class="muted">Transfer fee</span>
+              ${free ? html`<span><b style="color:var(--brand)">Free</b> <span class="faint">· Elite, ${w.freeWithdrawals} of ${w.freeWithdrawalsMax} left this month</span></span>` : html`<span class="num">${money(fee, cur)}</span>`}</div>
+            <div class="row between" style="margin-top:6px"><span>You receive</span><b class="h3 num">${money(Math.max(amount - fee, 0), cur)}</b></div>
+            ${momoCheaper ? html`<p class="tiny faint" style="margin-top:8px">Tip: sending to mobile money costs only ${money(100, cur)}.</p>` : ''}
+            ${!free && !w.freeWithdrawalsMax ? '' : !free ? html`<p class="tiny faint" style="margin-top:8px">Elite members get ${w.freeWithdrawalsMax} free withdrawals a month. <a href="/membership">See plans</a></p>` : ''}`);
         }
         f.amount.oninput = showFee;
         f.account.oninput = tryResolve;
