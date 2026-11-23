@@ -55,6 +55,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	alertStuckWithdrawals(ctx)
 	RemindExpiringMemberships(ctx)
 	purgeOldEvidence(ctx)
+	purgeOldChat(ctx)
 	purgeSponsors(ctx)
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)

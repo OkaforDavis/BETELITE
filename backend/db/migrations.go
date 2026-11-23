@@ -393,6 +393,17 @@ var migrations = []string{
 	// 19: knockout 3rd-place match (the two semi-final losers), played
 	// alongside the final.
 	`ALTER TABLE matches ADD COLUMN IF NOT EXISTS third_place BOOLEAN NOT NULL DEFAULT FALSE;`,
+
+	// 20: match chat between the two players, and "I'm ready" alerts (kind 'ping').
+	`CREATE TABLE IF NOT EXISTS match_messages (
+		id TEXT PRIMARY KEY,
+		match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+		user_id TEXT NOT NULL,
+		kind TEXT NOT NULL DEFAULT 'text',
+		body TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS idx_match_messages_match ON match_messages (match_id, created_at);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

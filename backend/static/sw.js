@@ -9,7 +9,7 @@ const SHELL = [
   '/js/realtime.js', '/js/pwa.js', '/js/auth.js', '/js/consent.js', '/js/components.js', '/js/gameid.js', '/js/invite.js', '/js/skeletons.js', '/js/progress.js', '/js/pull.js',
   '/js/pages/home.js', '/js/pages/play.js', '/js/pages/match.js', '/js/pages/tournaments.js',
   '/js/pages/tournament.js', '/js/pages/wallet.js', '/js/pages/profile.js', '/js/pages/notifications.js',
-  '/js/pages/watch.js', '/js/tips.js', '/js/sponsors.js', '/js/room.js', '/js/tour.js', '/js/pages/admin.js', '/js/pages/membership.js', '/js/pages/support.js', '/js/paysettings.js',
+  '/js/pages/watch.js', '/js/tips.js', '/js/sponsors.js', '/js/room.js', '/js/chat.js', '/js/alert.js', '/js/tour.js', '/js/pages/admin.js', '/js/pages/membership.js', '/js/pages/support.js', '/js/paysettings.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/mark.png', '/icons/badge-96.png', '/icons/wordmark.png', '/icons/apple-touch-icon.png',
   '/manifest.json',
   '/legal/terms.html', '/legal/privacy.html', '/legal/cookies.html', '/legal/responsible-gaming.html',
@@ -83,13 +83,19 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
   const title = data.title || 'CrestArena';
+  const ping = data.tag === 'match_ping';
   const options = {
     body: data.body || data.message || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-96.png',
     tag: data.tag || 'crestarena',
     renotify: true,
-    vibrate: [120, 60, 120],
+    // "I'm ready" alerts: a long, recognisable buzz pattern and they stay on
+    // screen until tapped. (Browsers don't let websites pick the sound of a
+    // background notification; the app plays the match sound when it's open.)
+    vibrate: ping ? [300, 120, 300, 120, 700, 200, 300, 120, 300] : [120, 60, 120],
+    requireInteraction: ping,
+    actions: ping ? [{ action: 'open', title: 'Open match' }] : [],
     data: { url: data.url || '/' },
   };
   event.waitUntil(

@@ -11,6 +11,8 @@ import { captureInvite, applyPendingInvite } from './invite.js';
 import { sk } from './skeletons.js';
 import { render as rerender } from './router.js';
 import { installPullToRefresh } from './pull.js';
+import { matchSound, chatSound, matchBanner } from './alert.js';
+import { chatVisible } from './chat.js';
 
 captureInvite();
 
@@ -111,7 +113,11 @@ function wireRealtime() {
     } else if (s === 'online') bar?.remove();
   });
   rt.on('notification', (n) => {
-    toast(n.message, 'info', n.title);
+    if (n.type === 'match_ping') {
+      // "I'm ready" alert: the match sound and a big banner, not a small toast.
+      matchSound();
+      matchBanner({ title: n.title, message: n.message, url: n.metadata?.url });
+    } else toast(n.message, 'info', n.title);
     refreshUnread();
     if (/deposit|withdrawal|result_confirmed|tournament_finished|challenge_expired|match_void/.test(n.type)) refreshProfile();
     if (/result|challenge|match|tournament/.test(n.type)) refreshCurrent();
@@ -122,6 +128,16 @@ function wireRealtime() {
     document.dispatchEvent(new CustomEvent('match_update', { detail: m }));
   });
   rt.on('match_room', (d) => document.dispatchEvent(new CustomEvent('match_room', { detail: d })));
+  rt.on('match_chat', (d) => {
+    document.dispatchEvent(new CustomEvent('match_chat', { detail: d }));
+    const msg = d?.message;
+    if (!msg || msg.kind !== 'text' || msg.userId === store.get().profile?.id) return;
+    chatSound();
+    if (!chatVisible(d.matchId)) {
+      const text = msg.body.length > 90 ? msg.body.slice(0, 90) + '…' : msg.body;
+      matchBanner({ title: 'New message from your opponent', message: text, url: '/match/' + d.matchId, chat: true });
+    }
+  });
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data?.type === 'push') refreshUnread();
   });

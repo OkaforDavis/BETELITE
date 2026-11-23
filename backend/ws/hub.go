@@ -134,3 +134,10 @@ func (h *Hub) OnlineCount() int {
 	defer h.mu.RUnlock()
 	return len(h.Clients)
 }
+
+// IsOnline reports whether the user has the app open on any device.
+func (h *Hub) IsOnline(uid string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.Rooms["user:"+uid]) > 0
+}

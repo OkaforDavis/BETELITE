@@ -5,6 +5,7 @@ import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 import { tipButton, bindTipButtons } from '../tips.js';
 import { roomSlot, mountRoom } from '../room.js';
+import { chatSlot, mountChat } from '../chat.js';
 
 const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
@@ -12,6 +13,7 @@ const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3
 export default async function matchPage(view, { id }) {
   // The router already shows this page's skeleton.
   let m;
+  let scrolled = false;
 
   async function load() {
     try {
@@ -50,6 +52,7 @@ export default async function matchPage(view, { id }) {
       </div>
 
       ${mine && m.status === 'ready' && m.awayId ? roomSlot(m) : ''}
+      ${showChat(m, mine) ? chatSlot(m) : ''}
       <section class="section" id="action">${mine ? actionArea(m, uid, opp) : spectatorNote(m)}</section>
       ${(mine || store.get().profile.isAdmin) && m.status !== 'ready' ? html`<section class="section"><div class="section-head"><h2 class="h2">Screenshots</h2></div><div id="evidence">${skeleton(90)}</div></section>` : ''}
 
@@ -75,6 +78,12 @@ export default async function matchPage(view, { id }) {
 
     bindTipButtons(view);
     if (mine && m.status === 'ready' && m.awayId) mountRoom(view, m, uid, opp);
+    if (showChat(m, mine)) {
+      mountChat(view, m, uid, mine ? opp : { name: m.awayName, tag: m.awayTag }).then(() => {
+        // Opened from a chat notification: jump to the chat.
+        if (!scrolled && new URLSearchParams(location.search).has('chat')) { scrolled = true; view.querySelector('#chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      });
+    }
     view.querySelector('[data-copy]')?.addEventListener('click', (e) => {
       copyText(e.currentTarget.dataset.copy, 'Match ID copied');
     });
@@ -154,6 +163,11 @@ export default async function matchPage(view, { id }) {
       <button class="btn primary block" id="submit" style="margin-top:14px" disabled>${ic('zap')} Verify & submit result</button>
       <p class="hint center">Our AI reads the score and checks both names. Usually takes 5–15 seconds.</p>
     </div>`;
+  }
+
+  // Players chat while the match is on (and read it after); admins can read it.
+  function showChat(m, mine) {
+    return m.awayId && (mine || store.get().profile.isAdmin);
   }
 
   function spectatorNote(m) {
