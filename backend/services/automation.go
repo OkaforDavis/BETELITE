@@ -59,6 +59,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	purgeSponsors(ctx)
 	settleDueResults(ctx)
 	handleMissedDeadlines(ctx)
+	endUnansweredRequests(ctx)
 	cleanupStaleChallenges(ctx, hub, cfg.ChallengeExpireDuration)
 	ExpireUnfilledCups(ctx)
 }

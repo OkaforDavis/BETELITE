@@ -86,6 +86,10 @@ type MatchView struct {
 	Currency        string     `json:"currency"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	SettledAt       *time.Time `json:"settledAt,omitempty"`
+	EndRequestedBy  string     `json:"endRequestedBy,omitempty"` // a player asked to end this unplayed 1v1
+	EndRequestedAt  *time.Time `json:"endRequestedAt,omitempty"`
+	EndDeadline     *time.Time `json:"endDeadline,omitempty"` // ends by itself at this time if not answered
+	EndReason       string     `json:"endReason,omitempty"`
 }
 
 const matchSelect = `
@@ -96,7 +100,8 @@ SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.ga
        COALESCE(m.submitted_by,''), m.dispute_deadline, m.play_deadline,
        COALESCE(m.disputed_by,''), COALESCE(m.dispute_reason,''), COALESCE(m.ingame_match_id,''),
        COALESCE(e.amount,0), COALESCE(e.pool,0), COALESCE(e.kind,''), COALESCE(e.currency, t.currency, 'NGN'),
-       m.created_at, m.settled_at, m.third_place
+       m.created_at, m.settled_at, m.third_place,
+       CASE WHEN m.status = 'ready' THEN COALESCE(m.end_requested_by,'') ELSE '' END, m.end_requested_at, COALESCE(m.end_reason,'')
 FROM matches m
 LEFT JOIN users hu ON hu.id = m.home_id
 LEFT JOIN users au ON au.id = m.away_id
@@ -113,9 +118,16 @@ func scanMatch(row pgx.Row) (*MatchView, error) {
 		&m.ScoreHome, &m.ScoreAway, &m.PensHome, &m.PensAway, &m.WinnerID,
 		&m.SubmittedBy, &m.DisputeDeadline, &m.PlayDeadline,
 		&m.DisputedBy, &m.DisputeReason, &m.InGameMatchID,
-		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt, &m.ThirdPlace)
+		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt, &m.ThirdPlace,
+		&m.EndRequestedBy, &m.EndRequestedAt, &m.EndReason)
 	if err != nil {
 		return nil, err
+	}
+	if m.EndRequestedBy == "" {
+		m.EndRequestedAt, m.EndReason = nil, ""
+	} else if m.EndRequestedAt != nil {
+		d := m.EndRequestedAt.Add(EndRequestTimeout)
+		m.EndDeadline = &d
 	}
 	if g := GameByID(m.Game); g != nil {
 		m.GameName = g.Short
@@ -561,6 +573,12 @@ func settleEscrow(ctx context.Context, tx pgx.Tx, challengeID, winner, homeID, a
 // VoidMatch cancels a match. 1v1 stakes are refunded; a tournament match is
 // reset so the players can replay it.
 func VoidMatch(ctx context.Context, matchID, by, reason string) error {
+	return voidMatch(ctx, matchID, by, reason, "")
+}
+
+// voidMatch is VoidMatch that, when need is set, only cancels a match still in
+// that status (so a result uploaded a moment earlier is never thrown away).
+func voidMatch(ctx context.Context, matchID, by, reason, need string) error {
 	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -575,6 +593,9 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 	}
 	if status == StatusConfirmed || status == StatusVoid {
 		return userErr(409, "This match is already final")
+	}
+	if need != "" && status != need {
+		return userErr(409, "The match has changed. Refresh to see the latest.")
 	}
 
 	if kind == "tournament" {
@@ -636,8 +657,12 @@ func VoidMatch(ctx context.Context, matchID, by, reason string) error {
 	if kind == "tournament" {
 		msg = "The result was cleared. Please replay the match and submit a new screenshot. " + reason
 	}
+	title := "Match cancelled"
+	if kind == "tournament" {
+		title = "Match reset"
+	}
 	for _, p := range []string{homeID, awayID} {
-		Notify(p, "match_void", "Match reset", msg, "/match/"+matchID, map[string]any{"matchId": matchID})
+		Notify(p, "match_void", title, msg, "/match/"+matchID, map[string]any{"matchId": matchID})
 	}
 	if m, err := GetMatch(ctx, matchID); err == nil {
 		broadcastMatch(m)

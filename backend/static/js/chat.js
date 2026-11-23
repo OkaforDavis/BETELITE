@@ -42,6 +42,11 @@ function names(m) { return { [m.homeId]: m.homeName, [m.awayId]: m.awayName }; }
 
 function messageRow(msg, uid, who) {
   const mine = msg.userId === uid;
+  const name = who[msg.userId] || 'Your opponent';
+  const sys = { end_request: mine ? 'You asked to end the match' : `${name} asked to end the match`,
+    end_declined: mine ? 'You chose to keep playing' : `${name} wants to keep playing`,
+    end_withdrawn: mine ? 'You took back your request to end' : `${name} took back the request to end` }[msg.kind];
+  if (sys) return html`<div class="msg-sys">${ic('flag')} ${sys}${msg.body ? `: “${msg.body}”` : ''} · ${timeAgo(msg.createdAt)}</div>`;
   if (msg.kind === 'ping') {
     return html`<div class="msg-sys">${ic('bellRing')} ${mine ? 'You sent an alert: ready to play' : `${who[msg.userId] || 'Your opponent'} is ready to play`} · ${timeAgo(msg.createdAt)}</div>`;
   }
