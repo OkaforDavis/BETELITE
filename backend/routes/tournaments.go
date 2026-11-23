@@ -241,9 +241,8 @@ func SetupTournamentRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		var sponsor *services.Sponsor
-		if t.HostID != "" {
-			sponsor = services.GetSponsor(ctx, t.ID, t.HostID == middleware.GetUID(c) || middleware.IsAdminCtx(c))
-		}
+		// Host cups and CrestArena's own cups (e.g. the End-of-Month Platter) can both have a sponsor.
+		sponsor = services.GetSponsor(ctx, t.ID, (t.HostID != "" && t.HostID == middleware.GetUID(c)) || middleware.IsAdminCtx(c))
 		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches, "sponsor": sponsor})
 	})
 

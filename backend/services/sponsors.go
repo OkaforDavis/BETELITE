@@ -101,9 +101,10 @@ func videoType(data []byte) string {
 	return ""
 }
 
-// SetSponsor adds or replaces the sponsor on a host's cup. It waits for an
-// admin to approve it.
-func SetSponsor(ctx context.Context, uid, tid, name, link string, images []SponsorUpload, video *SponsorUpload) error {
+// SetSponsor adds or replaces the sponsor on a cup. A host's sponsor waits
+// for an admin to approve it; an admin's (on any cup, including CrestArena's
+// own cups like the End-of-Month Platter) shows straight away.
+func SetSponsor(ctx context.Context, uid string, admin bool, tid, name, link string, images []SponsorUpload, video *SponsorUpload) error {
 	name = strings.TrimSpace(name)
 	if n := len([]rune(name)); n < 2 || n > sponsorNameMaxLength {
 		return userErr(400, "Enter the sponsor's name (2 to %d characters)", sponsorNameMaxLength)
@@ -120,7 +121,7 @@ func SetSponsor(ctx context.Context, uid, tid, name, link string, images []Spons
 	}
 	var host, status string
 	err = db.Pool.QueryRow(ctx, "SELECT COALESCE(host_id,''), status FROM tournaments WHERE id = $1", tid).Scan(&host, &status)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && host != uid) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !admin && (host == "" || host != uid)) {
 		return userErr(403, "Only the cup's host can add a sponsor")
 	}
 	if err != nil {
@@ -161,7 +162,13 @@ func SetSponsor(ctx context.Context, uid, tid, name, link string, images []Spons
 	if _, err := tx.Exec(ctx, "DELETE FROM cup_sponsors WHERE tournament_id = $1", tid); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO cup_sponsors (tournament_id, name, link) VALUES ($1,$2,$3)", tid, name, link); err != nil {
+	status = "pending"
+	var reviewer any
+	if admin {
+		status, reviewer = "approved", uid
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO cup_sponsors (tournament_id, name, link, status, reviewed_by, reviewed_at)
+		VALUES ($1,$2,$3,$4,$5::text, CASE WHEN $5::text IS NULL THEN NULL ELSE NOW() END)`, tid, name, link, status, reviewer); err != nil {
 		return err
 	}
 	for i, it := range items {
@@ -173,7 +180,9 @@ func SetSponsor(ctx context.Context, uid, tid, name, link string, images []Spons
 	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
-	NotifyAdmins(ctx, "Sponsor to review", name+" on cup "+tid+". Check it in Admin → Sponsors.")
+	if !admin {
+		NotifyAdmins(ctx, "Sponsor to review", name+" on cup "+tid+". Check it in Admin → Sponsors.")
+	}
 	return nil
 }
 
