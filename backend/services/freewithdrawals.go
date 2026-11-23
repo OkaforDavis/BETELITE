@@ -9,7 +9,8 @@ import "context"
 const EliteFreeWithdrawals = 5
 
 // FreeWithdrawalsLeft is how many fee-free withdrawals the player has left
-// this plan month (0 for anyone not on Elite). Failed withdrawals don't count.
+// this plan month (0 for anyone not on Elite). Withdrawals that never paid
+// out (failed, rejected by an admin, or reversed by the bank) don't count.
 func FreeWithdrawalsLeft(ctx context.Context, q querier, uid string) (int, error) {
 	m, err := ActiveMembership(ctx, q, uid)
 	if err != nil || m == nil || m.Tier != "elite" {
@@ -17,6 +18,6 @@ func FreeWithdrawalsLeft(ctx context.Context, q querier, uid string) (int, error
 	}
 	var used int
 	err = q.QueryRow(ctx, `SELECT COUNT(*) FROM withdrawals WHERE user_id = $1 AND fee_waived > 0
-		AND status <> 'failed' AND created_at >= $2`, uid, m.StartsAt).Scan(&used)
+		AND status NOT IN ('failed','rejected','reversed') AND created_at >= $2`, uid, m.StartsAt).Scan(&used)
 	return max(EliteFreeWithdrawals-used, 0), err
 }
