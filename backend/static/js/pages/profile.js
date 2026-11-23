@@ -4,6 +4,7 @@ import { html, ic, avatar, money, sheet, sheetHead, busy, toast, toastError, sha
 import { inviteLink } from '../invite.js';
 import { gameIdSheet } from '../gameid.js';
 import { tierBadge, TIER_NAMES } from '../components.js';
+import { soundOn, setSound, matchSound } from '../alert.js';
 import { APP_VERSION, canInstallAgain, promptInstall, pushState, enablePush, disablePush, isIOS, onInstallable } from '../pwa.js';
 import { signOut, sendVerification, reloadVerification, hasPassword, changePassword, sendPasswordReset } from '../auth.js';
 import { refreshProfile } from '../app.js';
@@ -66,6 +67,10 @@ export default async function profilePage(view, { query }) {
               ps === 'denied' ? 'Blocked in your browser settings' :
               ps === 'unsupported' ? 'Not supported on this browser' : 'Challenges, results, payouts and new tournaments'}</div></div>
             <label class="switch"><input type="checkbox" id="push" ${pushOn ? 'checked' : ''} ${ps === 'unsupported' || ps === 'denied' ? 'disabled' : ''} aria-label="Match alerts"><span></span></label>
+          </div>
+          <div class="list-row"><div class="icon-tile">${ic('bellRing')}</div>
+            <div class="grow"><div class="h3">Match sound</div><div class="small muted">"Gling-zzz" when an opponent is ready, while the app is open. <button class="link" id="test-sound" type="button">Play it</button></div></div>
+            <label class="switch"><input type="checkbox" id="sound" ${soundOn() ? 'checked' : ''} aria-label="Match sound"><span></span></label>
           </div>
           <div class="list-row"><div class="icon-tile">${ic('file')}</div>
             <div class="grow"><div class="h3">Email updates</div><div class="small muted">Receipts and important account emails</div></div>
@@ -167,6 +172,8 @@ export default async function profilePage(view, { query }) {
       }
       refreshProfile();
     };
+    view.querySelector('#sound').onchange = (e) => { setSound(e.target.checked); if (e.target.checked) matchSound(); };
+    view.querySelector('#test-sound').onclick = () => { if (!soundOn()) { setSound(true); view.querySelector('#sound').checked = true; } matchSound(); };
     view.querySelector('#email').onchange = (e) => api('POST', '/user/settings/update', { emailEnabled: e.target.checked }).then(refreshProfile).catch(toastError);
     view.querySelector('#share')?.addEventListener('click', () => {
       const url = inviteLink(ref.code);

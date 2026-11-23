@@ -589,3 +589,48 @@ button.list-row:active { background: var(--surface-2); }
 .card > .cup-cover:first-child { margin: -16px -16px 14px; border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0; }
 .card.pad-lg > .cup-cover:first-child { margin: -20px -20px 16px; }
 .cover-edit { border-radius: var(--r-sm); border: 1px dashed var(--line); display: grid; place-items: center; color: var(--text-3); }
+
+/* ── Match chat + "I'm ready" alerts ─────────────────────────── */
+.chat-card .h2 { display: inline-flex; align-items: center; gap: 8px; }
+.chat-card .h2 svg { width: 20px; height: 20px; color: var(--brand); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.live-dot.on { background: var(--brand); box-shadow: 0 0 0 0 var(--brand-line); animation: live-pulse 1.8s infinite; }
+@keyframes live-pulse { 70% { box-shadow: 0 0 0 7px rgba(0, 229, 117, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 229, 117, 0); } }
+.ping-btn { height: 52px; font-size: 17px; }
+.ping-btn:not(:disabled) svg { animation: ring 2.4s infinite; transform-origin: 50% 10%; }
+@keyframes ring { 0%, 80%, 100% { transform: rotate(0); } 84% { transform: rotate(14deg); } 88% { transform: rotate(-12deg); } 92% { transform: rotate(8deg); } 96% { transform: rotate(-4deg); } }
+.chat-list {
+  margin-top: 14px; max-height: 320px; min-height: 90px; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: var(--r);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.msg { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; max-width: 82%; }
+.msg.me { align-self: flex-end; align-items: flex-end; }
+.msg .bubble {
+  padding: 9px 13px; border-radius: 16px 16px 16px 4px; background: var(--surface-3); color: var(--text);
+  font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.msg.me .bubble { background: var(--brand); color: var(--brand-ink); border-radius: 16px 16px 4px 16px; }
+.msg-sys { align-self: center; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--gold); text-align: center; padding: 4px 10px; border-radius: var(--r-pill); background: var(--gold-soft); }
+.msg-sys svg { width: 14px; height: 14px; flex: none; }
+.chat-form { display: flex; gap: 8px; margin-top: 10px; }
+.chat-form .input { flex: 1; min-width: 0; }
+.chat-form .btn { flex: none; width: 52px; padding: 0; }
+
+.match-alert {
+  position: fixed; z-index: 90; top: calc(var(--safe-top) + 10px); left: 50%; transform: translateX(-50%);
+  width: min(94vw, 500px); display: flex; align-items: center; gap: 12px; padding: 14px 12px 14px 14px;
+  border-radius: var(--r-lg); background: rgba(14, 22, 36, 0.98); border: 1.5px solid var(--gold);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); font-size: 14px; animation: alert-in 0.45s var(--ease);
+}
+.match-alert.chat { border-color: var(--brand-line); }
+.match-alert b { display: block; font-size: 15px; margin-bottom: 2px; }
+.match-alert .small { overflow-wrap: anywhere; }
+.match-alert-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--gold-soft); color: var(--gold); }
+.match-alert.chat .match-alert-icon { background: var(--brand-soft); color: var(--brand); }
+.match-alert-icon svg { width: 24px; height: 24px; animation: ring 1.2s 2; transform-origin: 50% 10%; }
+.match-alert.out { animation: alert-out 0.25s forwards; }
+@keyframes alert-out { to { transform: translate(-50%, -14px); opacity: 0; } }
+@keyframes alert-in { 0% { transform: translate(-50%, -24px); opacity: 0; } 60% { transform: translate(-50%, 4px); opacity: 1; } 100% { transform: translate(-50%, 0); } }
+.link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--brand); text-decoration: underline; cursor: pointer; }
+.chat-card .tiny svg { display: inline; width: 13px; height: 13px; vertical-align: -2px; }

@@ -70,6 +70,36 @@ func SetupMatchRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"room": room})
 	})
 
+	// Match chat between the two players (admins can read it).
+	m.Get("/:id/chat", func(c *fiber.Ctx) error {
+		chat, err := services.GetChat(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"chat": chat})
+	})
+	m.Post("/:id/chat", func(c *fiber.Ctx) error {
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := c.BodyParser(&in); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		msg, err := services.SendChat(c.Context(), c.Params("id"), middleware.GetUID(c), in.Text)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"message": msg})
+	})
+	// "I'm ready" alert: a loud notification to the opponent.
+	m.Post("/:id/ping", func(c *fiber.Ctx) error {
+		msg, err := services.PingOpponent(c.Context(), c.Params("id"), middleware.GetUID(c))
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"message": msg})
+	})
+
 	// Upload the final result screenshot for this match (multipart "image").
 	m.Post("/:id/result", middleware.RateLimitOCR(), func(c *fiber.Ctx) error {
 		fh, err := c.FormFile("image")
