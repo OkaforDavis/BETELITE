@@ -206,8 +206,9 @@ const STATUS = {
   confirmed: ['Final', '', 'checkCircle'],
   void: ['Cancelled', '', 'xCircle'],
 };
-export function statusBadge(status) {
-  const [label, cls, ico] = STATUS[status] || [status, '', 'info'];
+// spectator: someone watching a match they aren't in sees "In progress", not "Play now".
+export function statusBadge(status, spectator = false) {
+  const [label, cls, ico] = spectator && status === 'ready' ? ['In progress', 'info', 'clock'] : STATUS[status] || [status, '', 'info'];
   return html`<span class="badge ${cls}">${ic(ico)}${label}</span>`;
 }
 
