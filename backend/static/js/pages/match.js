@@ -32,12 +32,12 @@ export default async function matchPage(view, { id }) {
     const prize = m.kind === 'p2p' ? (bounty ? m.stake : Math.floor((m.pool * 80) / 100)) : 0;
 
     view.innerHTML = String(html`<div class="page">
-      <a href="${m.kind === 'p2p' ? '/play?tab=mine' : '/tournaments/' + m.tournamentId}" class="row small muted" style="gap:4px;margin-bottom:12px">${ic('chevronLeft')}${m.kind === 'p2p' ? 'My matches' : m.tournamentName}</a>
+      <a href="${m.kind === 'p2p' ? (mine ? '/play?tab=mine' : '/play') : '/tournaments/' + m.tournamentId}" class="row small muted" style="gap:4px;margin-bottom:12px">${ic('chevronLeft')}${m.kind === 'p2p' ? (mine ? 'My matches' : 'Play') : m.tournamentName}</a>
 
       <div class="card pad-lg">
         <div class="row between">
           <span class="eyebrow">${m.kind === 'p2p' ? '1v1' : m.thirdPlace ? '3rd-place match' : 'Round ' + m.round} · ${gameName(m.game)}</span>
-          ${statusBadge(m.status)}
+          ${statusBadge(m.status, !mine)}
         </div>
         <div class="versus" style="margin:22px 0 18px">
           <div class="side ${m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, m.homeAvatar, 'lg ' + (m.homeId === uid ? 'me' : ''))}

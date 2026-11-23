@@ -37,6 +37,17 @@ type challengeView struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
+// closedNote tells a poster that their other open challenges were closed.
+func closedNote(n int) string {
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return " Your other open challenge was closed (one 1v1 at a time)."
+	}
+	return fmt.Sprintf(" Your %d other open challenges were closed (one 1v1 at a time).", n)
+}
+
 func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	lobby := api.Group("/lobby", middleware.AuthRequired(), dbRequired)
 
@@ -47,7 +58,10 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			FROM escrow e
 			JOIN users u ON u.id = e.creator_id
 			LEFT JOIN game_profiles gp ON gp.user_id = e.creator_id AND gp.game = e.game
-			WHERE e.status = 'waiting' ORDER BY e.created_at DESC LIMIT 100`)
+			WHERE e.status = 'waiting'
+			AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.kind = 'p2p' AND m.status IN `+services.UnfinishedP2PStatuses+`
+				AND (m.home_id = e.creator_id OR m.away_id = e.creator_id))
+			ORDER BY e.created_at DESC LIMIT 100`)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -128,6 +142,14 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
+		if err := services.LockPlayers(ctx, tx, uid); err != nil {
+			return fail(c, err)
+		}
+		if busy, err := services.ActiveP2PMatch(ctx, tx, uid); err != nil {
+			return fail(c, err)
+		} else if busy != "" {
+			return utils.SendError(c, 409, "Finish your current 1v1 first (upload or confirm its result), then post a new challenge")
+		}
 		var fee int64
 		if kind == "bounty" {
 			fee = services.HostFee(req.Amount)
@@ -177,6 +199,19 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		}
 		defer tx.Rollback(ctx)
 
+		// Lock both players before the challenge, so two accepts involving the
+		// same player run one after the other.
+		var poster string
+		if err := tx.QueryRow(ctx, "SELECT creator_id FROM escrow WHERE challenge_id = $1", req.ChallengeID).Scan(&poster); err != nil {
+			return utils.SendError(c, 409, "This challenge is no longer available")
+		}
+		if poster == uid {
+			return utils.SendError(c, 400, "You can't accept your own challenge")
+		}
+		if err := services.LockPlayers(ctx, tx, poster, uid); err != nil {
+			return fail(c, err)
+		}
+
 		var escrowID, amount int64
 		var creator, status, game, currency, kind string
 		err = tx.QueryRow(ctx, "SELECT id, creator_id, amount, status, COALESCE(game,''), COALESCE(currency,'NGN'), kind FROM escrow WHERE challenge_id = $1 FOR UPDATE", req.ChallengeID).
@@ -187,8 +222,16 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		if err != nil {
 			return fail(c, err)
 		}
-		if creator == uid {
-			return utils.SendError(c, 400, "You can't accept your own challenge")
+		// One 1v1 at a time, for both players.
+		if busy, err := services.ActiveP2PMatch(ctx, tx, uid); err != nil {
+			return fail(c, err)
+		} else if busy != "" {
+			return utils.SendError(c, 409, "Finish your current 1v1 first (upload or confirm its result), then accept another")
+		}
+		if busy, err := services.ActiveP2PMatch(ctx, tx, creator); err != nil {
+			return fail(c, err)
+		} else if busy != "" {
+			return utils.SendError(c, 409, "This player is in another match right now. Try another challenge.")
 		}
 		if services.GameByID(game) == nil {
 			return utils.SendError(c, 400, "This challenge is for an unsupported game")
@@ -235,17 +278,28 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			uid, matchID, escrowID); err != nil {
 			return fail(c, err)
 		}
+		closedPoster, err := services.CloseOpenChallenges(ctx, tx, creator, req.ChallengeID)
+		if err != nil {
+			return fail(c, err)
+		}
+		closedMine, err := services.CloseOpenChallenges(ctx, tx, uid, "")
+		if err != nil {
+			return fail(c, err)
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return fail(c, err)
 		}
 
 		ws.BroadcastEvent(hub, "lobby_challenge_removed", fiber.Map{"id": req.ChallengeID})
+		for _, id := range append(closedPoster, closedMine...) {
+			ws.BroadcastEvent(hub, "lobby_challenge_removed", fiber.Map{"id": id})
+		}
 		what := "challenge"
 		if bounty {
 			what = "bounty"
 		}
 		services.Notify(creator, "challenge_accepted", "Challenge accepted! ⚔️",
-			services.Username(ctx, uid)+" accepted your "+what+". Play the match and upload the final result screen within 3 hours.",
+			services.Username(ctx, uid)+" accepted your "+what+". Play the match and upload the final result screen within 3 hours."+closedNote(len(closedPoster)),
 			"/match/"+matchID, map[string]any{"matchId": matchID})
 		return utils.SendSuccess(c, fiber.Map{"matchId": matchID})
 	})
@@ -265,6 +319,9 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			return fail(c, err)
 		}
 		defer tx.Rollback(ctx)
+		if err := services.LockPlayers(ctx, tx, uid); err != nil {
+			return fail(c, err)
+		}
 
 		var amount, fee int64
 		var status, kind string

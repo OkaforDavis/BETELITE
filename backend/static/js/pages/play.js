@@ -52,15 +52,15 @@ export default async function play(view, { query }) {
           ${avatar(c.creatorName, c.creatorAvatar, c.creatorId === uid ? 'me' : '')}
           <div class="grow">
             <div class="h3 ellipsis">${c.creatorId === uid ? 'Your challenge' : c.creatorName}</div>
-            <div class="small muted ellipsis">${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>
+            <div class="small muted ellipsis">${c.amount ? '' : 'Friendly · '}${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>
           </div>
-          <div style="text-align:right">${c.kind === 'bounty' && c.amount ? html`
+          ${c.amount ? html`<div style="text-align:right">${c.kind === 'bounty' ? html`
             <span class="badge brand">${ic('zap')}Bounty</span>
             <div class="h3 num brand-text" style="margin-top:4px">${money(c.prize, c.currency)}</div>
-            <div class="tiny muted">free to accept</div>` : c.amount ? html`
+            <div class="tiny muted">free to accept</div>` : html`
             <div class="h3 num">${money(c.amount, c.currency)}</div>
-            <div class="tiny brand-text">Win ${money(c.prize, c.currency)}</div>` : html`<span class="badge">Friendly</span>`}
-          </div>
+            <div class="tiny brand-text">Win ${money(c.prize, c.currency)}</div>`}
+          </div>` : ''}
           ${c.creatorId === uid
             ? html`<button class="btn danger sm" data-cancel="${c.id}" aria-label="Cancel challenge">${ic('x')}</button>`
             : html`<button class="btn primary sm" data-accept="${c.id}">Accept</button>`}

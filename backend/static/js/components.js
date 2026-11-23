@@ -33,7 +33,7 @@ export function matchHero(m) {
   <a class="card highlight tap" href="/match/${m.id}" style="display:block;color:inherit">
     <div class="row between">
       <span class="eyebrow">${m.kind === 'p2p' ? '1v1 match' : m.tournamentName + (m.thirdPlace ? ' · 3rd-place match' : ' · Round ' + m.round)} · ${gameName(m.game)}</span>
-      ${statusBadge(m.status)}
+      ${statusBadge(m.status, m.homeId !== uid && m.awayId !== uid)}
     </div>
     <div class="versus" style="margin:18px 0 14px">
       <div class="side ${m.winnerId && m.winnerId === m.homeId ? 'winner' : ''}">${avatar(m.homeName, m.homeAvatar, m.homeId === uid ? 'me' : '')}
@@ -57,7 +57,7 @@ export function matchRow(m) {
       <div><span class="ellipsis ${m.winnerId === m.homeId ? 'brand-text' : ''}">${name(m.homeId, m.homeName)}</span><b>${hs}</b></div>
       <div><span class="ellipsis ${m.winnerId === m.awayId ? 'brand-text' : ''}">${name(m.awayId, m.awayName)}</span><b>${as}</b></div>
     </div>
-    <div style="text-align:right">${statusBadge(m.status)}<div class="tiny faint" style="margin-top:6px">${gameName(m.game)}</div></div>
+    <div style="text-align:right">${statusBadge(m.status, m.homeId !== uid && m.awayId !== uid)}<div class="tiny faint" style="margin-top:6px">${gameName(m.game)}</div></div>
   </a>`;
 }
 
