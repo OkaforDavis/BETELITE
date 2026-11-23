@@ -404,6 +404,12 @@ var migrations = []string{
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 	CREATE INDEX IF NOT EXISTS idx_match_messages_match ON match_messages (match_id, created_at);`,
+
+	// 21: a player asked to end an unplayed 1v1 (the other player agrees, or it
+	// ends by itself if they don't answer).
+	`ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_requested_by TEXT;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_requested_at TIMESTAMPTZ;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_reason TEXT;`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

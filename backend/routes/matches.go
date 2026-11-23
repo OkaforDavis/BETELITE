@@ -91,6 +91,32 @@ func SetupMatchRoutes(api fiber.Router) {
 		}
 		return utils.SendSuccess(c, fiber.Map{"message": msg})
 	})
+	// End an unplayed 1v1: friendly ends at once, otherwise the opponent agrees.
+	m.Post("/:id/end", func(c *fiber.Ctx) error {
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		c.BodyParser(&in)
+		match, err := services.RequestEnd(c.Context(), c.Params("id"), middleware.GetUID(c), in.Reason)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"match": match})
+	})
+	m.Post("/:id/end/respond", func(c *fiber.Ctx) error {
+		var in struct {
+			Agree bool `json:"agree"`
+		}
+		if err := c.BodyParser(&in); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		match, err := services.RespondEnd(c.Context(), c.Params("id"), middleware.GetUID(c), in.Agree)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"match": match})
+	})
+
 	// "I'm ready" alert: a loud notification to the opponent.
 	m.Post("/:id/ping", func(c *fiber.Ctx) error {
 		msg, err := services.PingOpponent(c.Context(), c.Params("id"), middleware.GetUID(c))

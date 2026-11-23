@@ -94,7 +94,7 @@ export default async function matchPage(view, { id }) {
 
   function actionArea(m, uid, opp) {
     switch (m.status) {
-      case 'ready': return uploadArea(m, opp);
+      case 'ready': return html`${endRequestCard(m, uid, opp)}${uploadArea(m, opp)}${endLink(m)}`;
       case 'submitted':
         if (m.submittedBy === uid) {
           return html`<div class="notice warn">${ic('clock')}<div><b>Waiting for ${opp.name} to check the result</b>
@@ -132,6 +132,63 @@ export default async function matchPage(view, { id }) {
         return html`<div class="notice">${ic('xCircle')}<div><b>Match cancelled</b><div class="small">${m.disputeReason || 'No result was submitted in time.'} ${m.escrowKind === 'bounty' ? 'The bounty and hosting fee went back to the host.' : m.stake > 0 ? 'Stakes were refunded.' : ''}</div></div></div>`;
     }
     return '';
+  }
+
+  // A pending "end the match" request, for the player who asked or the one who must answer.
+  function endRequestCard(m, uid, opp) {
+    if (m.kind !== 'p2p' || !m.endRequestedBy) return '';
+    const left = html`<b class="num" data-countdown="${m.endDeadline}">${timeLeft(m.endDeadline)}</b>`;
+    if (m.endRequestedBy === uid) {
+      return html`<div class="notice warn" style="margin-bottom:14px">${ic('clock')}<div class="grow"><b>You asked to end this match</b>
+        <div class="small">Waiting for ${opp.name}. If they don't answer in ${left}, the match ends by itself and ${m.escrowKind === 'bounty' ? 'the bounty goes back to the host' : 'stakes are refunded'}.</div>
+        <button class="link small" id="end-withdraw" style="margin-top:6px">Take it back, I want to play</button></div></div>`;
+    }
+    return html`<div class="card highlight" style="margin-bottom:14px">
+      <div class="h2">${opp.name} wants to end this match</div>
+      ${m.endReason ? html`<p class="small" style="margin-top:6px">“${m.endReason}”</p>` : ''}
+      <p class="small muted" style="margin-top:6px">${m.escrowKind === 'bounty' ? 'If it ends, the bounty and fee go back to the host and nobody wins.' : 'If it ends, nobody wins and any stakes are refunded.'} No answer in ${left} and it ends by itself.</p>
+      <div class="grid-2" style="margin-top:14px">
+        <button class="btn secondary" id="end-decline">${ic('gamepad')} Keep playing</button>
+        <button class="btn danger" id="end-agree">${ic('xCircle')} End match</button>
+      </div></div>`;
+  }
+
+  function endLink(m) {
+    if (m.kind !== 'p2p' || m.endRequestedBy) return '';
+    return html`<button class="btn ghost block" id="end-match" style="margin-top:12px">${ic('xCircle')} End this match</button>`;
+  }
+
+  function endSheet() {
+    const friendly = !(m.stake > 0);
+    const reasons = ['Accepted by mistake', "Can't play right now", 'Wrong game or settings', 'Opponent not responding'];
+    sheet(String(html`${sheetHead('End this match?', friendly ? 'Friendly match: it ends straight away' : 'Your opponent has to agree')}
+      <form id="endf">
+        <div class="chips" style="flex-wrap:wrap">${reasons.map((r) => html`<button type="button" class="chip" data-reason="${r}">${r}</button>`)}</div>
+        <label class="field"><span class="label">Reason <span class="faint">(optional)</span></span>
+          <input class="input" name="reason" maxlength="120" placeholder="Tell your opponent why"></label>
+        <div class="notice ${friendly ? '' : 'warn'}" style="margin-top:12px">${ic('info')}<div class="small">${friendly
+          ? 'Nobody wins or loses. You can both play other matches after.'
+          : `${m.escrowKind === 'bounty' ? 'The bounty and hosting fee go back to the host.' : 'Both stakes are refunded.'} If your opponent doesn't answer in 15 minutes, the match ends by itself. Only end matches you haven't played. If you already played, upload the result.`}</div></div>
+        <div class="sheet-actions"><button class="btn danger block" type="submit">${friendly ? 'End match' : 'Ask to end match'}</button></div>
+      </form>`), {
+      label: 'End match',
+      onMount(root, close) {
+        const f = root.querySelector('#endf');
+        root.querySelectorAll('[data-reason]').forEach((b) => b.addEventListener('click', () => {
+          root.querySelectorAll('[data-reason]').forEach((x) => x.classList.toggle('active', x === b));
+          f.elements.reason.value = b.dataset.reason;
+        }));
+        f.onsubmit = (e) => {
+          e.preventDefault();
+          busy(f.querySelector('[type=submit]'), async () => {
+            ({ match: m } = await post(`/matches/${m.id}/end`, { reason: f.elements.reason.value }));
+            close();
+            toast(m.status === 'void' ? 'Match ended' : 'Request sent. Waiting for your opponent.', 'info');
+            refreshProfile(); refreshCurrent(); draw();
+          });
+        };
+      },
+    });
   }
 
   function uploadArea(m, opp) {
@@ -218,6 +275,16 @@ export default async function matchPage(view, { id }) {
       };
     }
 
+    view.querySelector('#end-match')?.addEventListener('click', endSheet);
+    const respond = (agree) => (e) => busy(e.currentTarget, async () => {
+      ({ match: m } = await post(`/matches/${m.id}/end/respond`, { agree }));
+      toast(m.status === 'void' ? 'Match ended' : agree ? 'Done' : 'The match is still on', 'info');
+      refreshProfile(); refreshCurrent(); draw();
+    });
+    view.querySelector('#end-agree')?.addEventListener('click', respond(true));
+    view.querySelector('#end-decline')?.addEventListener('click', respond(false));
+    view.querySelector('#end-withdraw')?.addEventListener('click', respond(false));
+
     view.querySelector('#confirm')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       const ok = await confirmSheet({ title: 'Confirm this result?', message: 'This makes the result final straight away and settles the match. You can’t undo it.', confirm: 'Yes, it’s correct' });
@@ -260,10 +327,13 @@ export default async function matchPage(view, { id }) {
 
   const onUpdate = (e) => { if (e.detail.id === id) { m = e.detail; if (!view.querySelector('#file')?.files?.length) draw(); } };
   const onRoom = (e) => { if (e.detail?.matchId === id && m) { const uid = store.get().profile.id; mountRoom(view, m, uid, uid === m.homeId ? { name: m.awayName, tag: m.awayTag } : { name: m.homeName, tag: m.homeTag }); } };
+  // Back in the app: reload the match in case it changed while away.
+  const onResume = () => { if (m && !view.querySelector('#file')?.files?.length && !document.querySelector('.sheet')) load(); };
+  document.addEventListener('app_resume', onResume);
   document.addEventListener('match_update', onUpdate);
   document.addEventListener('match_room', onRoom);
   await load();
-  return () => { document.removeEventListener('match_update', onUpdate); document.removeEventListener('match_room', onRoom); };
+  return () => { document.removeEventListener('app_resume', onResume); document.removeEventListener('match_update', onUpdate); document.removeEventListener('match_room', onRoom); };
 }
 
 // Phone screenshots are often 2–5 MB PNGs. Re-encode large ones as a JPEG

@@ -35,12 +35,18 @@ export function disconnect() {
   ws = null;
 }
 
+let reconnectTimer = null;
+let hiddenAt = 0;
+
 function open() {
   if (!tokenFn) return;
+  clearTimeout(reconnectTimer);
+  if (ws && ws.readyState <= 1) return; // already connecting or connected
   const base = API_BASE || location.origin;
   const url = base.replace(/^http/, 'ws') + '/ws';
-  ws = new WebSocket(url);
-  ws.onopen = async () => {
+  const sock = new WebSocket(url);
+  ws = sock;
+  sock.onopen = async () => {
     retry = 0;
     emit('status', 'online');
     const token = await tokenFn();
@@ -49,7 +55,7 @@ function open() {
     clearInterval(pingTimer);
     pingTimer = setInterval(() => send('ping', {}), 25000);
   };
-  ws.onmessage = (e) => {
+  sock.onmessage = (e) => {
     // The server may batch several JSON messages separated by newlines.
     for (const line of String(e.data).split('\n')) {
       if (!line.trim()) continue;
@@ -59,17 +65,30 @@ function open() {
       } catch { /* ignore malformed */ }
     }
   };
-  ws.onclose = () => {
+  sock.onclose = () => {
+    if (ws !== sock) return; // an older socket closing late
     clearInterval(pingTimer);
     if (!tokenFn) return;
+    // Phones cut the connection when the app goes to the background. That's
+    // normal: reconnect quietly when it comes back instead of retrying (and
+    // showing "Reconnecting…") while nobody is looking.
+    if (document.visibilityState === 'hidden') return;
     emit('status', 'offline');
-    const delay = Math.min(30000, 1000 * 2 ** retry++);
-    setTimeout(open, delay);
+    const delay = Math.min(15000, 500 * 2 ** retry++);
+    reconnectTimer = setTimeout(open, delay);
   };
-  ws.onerror = () => ws.close();
+  sock.onerror = () => sock.close();
 }
 
-// Reconnect immediately when the app comes back to the foreground.
+// Back in the foreground: reconnect at once and tell the app to refresh what
+// may have changed while it was away (results, chat, balance).
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && tokenFn && (!ws || ws.readyState > 1)) { retry = 0; open(); }
+  if (!tokenFn) return;
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  retry = 0;
+  const wasDown = !ws || ws.readyState > 1;
+  if (wasDown) open();
+  if (hiddenAt && Date.now() - hiddenAt > 3000) emit('resume', { away: Date.now() - hiddenAt, reconnected: wasDown });
+  hiddenAt = 0;
 });
+window.addEventListener('online', () => { if (tokenFn) { retry = 0; open(); } });

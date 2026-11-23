@@ -103,14 +103,25 @@ function mountShell() {
 // ── Realtime ────────────────────────────────────────────────────────
 function wireRealtime() {
   rt.connect(currentToken);
+  // Only show "Reconnecting…" when the connection is really down for a few
+  // seconds while the app is on screen, not on every quick reconnect.
+  let barTimer = null;
   rt.on('status', (s) => {
-    let bar = $('.connection');
-    if (s === 'offline' && !bar) {
-      bar = document.createElement('div');
-      bar.className = 'connection';
-      bar.textContent = 'Reconnecting…';
-      document.body.append(bar);
-    } else if (s === 'online') bar?.remove();
+    clearTimeout(barTimer);
+    if (s === 'offline') {
+      barTimer = setTimeout(() => {
+        if ($('.connection') || document.visibilityState !== 'visible') return;
+        const bar = document.createElement('div');
+        bar.className = 'connection';
+        bar.textContent = navigator.onLine === false ? 'No internet connection' : 'Reconnecting…';
+        document.body.append(bar);
+      }, 4000);
+    } else if (s === 'online') $('.connection')?.remove();
+  });
+  // Back from the background: refresh what may have changed while away.
+  rt.on('resume', () => {
+    refreshUnread(); refreshProfile(); refreshCurrent();
+    document.dispatchEvent(new CustomEvent('app_resume'));
   });
   rt.on('notification', (n) => {
     if (n.type === 'match_ping') {
