@@ -44,7 +44,8 @@ type Standing struct {
 	Points       int    `json:"points"`
 	Eliminated   bool   `json:"eliminated"`
 	Position     *int   `json:"position,omitempty"`
-	Tier         string `json:"tier"` // membership badge
+	Score        *int   `json:"score,omitempty"` // Free-for-All: kills/points in the room
+	Tier         string `json:"tier"`            // membership badge
 }
 
 // Standings returns the table, sorted by points, goal difference, goals scored.
@@ -53,7 +54,7 @@ func Standings(ctx context.Context, q interface {
 }, tournamentID string) ([]Standing, error) {
 	rows, err := q.Query(ctx, `
 		SELECT tp.user_id, COALESCE(u.username,''), COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''),
-		       tp.wins, tp.draws, tp.losses, tp.goals, tp.goals_against, tp.points, tp.eliminated, tp.final_position,
+		       tp.wins, tp.draws, tp.losses, tp.goals, tp.goals_against, tp.points, tp.eliminated, tp.final_position, tp.score,
 		       COALESCE((SELECT m.tier FROM memberships m WHERE m.user_id = tp.user_id AND m.starts_at <= NOW() AND m.ends_at > NOW() ORDER BY m.ends_at DESC LIMIT 1), 'free')
 		FROM tournament_players tp
 		JOIN tournaments t ON t.id = tp.tournament_id
@@ -68,7 +69,7 @@ func Standings(ctx context.Context, q interface {
 	for rows.Next() {
 		var s Standing
 		if err := rows.Scan(&s.UserID, &s.Username, &s.Gamertag, &s.AvatarURL, &s.Wins, &s.Draws, &s.Losses,
-			&s.GoalsFor, &s.GoalsAgainst, &s.Points, &s.Eliminated, &s.Position, &s.Tier); err != nil {
+			&s.GoalsFor, &s.GoalsAgainst, &s.Points, &s.Eliminated, &s.Position, &s.Score, &s.Tier); err != nil {
 			return nil, err
 		}
 		s.Played = s.Wins + s.Draws + s.Losses
@@ -120,7 +121,9 @@ func StartTournament(ctx context.Context, tx pgx.Tx, tournamentID string) error 
 
 	now := time.Now()
 	roundLen := time.Duration(hours) * time.Hour
-	if format == "league" {
+	if format == "ffa" {
+		// Everyone plays in one game room; the host posts it (PostCupRoom).
+	} else if format == "league" {
 		for r, pairs := range roundRobin(players) {
 			deadline := now.Add(time.Duration(r+1) * roundLen)
 			for slot, p := range pairs {
@@ -243,7 +246,7 @@ func advanceTournament(ctx context.Context, tournamentID string) error {
 		Scan(&format, &game, &status, &round, &hours, &name); err != nil {
 		return err
 	}
-	if status != "active" {
+	if status != "active" || format == "ffa" { // FFA cups finish when the host submits the result
 		return nil
 	}
 

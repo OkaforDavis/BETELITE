@@ -410,6 +410,27 @@ var migrations = []string{
 	`ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_requested_by TEXT;
 	ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_requested_at TIMESTAMPTZ;
 	ALTER TABLE matches ADD COLUMN IF NOT EXISTS end_reason TEXT;`,
+
+	// 22: match settings (CODM mode, map, score/time limit, loadout rules) for
+	// cups, challenges and matches; Free-for-All cups (everyone in one game
+	// room: a start time, the room the host posts, and the result).
+	`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS settings JSONB;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_code TEXT;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_pass TEXT;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_note TEXT;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS room_at TIMESTAMPTZ;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ;
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS host_alerted_at TIMESTAMPTZ;
+	ALTER TABLE tournament_players ADD COLUMN IF NOT EXISTS score INT;
+	ALTER TABLE escrow ADD COLUMN IF NOT EXISTS settings JSONB;
+	ALTER TABLE matches ADD COLUMN IF NOT EXISTS settings JSONB;
+	CREATE TABLE IF NOT EXISTS tournament_results (
+		tournament_id TEXT PRIMARY KEY REFERENCES tournaments(id) ON DELETE CASCADE,
+		image BYTEA,
+		submitted_by TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

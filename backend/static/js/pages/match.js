@@ -6,6 +6,7 @@ import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 import { tipButton, bindTipButtons } from '../tips.js';
 import { roomSlot, mountRoom } from '../room.js';
 import { chatSlot, mountChat } from '../chat.js';
+import { settingsBox } from '../roomsettings.js';
 
 const STEPS = ['Play', 'Result sent', 'Check', 'Final'];
 const stepIndex = { ready: 0, submitted: 1, disputed: 2, review: 2, confirmed: 3, void: 3 };
@@ -51,6 +52,7 @@ export default async function matchPage(view, { id }) {
         ${m.status !== 'void' ? html`<div class="steps" aria-label="Match progress">${STEPS.map((s, i) => html`<div class="step ${i < step ? 'done' : i === step ? (m.status === 'confirmed' ? 'done' : 'now') : ''}">${s}</div>`)}</div>` : ''}
       </div>
 
+      ${m.settings ? html`<section class="section">${settingsBox(m.game, m.settings)}</section>` : ''}
       ${mine && m.status === 'ready' && m.awayId ? roomSlot(m) : ''}
       ${showChat(m, mine) ? chatSlot(m) : ''}
       <section class="section" id="action">${mine ? actionArea(m, uid, opp) : spectatorNote(m)}</section>

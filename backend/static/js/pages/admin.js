@@ -4,6 +4,8 @@ import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, bu
 import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
 import { adminSponsors } from '../sponsors.js';
+import { gameInfo } from '../store.js';
+import { settingsPicker, bindSettingsPicker, hasSettings } from '../roomsettings.js';
 
 const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['sponsors', 'Sponsors'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
 
@@ -219,6 +221,7 @@ async function tournaments(body, redraw) {
       knockout: { 8: [[50], [5800]], 16: [[100], [11500]], 32: [[150], [17300]], 64: [[300], [34500]] },
       swiss: { 8: [[30, 12, 8], [3500, 1400, 900]], 16: [[60, 25, 15], [7000, 2900, 1700]], 32: [[100, 50, 30], [11500, 5800, 3500]], 64: [[150, 90, 60], [17300, 10400, 6900]] },
       league: { 8: [[30, 12, 8], [3500, 1400, 900]], 16: [[60, 25, 15], [7000, 2900, 1700]] },
+      ffa: { 8: [[150], [16000]] },
     };
     const NAMES = { 'swiss-32': 'Top Player', 'swiss-64': 'End-of-Month Platter', 'knockout-64': 'End-of-Month Platter' };
     sheet(String(html`${sheetHead('Create tournament', 'Fixed prizes in cedis and naira, paid by CrestArena')}
@@ -226,11 +229,14 @@ async function tournaments(body, redraw) {
         <label class="field"><span class="label">Name</span><input class="input" name="name" required maxlength="60" placeholder="e.g. Friday Night Cup"></label>
         <div class="field"><span class="label">Game</span><div id="g">${gameChips(game)}</div></div>
         <div class="field"><span class="label">Format</span><div class="seg" id="fmt">
-          <button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="swiss">Points</button><button type="button" data-f="league">League</button></div>
+          <button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="swiss">Points</button><button type="button" data-f="league">League</button><button type="button" data-f="ffa" hidden>Free for All</button></div>
           <p class="hint" id="fmt-hint"></p></div>
+        <div id="settings-slot"></div>
+        <label class="field" id="starts-field" hidden><span class="label">Start time (your local time)</span><input class="input" type="datetime-local" name="startsAt">
+          <span class="hint">Players get a reminder 15 minutes before. At start time, post the Room ID on the cup page.</span></label>
         <div class="grid-2" style="margin-top:14px">
           <label class="field"><span class="label">Players</span><select class="select" name="max"><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option></select></label>
-          <label class="field" style="margin-top:0"><span class="label">Hours per round</span><input class="input num" name="hours" inputmode="numeric" value="24"></label></div>
+          <label class="field" style="margin-top:0" id="hours-field"><span class="label">Hours per round</span><input class="input num" name="hours" inputmode="numeric" value="24"></label></div>
         <div class="grid-2" style="margin-top:14px">
           <label class="field"><span class="label">Prizes ₵ (1st, 2nd, …)</span><input class="input" name="ghs" required></label>
           <label class="field" style="margin-top:0"><span class="label">Prizes ₦ (1st, 2nd, …)</span><input class="input" name="ngn" required></label></div>
@@ -249,25 +255,44 @@ async function tournaments(body, redraw) {
           knockout: 'Lose once and you are out. Pays up to 3 places: the semi-final losers play a 3rd-place match.',
           swiss: 'Everyone plays every round (8 players: 3 rounds, 16: 4, 32: 5, 64: 6) against players on similar points. Top 3 by points win.',
           league: 'Everyone plays everyone once. Best for 8 players or fewer (up to 20).',
+          ffa: 'Everyone plays in one game room (up to 8). You post the Room ID at start time, then enter the scores from the final scoreboard. Highest score wins.',
+        };
+        let readSettings = () => null;
+        const SIZE_OPTS = { ffa: [2, 3, 4, 5, 6, 7, 8], other: [4, 8, 16, 32, 64] };
+        const shape = () => {
+          const ffa = format === 'ffa';
+          const ffaOk = !!gameInfo(game).ffa;
+          root.querySelector('[data-f="ffa"]').hidden = !ffaOk;
+          if (ffa && !ffaOk) { format = 'knockout'; root.querySelectorAll('[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === format)); }
+          const sizes = format === 'ffa' ? SIZE_OPTS.ffa : SIZE_OPTS.other;
+          const cur = +f.max.value;
+          f.max.innerHTML = sizes.map((n) => `<option ${n === (sizes.includes(cur) ? cur : 8) ? 'selected' : ''}>${n}</option>`).join('');
+          root.querySelector('#hours-field').hidden = format === 'ffa';
+          root.querySelector('#starts-field').hidden = format !== 'ffa';
+          root.querySelector('#settings-slot').innerHTML = hasSettings(game) ? String(settingsPicker(game, format === 'ffa' ? 'ffa' : '1v1')) : '';
+          readSettings = bindSettingsPicker(root, game);
         };
         const preset = () => {
           const p = PRESETS[format]?.[f.max.value];
           if (p) { f.ghs.value = p[0].join(', '); f.ngn.value = p[1].join(', '); }
           hint.textContent = HINTS[format];
-          f.freeSeats.value = Math.max(1, Math.floor(+f.max.value / 4));
+          f.freeSeats.value = format === 'ffa' ? f.max.value : Math.max(1, Math.floor(+f.max.value / 4));
+          if (format === 'ffa') f.early.value = 0;
           const suggested = NAMES[format + '-' + f.max.value];
           if (suggested && !f.name.value) f.name.value = suggested;
           if (+f.max.value === 64) f.earlyTier.value = 'elite';
         };
-        const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); }));
+        const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); shape(); preset(); }));
         bindG();
         root.querySelectorAll('[data-f]').forEach((b) => (b.onclick = () => {
           format = b.dataset.f;
           root.querySelectorAll('[data-f]').forEach((x) => x.classList.toggle('active', x === b));
+          shape();
           if (format === 'league' && +f.max.value > 16) f.max.value = '8';
           preset();
         }));
         f.max.onchange = preset;
+        shape();
         preset();
         const list = (s) => s.split(',').map((x) => Math.round(parseFloat(x) * 100)).filter((x) => x > 0);
         f.onsubmit = (e) => {
@@ -277,10 +302,13 @@ async function tournaments(body, redraw) {
           const ngn = list(f.ngn.value);
           if (ghs.length !== ngn.length) return toast('Give the same number of prizes in cedis and naira', 'err');
           busy(f.querySelector('[type=submit]'), async () => {
+            if (format === 'ffa' && !f.startsAt.value) throw new Error('Pick the start time');
             await post('/admin/tournaments', {
               name: f.name.value, game, format, maxPlayers: num('max'), roundHours: num('hours'), earlyHours: num('early'),
               earlyTier: f.earlyTier.value, freeSeats: num('freeSeats'),
               entryFee: Math.round(num('fee') * 100), prizes: { GHS: ghs, NGN: ngn },
+              settings: readSettings(),
+              startsAt: format === 'ffa' ? new Date(f.startsAt.value).toISOString() : undefined,
             });
             close(); toast('Tournament created'); redraw();
           });

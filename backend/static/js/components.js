@@ -66,6 +66,7 @@ export const FORMATS = {
   knockout: ['Knockout', 'trophy', ''],
   league: ['League', 'list', 'info'],
   swiss: ['Points', 'grid', 'info'],
+  ffa: ['Free for All', 'target', 'warn'],
 };
 export const formatBadge = (t) => {
   const [label, icon, cls] = FORMATS[t.format] || FORMATS.knockout;

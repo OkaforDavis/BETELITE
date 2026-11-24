@@ -24,8 +24,8 @@ const (
 	chatPerMinute     = 15               // messages per player per match per minute
 	PingCooldown      = 60 * time.Second // between two alerts from the same player
 	PingMaxPerMatch   = 10
-	chatAfterFinal    = time.Hour        // "GG" time after the match is settled
-	chatPushThrottle  = 2 * time.Minute  // phone pushes for chat, per match
+	chatAfterFinal    = time.Hour       // "GG" time after the match is settled
+	chatPushThrottle  = 2 * time.Minute // phone pushes for chat, per match
 	chatHistoryLength = 200
 )
 

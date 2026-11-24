@@ -3,15 +3,17 @@ package services
 // Game describes a title CrestArena supports for verified matches, plus the
 // hints the OCR prompt needs to recognise a valid player-vs-player result.
 type Game struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Short        string   `json:"short"`
-	NameHint     string   `json:"nameHint"`     // shown in the profile form
-	IDHint       string   `json:"idHint"`       // where to find the in-game ID number
-	Football     bool     `json:"football"`     // draws in knockouts go to penalties
-	ResultScreen string   `json:"resultScreen"` // what to screenshot, in plain words
-	ModeHint     string   `json:"modeHint"`     // which game mode counts
-	Room         RoomSpec `json:"room"`         // how the two players meet in the game
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Short        string        `json:"short"`
+	NameHint     string        `json:"nameHint"`           // shown in the profile form
+	IDHint       string        `json:"idHint"`             // where to find the in-game ID number
+	Football     bool          `json:"football"`           // draws in knockouts go to penalties
+	ResultScreen string        `json:"resultScreen"`       // what to screenshot, in plain words
+	ModeHint     string        `json:"modeHint"`           // which game mode counts
+	Room         RoomSpec      `json:"room"`               // how the two players meet in the game
+	Settings     *SettingsSpec `json:"settings,omitempty"` // room settings players pick (CODM)
+	FFA          bool          `json:"ffa,omitempty"`      // can run Free-for-All cups (everyone in one room)
 	ocrHints     string
 }
 
@@ -112,6 +114,8 @@ Reject: Career / Season / Cup matches vs AI, pause menus, replays, and screens w
 		IDHint:       "Optional. Your CODM UID, so your opponent can invite you.",
 		ResultScreen: "final scoreboard (Victory / Defeat screen)",
 		ModeHint:     "a 1v1 private room or Gunfight 1v1 vs a real player",
+		Settings:     codmSettings,
+		FFA:          true,
 		Room: RoomSpec{
 			Mode: "host", Host: "home", CodeLabel: "Room ID", Password: true,
 			HostSteps: []string{
