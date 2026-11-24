@@ -52,44 +52,46 @@ func userErr(status int, format string, a ...any) error {
 
 // MatchView is a match as returned to clients.
 type MatchView struct {
-	ID              string     `json:"id"`
-	Kind            string     `json:"kind"` // p2p | tournament
-	Game            string     `json:"game"`
-	GameName        string     `json:"gameName"`
-	HomeID          string     `json:"homeId"`
-	HomeName        string     `json:"homeName"`
-	HomeTag         string     `json:"homeTag"`
-	HomeAvatar      string     `json:"homeAvatar"`
-	AwayID          string     `json:"awayId"`
-	AwayName        string     `json:"awayName"`
-	AwayTag         string     `json:"awayTag"`
-	AwayAvatar      string     `json:"awayAvatar"`
-	TournamentID    string     `json:"tournamentId,omitempty"`
-	TournamentName  string     `json:"tournamentName,omitempty"`
-	Round           int        `json:"round,omitempty"`
-	ThirdPlace      bool       `json:"thirdPlace,omitempty"` // knockout 3rd-place match
-	Status          string     `json:"status"`
-	ScoreHome       *int       `json:"scoreHome"`
-	ScoreAway       *int       `json:"scoreAway"`
-	PensHome        *int       `json:"pensHome,omitempty"`
-	PensAway        *int       `json:"pensAway,omitempty"`
-	WinnerID        string     `json:"winnerId,omitempty"`
-	SubmittedBy     string     `json:"submittedBy,omitempty"`
-	DisputeDeadline *time.Time `json:"disputeDeadline,omitempty"`
-	PlayDeadline    *time.Time `json:"playDeadline,omitempty"`
-	DisputedBy      string     `json:"disputedBy,omitempty"`
-	DisputeReason   string     `json:"disputeReason,omitempty"`
-	InGameMatchID   string     `json:"inGameMatchId,omitempty"`
-	Stake           int64      `json:"stake"`
-	Pool            int64      `json:"pool"`
-	EscrowKind      string     `json:"escrowKind,omitempty"` // "bounty": only the host (home) put up the prize
-	Currency        string     `json:"currency"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	SettledAt       *time.Time `json:"settledAt,omitempty"`
-	EndRequestedBy  string     `json:"endRequestedBy,omitempty"` // a player asked to end this unplayed 1v1
-	EndRequestedAt  *time.Time `json:"endRequestedAt,omitempty"`
-	EndDeadline     *time.Time `json:"endDeadline,omitempty"` // ends by itself at this time if not answered
-	EndReason       string     `json:"endReason,omitempty"`
+	ID              string         `json:"id"`
+	Kind            string         `json:"kind"` // p2p | tournament
+	Game            string         `json:"game"`
+	GameName        string         `json:"gameName"`
+	HomeID          string         `json:"homeId"`
+	HomeName        string         `json:"homeName"`
+	HomeTag         string         `json:"homeTag"`
+	HomeAvatar      string         `json:"homeAvatar"`
+	AwayID          string         `json:"awayId"`
+	AwayName        string         `json:"awayName"`
+	AwayTag         string         `json:"awayTag"`
+	AwayAvatar      string         `json:"awayAvatar"`
+	TournamentID    string         `json:"tournamentId,omitempty"`
+	TournamentName  string         `json:"tournamentName,omitempty"`
+	Round           int            `json:"round,omitempty"`
+	ThirdPlace      bool           `json:"thirdPlace,omitempty"` // knockout 3rd-place match
+	Settings        *MatchSettings `json:"settings,omitempty"`   // room settings (CODM)
+	SettingsSummary string         `json:"settingsSummary,omitempty"`
+	Status          string         `json:"status"`
+	ScoreHome       *int           `json:"scoreHome"`
+	ScoreAway       *int           `json:"scoreAway"`
+	PensHome        *int           `json:"pensHome,omitempty"`
+	PensAway        *int           `json:"pensAway,omitempty"`
+	WinnerID        string         `json:"winnerId,omitempty"`
+	SubmittedBy     string         `json:"submittedBy,omitempty"`
+	DisputeDeadline *time.Time     `json:"disputeDeadline,omitempty"`
+	PlayDeadline    *time.Time     `json:"playDeadline,omitempty"`
+	DisputedBy      string         `json:"disputedBy,omitempty"`
+	DisputeReason   string         `json:"disputeReason,omitempty"`
+	InGameMatchID   string         `json:"inGameMatchId,omitempty"`
+	Stake           int64          `json:"stake"`
+	Pool            int64          `json:"pool"`
+	EscrowKind      string         `json:"escrowKind,omitempty"` // "bounty": only the host (home) put up the prize
+	Currency        string         `json:"currency"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	SettledAt       *time.Time     `json:"settledAt,omitempty"`
+	EndRequestedBy  string         `json:"endRequestedBy,omitempty"` // a player asked to end this unplayed 1v1
+	EndRequestedAt  *time.Time     `json:"endRequestedAt,omitempty"`
+	EndDeadline     *time.Time     `json:"endDeadline,omitempty"` // ends by itself at this time if not answered
+	EndReason       string         `json:"endReason,omitempty"`
 }
 
 const matchSelect = `
@@ -101,7 +103,8 @@ SELECT m.id, m.kind, m.game, m.home_id, COALESCE(hu.username,''), COALESCE(hg.ga
        COALESCE(m.disputed_by,''), COALESCE(m.dispute_reason,''), COALESCE(m.ingame_match_id,''),
        COALESCE(e.amount,0), COALESCE(e.pool,0), COALESCE(e.kind,''), COALESCE(e.currency, t.currency, 'NGN'),
        m.created_at, m.settled_at, m.third_place,
-       CASE WHEN m.status = 'ready' THEN COALESCE(m.end_requested_by,'') ELSE '' END, m.end_requested_at, COALESCE(m.end_reason,'')
+       CASE WHEN m.status = 'ready' THEN COALESCE(m.end_requested_by,'') ELSE '' END, m.end_requested_at, COALESCE(m.end_reason,''),
+       COALESCE(m.settings, e.settings, t.settings)
 FROM matches m
 LEFT JOIN users hu ON hu.id = m.home_id
 LEFT JOIN users au ON au.id = m.away_id
@@ -112,6 +115,7 @@ LEFT JOIN escrow e ON e.challenge_id = m.challenge_id`
 
 func scanMatch(row pgx.Row) (*MatchView, error) {
 	var m MatchView
+	var settings []byte
 	err := row.Scan(&m.ID, &m.Kind, &m.Game, &m.HomeID, &m.HomeName, &m.HomeTag, &m.HomeAvatar,
 		&m.AwayID, &m.AwayName, &m.AwayTag, &m.AwayAvatar,
 		&m.TournamentID, &m.TournamentName, &m.Round, &m.Status,
@@ -119,10 +123,12 @@ func scanMatch(row pgx.Row) (*MatchView, error) {
 		&m.SubmittedBy, &m.DisputeDeadline, &m.PlayDeadline,
 		&m.DisputedBy, &m.DisputeReason, &m.InGameMatchID,
 		&m.Stake, &m.Pool, &m.EscrowKind, &m.Currency, &m.CreatedAt, &m.SettledAt, &m.ThirdPlace,
-		&m.EndRequestedBy, &m.EndRequestedAt, &m.EndReason)
+		&m.EndRequestedBy, &m.EndRequestedAt, &m.EndReason, &settings)
 	if err != nil {
 		return nil, err
 	}
+	m.Settings = ParseSettings(settings)
+	m.SettingsSummary = SettingsSummary(m.Game, m.Settings)
 	if m.EndRequestedBy == "" {
 		m.EndRequestedAt, m.EndReason = nil, ""
 	} else if m.EndRequestedAt != nil {

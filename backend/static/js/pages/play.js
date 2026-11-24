@@ -8,6 +8,7 @@ import { needsConsent, consentGate } from '../consent.js';
 import { navigate } from '../router.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 import * as rt from '../realtime.js';
+import { settingsPicker, bindSettingsPicker } from '../roomsettings.js';
 
 const WIN_PCT = 80;
 const QUICK = { NGN: [500, 1000, 2000, 5000], GHS: [10, 20, 50, 100] };
@@ -53,6 +54,7 @@ export default async function play(view, { query }) {
           <div class="grow">
             <div class="h3 ellipsis">${c.creatorId === uid ? 'Your challenge' : c.creatorName}</div>
             <div class="small muted ellipsis">${c.amount ? '' : 'Friendly · '}${c.gameName} · ${c.creatorTag || '—'} · ${timeAgo(c.createdAt)}</div>
+            ${c.settingsSummary ? html`<div class="tiny brand-text ellipsis" style="margin-top:2px">${ic('target')} ${c.settingsSummary}</div>` : ''}
           </div>
           ${c.amount ? html`<div style="text-align:right">${c.kind === 'bounty' ? html`
             <span class="badge brand">${ic('zap')}Bounty</span>
@@ -120,7 +122,7 @@ export default async function play(view, { query }) {
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptBounty(c, btn));
     const ok = await confirmSheet({
       title: `Take on ${c.creatorName}'s bounty?`,
-      message: `Free to accept. Beat ${c.creatorName} at ${gameName(c.game)} and ${money(c.prize, c.currency)} is yours${profile.currency !== c.currency ? ` (paid in ${profile.currency} at the market rate)` : ''}. Lose or draw and nothing is taken from you. Play within 3 hours and upload the final result screen showing both names.`,
+      message: `Free to accept. Beat ${c.creatorName} at ${gameName(c.game)} and ${money(c.prize, c.currency)} is yours${profile.currency !== c.currency ? ` (paid in ${profile.currency} at the market rate)` : ''}. Lose or draw and nothing is taken from you. Play within 3 hours and upload the final result screen showing both names.${c.settingsSummary ? ` Settings: ${c.settingsSummary}.` : ''}`,
       confirm: 'Accept bounty',
     });
     if (!ok) return;
@@ -136,7 +138,7 @@ export default async function play(view, { query }) {
     if (!hasGameProfile(c.game)) return gameIdSheet(c.game, () => acceptFree(c, btn));
     const ok = await confirmSheet({
       title: `Play ${c.creatorName}?`,
-      message: `A free friendly match. Play ${gameName(c.game)} within 3 hours and upload the final result screen showing both names.`,
+      message: `A free friendly match. Play ${gameName(c.game)} within 3 hours and upload the final result screen showing both names.${c.settingsSummary ? ` Settings: ${c.settingsSummary}.` : ''}`,
       confirm: 'Accept challenge',
     });
     if (!ok) return;
@@ -239,6 +241,7 @@ function createFreeOrBounty(onDone) {
     <form id="cc">
       <span class="label">Game</span>
       <div id="games">${gameChips(game)}</div>
+      <div id="settings-slot">${settingsPicker(game, '1v1')}</div>
       <div class="field" style="margin-top:18px"><span class="label">Type</span>
         <div class="seg" id="kind"><button type="button" data-k="friendly" class="active">Friendly</button><button type="button" data-k="bounty">${ic('zap')} Bounty</button></div></div>
       <div id="bounty-box" hidden>
@@ -277,9 +280,12 @@ function createFreeOrBounty(onDone) {
           <div class="row between"><span>Taken from your wallet now</span><b class="h3 num">${money(prize + fee, cur)}</b></div>
           <div class="tiny faint" style="margin-top:6px">Win or draw: ${money(prize, cur)} returns to you. Lose: your challenger gets it.</div>`);
       };
+      let readSettings = bindSettingsPicker(root, game);
       const bindGames = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
         game = b.dataset.game;
         root.querySelector('#games').innerHTML = String(gameChips(game));
+        root.querySelector('#settings-slot').innerHTML = String(settingsPicker(game, '1v1'));
+        readSettings = bindSettingsPicker(root, game);
         bindGames();
       }));
       bindGames();
@@ -302,7 +308,8 @@ function createFreeOrBounty(onDone) {
           return navigate('/wallet?deposit=' + Math.ceil((total - profile.balance) / 100));
         }
         busy(e.target.querySelector('[type=submit]'), async () => {
-          await post('/lobby/create', kind === 'bounty' ? { game, amount: amount * 100, kind: 'bounty' } : { game, amount: 0 });
+          const settings = readSettings();
+          await post('/lobby/create', kind === 'bounty' ? { game, amount: amount * 100, kind: 'bounty', settings } : { game, amount: 0, settings });
           close();
           toast(kind === 'bounty' ? 'Bounty posted. We’ll notify you when someone takes it on.' : 'Challenge posted. We’ll notify you when someone accepts.');
           refreshProfile();

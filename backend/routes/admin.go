@@ -264,19 +264,21 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	admin.Post("/tournaments", func(c *fiber.Ctx) error {
 		var req struct {
-			Name       string               `json:"name"`
-			Game       string               `json:"game"`
-			Format     string               `json:"format"` // knockout | league | swiss
-			Icon       string               `json:"icon"`
-			EntryFee   int64                `json:"entryFee"` // only when staking is enabled
-			Currency   string               `json:"currency"` // entry fee currency
-			MaxPlayers int                  `json:"maxPlayers"`
-			Prizes     services.FixedPrizes `json:"prizes"`     // fixed prizes per currency, minor units
-			PrizeSplit []float64            `json:"prizeSplit"` // paid-entry tournaments only
-			RoundHours int                  `json:"roundHours"`
-			EarlyHours int                  `json:"earlyHours"` // members-only sign-up window
-			EarlyTier  string               `json:"earlyTier"`  // "pro" (any plan) or "elite"
-			FreeSeats  *int                 `json:"freeSeats"`  // max free-plan seats; default 25%
+			Name       string                  `json:"name"`
+			Game       string                  `json:"game"`
+			Format     string                  `json:"format"` // knockout | league | swiss
+			Icon       string                  `json:"icon"`
+			EntryFee   int64                   `json:"entryFee"` // only when staking is enabled
+			Currency   string                  `json:"currency"` // entry fee currency
+			MaxPlayers int                     `json:"maxPlayers"`
+			Prizes     services.FixedPrizes    `json:"prizes"`     // fixed prizes per currency, minor units
+			PrizeSplit []float64               `json:"prizeSplit"` // paid-entry tournaments only
+			RoundHours int                     `json:"roundHours"`
+			EarlyHours int                     `json:"earlyHours"` // members-only sign-up window
+			EarlyTier  string                  `json:"earlyTier"`  // "pro" (any plan) or "elite"
+			FreeSeats  *int                    `json:"freeSeats"`  // max free-plan seats; default 25%
+			Settings   *services.MatchSettings `json:"settings"`   // room settings (CODM)
+			StartsAt   *time.Time              `json:"startsAt"`   // Free-for-All cups: when the room opens
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -286,9 +288,22 @@ func SetupAdminRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Name and a supported game are required")
 		}
 		switch req.Format {
-		case "league", "swiss":
+		case "league", "swiss", "ffa":
 		default:
 			req.Format = "knockout"
+		}
+		if req.Format == "ffa" {
+			s, err := services.CheckFFA(req.Game, req.MaxPlayers, req.Settings, req.StartsAt)
+			if err != nil {
+				return fail(c, err)
+			}
+			req.Settings = s
+		} else {
+			s, err := services.CleanSettings(req.Game, req.Settings, "")
+			if err != nil {
+				return fail(c, err)
+			}
+			req.Settings, req.StartsAt = s, nil
 		}
 		if req.Currency != "GHS" {
 			req.Currency = "NGN"
@@ -376,10 +391,10 @@ func SetupAdminRoutes(api fiber.Router) {
 		}
 		ctx := c.Context()
 		id := utils.GenerateTournamentID()
-		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours, members_only_until, created_by, status, early_tier, free_seats)
-			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,0,$9::jsonb,$10::jsonb,$11,$12,$13,'open',$14,$15)`,
+		_, err := db.Pool.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, icon, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours, members_only_until, created_by, status, early_tier, free_seats, settings, starts_at)
+			VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,0,$9::jsonb,$10::jsonb,$11,$12,$13,'open',$14,$15,$16::jsonb,$17)`,
 			id, req.Name, req.Game, req.Format, req.Icon, req.EntryFee, req.Currency, req.MaxPlayers, splitJSON, prizesJSON, req.RoundHours, membersUntil, middleware.GetUID(c),
-			req.EarlyTier, freeSeats)
+			req.EarlyTier, freeSeats, services.SettingsJSON(req.Settings), req.StartsAt)
 		if err != nil {
 			return fail(c, err)
 		}

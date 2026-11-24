@@ -21,39 +21,46 @@ import (
 )
 
 type tournamentView struct {
-	ID               string               `json:"id"`
-	Name             string               `json:"name"`
-	Description      string               `json:"description,omitempty"`
-	CoverURL         string               `json:"coverUrl,omitempty"`
-	Game             string               `json:"game"`
-	GameName         string               `json:"gameName"`
-	Format           string               `json:"format"`
-	Icon             string               `json:"icon"`
-	EntryFee         int64                `json:"entryFee"`
-	Currency         string               `json:"currency"`
-	MaxPlayers       int                  `json:"maxPlayers"`
-	PlayerCount      int                  `json:"playerCount"`
-	Status           string               `json:"status"`
-	CurrentRound     int                  `json:"currentRound"`
-	RoundHours       int                  `json:"roundHours"`
-	PrizeSplit       []float64            `json:"prizeSplit"`
-	Prizes           []int64              `json:"prizes"`                     // projected at full capacity
-	FixedPrizes      services.FixedPrizes `json:"fixedPrizes,omitempty"`      // per currency, 1st place first
-	MembersOnlyUntil *time.Time           `json:"membersOnlyUntil,omitempty"` // early sign-up for members
-	EarlyTier        string               `json:"earlyTier"`                  // "pro" = any plan, "elite" = Elite only
-	FreeSeats        *int                 `json:"freeSeats,omitempty"`        // max seats for free-plan players
-	FreeTaken        int                  `json:"freeTaken"`
-	TotalRounds      int                  `json:"totalRounds,omitempty"`
-	Joined           bool                 `json:"joined"`
-	WinnerID         string               `json:"winnerId,omitempty"`
-	CreatedAt        time.Time            `json:"createdAt"`
-	StartedAt        *time.Time           `json:"startedAt,omitempty"`
-	HostID           string               `json:"hostId,omitempty"` // player-hosted cup: free entry, host funds the pool
-	HostName         string               `json:"hostName,omitempty"`
-	HostPool         int64                `json:"hostPool,omitempty"`
-	HostFee          int64                `json:"hostFee,omitempty"`
-	FillDeadline     *time.Time           `json:"fillDeadline,omitempty"`
-	MembersOnly      bool                 `json:"membersOnly,omitempty"` // host cup only paid members can join
+	ID               string                  `json:"id"`
+	Name             string                  `json:"name"`
+	Description      string                  `json:"description,omitempty"`
+	CoverURL         string                  `json:"coverUrl,omitempty"`
+	Game             string                  `json:"game"`
+	GameName         string                  `json:"gameName"`
+	Format           string                  `json:"format"`
+	Icon             string                  `json:"icon"`
+	EntryFee         int64                   `json:"entryFee"`
+	Currency         string                  `json:"currency"`
+	MaxPlayers       int                     `json:"maxPlayers"`
+	PlayerCount      int                     `json:"playerCount"`
+	Status           string                  `json:"status"`
+	CurrentRound     int                     `json:"currentRound"`
+	RoundHours       int                     `json:"roundHours"`
+	PrizeSplit       []float64               `json:"prizeSplit"`
+	Prizes           []int64                 `json:"prizes"`                     // projected at full capacity
+	FixedPrizes      services.FixedPrizes    `json:"fixedPrizes,omitempty"`      // per currency, 1st place first
+	MembersOnlyUntil *time.Time              `json:"membersOnlyUntil,omitempty"` // early sign-up for members
+	EarlyTier        string                  `json:"earlyTier"`                  // "pro" = any plan, "elite" = Elite only
+	FreeSeats        *int                    `json:"freeSeats,omitempty"`        // max seats for free-plan players
+	FreeTaken        int                     `json:"freeTaken"`
+	TotalRounds      int                     `json:"totalRounds,omitempty"`
+	Joined           bool                    `json:"joined"`
+	WinnerID         string                  `json:"winnerId,omitempty"`
+	CreatedAt        time.Time               `json:"createdAt"`
+	StartedAt        *time.Time              `json:"startedAt,omitempty"`
+	HostID           string                  `json:"hostId,omitempty"` // player-hosted cup: free entry, host funds the pool
+	HostName         string                  `json:"hostName,omitempty"`
+	HostPool         int64                   `json:"hostPool,omitempty"`
+	HostFee          int64                   `json:"hostFee,omitempty"`
+	FillDeadline     *time.Time              `json:"fillDeadline,omitempty"`
+	MembersOnly      bool                    `json:"membersOnly,omitempty"` // host cup only paid members can join
+	Settings         *services.MatchSettings `json:"settings,omitempty"`    // room settings (CODM)
+	SettingsSummary  string                  `json:"settingsSummary,omitempty"`
+	StartsAt         *time.Time              `json:"startsAt,omitempty"` // Free-for-All: when the room opens
+	CreatedBy        string                  `json:"-"`
+	Room             *services.CupRoom       `json:"room,omitempty"`      // Free-for-All: players and host only
+	CanManage        bool                    `json:"canManage,omitempty"` // may post the room / the result
+	HasResult        bool                    `json:"hasResult,omitempty"` // a final scoreboard was uploaded
 }
 
 const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon,''), t.entry_fee, t.currency, t.max_players,
@@ -61,17 +68,21 @@ const tournamentSelect = `SELECT t.id, t.name, t.game, t.format, COALESCE(t.icon
 	t.prize_split, t.prize_pool, EXISTS(SELECT 1 FROM tournament_players p WHERE p.tournament_id = t.id AND p.user_id = $1),
 	COALESCE(t.winner_id,''), t.created_at, t.started_at, t.prizes, t.members_only_until, t.early_tier, t.free_seats,
 	(SELECT COUNT(*) FROM tournament_players p WHERE p.tournament_id = t.id AND p.free_entry),
-	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only, COALESCE(t.description,''), COALESCE(t.cover_url,'') FROM tournaments t`
+	COALESCE(t.host_id,''), COALESCE((SELECT username FROM users h WHERE h.id = t.host_id),''), t.host_pool, t.host_fee, t.fill_deadline, t.members_only, COALESCE(t.description,''), COALESCE(t.cover_url,''),
+	t.settings, t.starts_at, COALESCE(t.created_by,''), EXISTS(SELECT 1 FROM tournament_results r WHERE r.tournament_id = t.id) FROM tournaments t`
 
 func scanTournament(row pgx.Row) (*tournamentView, error) {
 	var t tournamentView
-	var split, fixed []byte
+	var split, fixed, settings []byte
 	var seed int64
 	if err := row.Scan(&t.ID, &t.Name, &t.Game, &t.Format, &t.Icon, &t.EntryFee, &t.Currency, &t.MaxPlayers, &t.PlayerCount,
 		&t.Status, &t.CurrentRound, &t.RoundHours, &split, &seed, &t.Joined, &t.WinnerID, &t.CreatedAt, &t.StartedAt, &fixed, &t.MembersOnlyUntil,
-		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly, &t.Description, &t.CoverURL); err != nil {
+		&t.EarlyTier, &t.FreeSeats, &t.FreeTaken, &t.HostID, &t.HostName, &t.HostPool, &t.HostFee, &t.FillDeadline, &t.MembersOnly, &t.Description, &t.CoverURL,
+		&settings, &t.StartsAt, &t.CreatedBy, &t.HasResult); err != nil {
 		return nil, err
 	}
+	t.Settings = services.ParseSettings(settings)
+	t.SettingsSummary = services.SettingsSummary(t.Game, t.Settings)
 	t.FixedPrizes = services.ParseFixedPrizes(fixed)
 	if t.Format == "swiss" {
 		t.TotalRounds = services.SwissRounds(t.MaxPlayers)
@@ -240,10 +251,70 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
+		if t.Format == "ffa" {
+			uid, admin := middleware.GetUID(c), middleware.IsAdminCtx(c)
+			t.CanManage = services.CanManageCup(t.HostID, uid, admin)
+			if t.Room, err = services.GetCupRoom(ctx, t.ID, uid, admin); err != nil {
+				return fail(c, err)
+			}
+		}
 		var sponsor *services.Sponsor
 		// Host cups and CrestArena's own cups (e.g. the End-of-Month Platter) can both have a sponsor.
 		sponsor = services.GetSponsor(ctx, t.ID, (t.HostID != "" && t.HostID == middleware.GetUID(c)) || middleware.IsAdminCtx(c))
 		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches, "sponsor": sponsor})
+	})
+
+	// Free-for-All cups: the host posts the game room (this starts the cup and
+	// alerts every player), then submits the final scoreboard.
+	tr.Post("/:id/room", func(c *fiber.Ctx) error {
+		var in struct {
+			Code     string `json:"code"`
+			Password string `json:"password"`
+			Note     string `json:"note"`
+		}
+		if err := c.BodyParser(&in); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		room, err := services.PostCupRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), in.Code, in.Password, in.Note)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"room": room})
+	})
+	tr.Post("/:id/result", middleware.RateLimitOCR(), func(c *fiber.Ctx) error {
+		fh, err := c.FormFile("image")
+		if err != nil {
+			return utils.SendError(c, 400, "Upload the final scoreboard screenshot")
+		}
+		if fh.Size > 8<<20 {
+			return utils.SendError(c, 400, "The screenshot is larger than 8 MB")
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return fail(c, err)
+		}
+		img, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return fail(c, err)
+		}
+		var res services.CupResult
+		if err := json.Unmarshal([]byte(c.FormValue("result")), &res); err != nil {
+			return utils.SendError(c, 400, "Invalid result")
+		}
+		if err := services.SubmitCupResult(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), res, img); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"ok": true})
+	})
+	tr.Get("/:id/result-image", func(c *fiber.Ctx) error {
+		img, err := services.CupResultImage(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		if err != nil {
+			return fail(c, err)
+		}
+		c.Set("Content-Type", "image/jpeg")
+		c.Set("Cache-Control", "private, max-age=300")
+		return c.Send(img)
 	})
 
 	tr.Post("/:id/join", func(c *fiber.Ctx) error {
@@ -434,7 +505,14 @@ func notifyTournamentStart(tid, name string) {
 		}
 	}
 	rows.Close()
+	var format string
+	db.Pool.QueryRow(ctx, "SELECT format FROM tournaments WHERE id = $1", tid).Scan(&format)
 	for _, id := range ids {
+		if format == "ffa" {
+			services.Notify(id, "tournament_started", name+" is full! 🎯",
+				"All seats are taken. At start time the host posts the Room ID here and you'll get a loud alert.", "/tournaments/"+tid, map[string]any{"tournamentId": tid})
+			continue
+		}
 		services.Notify(id, "tournament_started", name+" has started! 🏁",
 			"Your first match is ready. Open the tournament to see your opponent and deadline.", "/tournaments/"+tid, map[string]any{"tournamentId": tid})
 	}

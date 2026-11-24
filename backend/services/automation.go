@@ -62,6 +62,7 @@ func runAutomation(hub *ws.Hub, cfg AutomationConfig) {
 	endUnansweredRequests(ctx)
 	cleanupStaleChallenges(ctx, hub, cfg.ChallengeExpireDuration)
 	ExpireUnfilledCups(ctx)
+	remindFFACups(ctx)
 }
 
 func idsFrom(ctx context.Context, sql string, args ...any) []string {

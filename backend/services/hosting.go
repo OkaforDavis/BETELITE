@@ -104,6 +104,24 @@ type HostCupRequest struct {
 	RoundHours int       `json:"roundHours"`
 	// MembersOnly: only players with a paid plan can join.
 	MembersOnly bool `json:"membersOnly"`
+	// Room settings (CODM) and, for Free-for-All cups, the start time.
+	Settings *MatchSettings `json:"settings"`
+	StartsAt *time.Time     `json:"startsAt"`
+}
+
+// CheckFFA validates a Free-for-All cup's game, size, settings and start time.
+func CheckFFA(game string, players int, settings *MatchSettings, startsAt *time.Time) (*MatchSettings, error) {
+	g := GameByID(game)
+	if g == nil || !g.FFA {
+		return nil, userErr(400, "Free-for-All cups are for Call of Duty: Mobile")
+	}
+	if players < 2 || players > FFAMaxPlayers {
+		return nil, userErr(400, "A Free-for-All room takes 2 to %d players", FFAMaxPlayers)
+	}
+	if startsAt != nil && (startsAt.Before(time.Now().Add(-time.Minute)) || startsAt.After(time.Now().Add(30*24*time.Hour))) {
+		return nil, userErr(400, "Pick a start time in the next 30 days")
+	}
+	return CleanSettings(game, settings, "ffa")
 }
 
 // FreeCupAvailable reports whether an Elite member still has this plan
@@ -146,8 +164,22 @@ func HostCup(ctx context.Context, uid string, req HostCupRequest) (string, error
 		if req.MaxPlayers < 4 || req.MaxPlayers > 8 {
 			return "", userErr(400, "Leagues take 4 to 8 players")
 		}
+	case "ffa":
+		places = 3
+		s, err := CheckFFA(req.Game, req.MaxPlayers, req.Settings, req.StartsAt)
+		if err != nil {
+			return "", err
+		}
+		req.Settings = s
 	default:
 		return "", userErr(400, "Choose a format")
+	}
+	if req.Format != "ffa" {
+		s, err := CleanSettings(req.Game, req.Settings, "")
+		if err != nil {
+			return "", err
+		}
+		req.Settings, req.StartsAt = s, nil
 	}
 	if err := ValidateSplit(req.Split, places); err != nil {
 		return "", err
@@ -207,9 +239,10 @@ func HostCup(ctx context.Context, uid string, req HostCupRequest) (string, error
 	prizes, _ := json.Marshal(map[string][]int64{currency: SplitPool(req.Pool, req.Split)})
 	split, _ := json.Marshal(req.Split)
 	_, err = tx.Exec(ctx, `INSERT INTO tournaments (id, name, game, mode, format, entry_fee, currency, max_players, prize_pool, prize_split, prizes, round_hours,
-			created_by, status, early_tier, host_id, host_pool, host_fee, host_fee_waived, fill_deadline, members_only)
-		VALUES ($1,$2,$3,$4,$4,0,$5,$6,0,$7::jsonb,$8::jsonb,$9,$10,'open','pro',$10,$11,$12,$13,$14,$15)`,
-		id, req.Name, req.Game, req.Format, currency, req.MaxPlayers, string(split), string(prizes), req.RoundHours, uid, req.Pool, fee, waived, time.Now().Add(CupFillWindow), req.MembersOnly)
+			created_by, status, early_tier, host_id, host_pool, host_fee, host_fee_waived, fill_deadline, members_only, settings, starts_at)
+		VALUES ($1,$2,$3,$4,$4,0,$5,$6,0,$7::jsonb,$8::jsonb,$9,$10,'open','pro',$10,$11,$12,$13,$14,$15,$16::jsonb,$17)`,
+		id, req.Name, req.Game, req.Format, currency, req.MaxPlayers, string(split), string(prizes), req.RoundHours, uid, req.Pool, fee, waived, time.Now().Add(CupFillWindow), req.MembersOnly,
+		settingsJSON(req.Settings), req.StartsAt)
 	if err != nil {
 		return "", err
 	}

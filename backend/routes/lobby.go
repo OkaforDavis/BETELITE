@@ -23,18 +23,20 @@ var (
 )
 
 type challengeView struct {
-	ID            string    `json:"id"`
-	CreatorID     string    `json:"creatorId"`
-	CreatorName   string    `json:"creatorName"`
-	CreatorTag    string    `json:"creatorTag"`
-	CreatorAvatar string    `json:"creatorAvatar"`
-	Game          string    `json:"game"`
-	GameName      string    `json:"gameName"`
-	Kind          string    `json:"kind"` // stake | bounty (amount 0 = friendly)
-	Amount        int64     `json:"amount"`
-	Currency      string    `json:"currency"`
-	Prize         int64     `json:"prize"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID              string                  `json:"id"`
+	CreatorID       string                  `json:"creatorId"`
+	CreatorName     string                  `json:"creatorName"`
+	CreatorTag      string                  `json:"creatorTag"`
+	CreatorAvatar   string                  `json:"creatorAvatar"`
+	Game            string                  `json:"game"`
+	GameName        string                  `json:"gameName"`
+	Kind            string                  `json:"kind"` // stake | bounty (amount 0 = friendly)
+	Amount          int64                   `json:"amount"`
+	Currency        string                  `json:"currency"`
+	Prize           int64                   `json:"prize"`
+	CreatedAt       time.Time               `json:"createdAt"`
+	Settings        *services.MatchSettings `json:"settings,omitempty"` // room settings the poster picked (CODM)
+	SettingsSummary string                  `json:"settingsSummary,omitempty"`
 }
 
 // closedNote tells a poster that their other open challenges were closed.
@@ -54,7 +56,7 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 	// Open challenges waiting for an opponent.
 	lobby.Get("/", func(c *fiber.Ctx) error {
 		rows, err := db.Pool.Query(c.Context(), `
-			SELECT e.challenge_id, e.creator_id, u.username, COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''), COALESCE(e.game,''), e.kind, e.amount, COALESCE(e.currency,'NGN'), e.created_at
+			SELECT e.challenge_id, e.creator_id, u.username, COALESCE(gp.gamertag,''), COALESCE(u.avatar_url,''), COALESCE(e.game,''), e.kind, e.amount, COALESCE(e.currency,'NGN'), e.created_at, e.settings
 			FROM escrow e
 			JOIN users u ON u.id = e.creator_id
 			LEFT JOIN game_profiles gp ON gp.user_id = e.creator_id AND gp.game = e.game
@@ -69,7 +71,10 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		list := []challengeView{}
 		for rows.Next() {
 			var ch challengeView
-			if rows.Scan(&ch.ID, &ch.CreatorID, &ch.CreatorName, &ch.CreatorTag, &ch.CreatorAvatar, &ch.Game, &ch.Kind, &ch.Amount, &ch.Currency, &ch.CreatedAt) == nil {
+			var settings []byte
+			if rows.Scan(&ch.ID, &ch.CreatorID, &ch.CreatorName, &ch.CreatorTag, &ch.CreatorAvatar, &ch.Game, &ch.Kind, &ch.Amount, &ch.Currency, &ch.CreatedAt, &settings) == nil {
+				ch.Settings = services.ParseSettings(settings)
+				ch.SettingsSummary = services.SettingsSummary(ch.Game, ch.Settings)
 				if g := services.GameByID(ch.Game); g != nil {
 					ch.GameName = g.Short
 				}
@@ -92,6 +97,8 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 			Game   string `json:"game"`
 			Amount int64  `json:"amount"`
 			Kind   string `json:"kind"` // "" | stake | bounty
+			// Room settings (CODM): mode, map, score/time limit, loadout rules.
+			Settings *services.MatchSettings `json:"settings"`
 		}
 		if err := c.BodyParser(&req); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
@@ -101,6 +108,10 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 		game := services.GameByID(req.Game)
 		if game == nil {
 			return utils.SendError(c, 400, "Choose a supported game")
+		}
+		settings, err := services.CleanSettings(game.ID, req.Settings, "1v1")
+		if err != nil {
+			return fail(c, err)
 		}
 		kind := "stake"
 		if req.Kind == "bounty" && req.Amount > 0 {
@@ -170,8 +181,8 @@ func SetupLobbyRoutes(api fiber.Router, hub *ws.Hub) {
 				return fail(c, err)
 			}
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency, kind, fee)
-			VALUES ($1,$2,$3,$3,'waiting',$4,$5,$6,$7)`, id, uid, req.Amount, game.ID, currency, kind, fee); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO escrow (challenge_id, creator_id, amount, pool, status, game, currency, kind, fee, settings)
+			VALUES ($1,$2,$3,$3,'waiting',$4,$5,$6,$7,$8::jsonb)`, id, uid, req.Amount, game.ID, currency, kind, fee, services.SettingsJSON(settings)); err != nil {
 			return fail(c, err)
 		}
 		if err := tx.Commit(ctx); err != nil {

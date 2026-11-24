@@ -1,5 +1,6 @@
 import { get, post } from '../api.js';
-import { store } from '../store.js';
+import { store, gameInfo } from '../store.js';
+import { settingsPicker, bindSettingsPicker, hasSettings } from '../roomsettings.js';
 import { html, ic, skeleton, empty, money, sym, sheet, sheetHead, busy, toast } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { tournamentCard, gameChips, hasGameProfile } from '../components.js';
@@ -56,28 +57,33 @@ export default async function tournaments(view) {
     const games = store.get().games;
     let game = profile.gameProfiles[0]?.game || games[0].id;
     let format = 'knockout';
-    const SIZES = { knockout: [4, 8, 16, 32, 64], swiss: [8, 16, 32], league: [4, 6, 8] };
+    const SIZES = { knockout: [4, 8, 16, 32, 64], swiss: [8, 16, 32], league: [4, 6, 8], ffa: [2, 3, 4, 5, 6, 7, 8] };
     const SPLITS = {
       knockout: [['Winner takes all', [100]], ['70 / 30', [70, 30]], ['60 / 25 / 15', [60, 25, 15]]],
       swiss: [['50 / 30 / 20', [50, 30, 20]], ['60 / 40', [60, 40]], ['Winner takes all', [100]]],
       league: [['50 / 30 / 20', [50, 30, 20]], ['60 / 40', [60, 40]], ['Winner takes all', [100]]],
+      ffa: [['Winner takes all', [100]], ['70 / 30', [70, 30]], ['60 / 25 / 15', [60, 25, 15]]],
     };
     let split = 0;
     const HINTS = {
       knockout: 'Lose once and you are out. Every match needs a winner (penalties in football games).',
       swiss: 'Everyone plays every round against players on similar points. Top of the table wins.',
       league: 'Everyone plays everyone once. Best for small groups.',
+      ffa: 'Everyone plays at once in one game room (up to 8). You post the Room ID at start time and enter the scores after. Highest score wins.',
     };
     sheet(String(html`${sheetHead('Host a cup', 'You put up the prize pool. Players join free.')}
       <form id="hc">
         <label class="field"><span class="label">Cup name</span><input class="input" name="name" required minlength="3" maxlength="40" placeholder="e.g. Saturday Showdown"></label>
         <div class="field"><span class="label">Game</span><div id="g">${gameChips(game)}</div></div>
         <div class="field"><span class="label">Format</span><div class="seg" id="fmt">
-          <button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="swiss">Points</button><button type="button" data-f="league">League</button></div>
+          <button type="button" data-f="knockout" class="active">Knockout</button><button type="button" data-f="swiss">Points</button><button type="button" data-f="league">League</button><button type="button" data-f="ffa" hidden>Free for All</button></div>
           <p class="hint" id="fmt-hint"></p></div>
+        <div id="settings-slot"></div>
+        <label class="field" id="starts-field" hidden><span class="label">Start time</span><input class="input" type="datetime-local" name="startsAt">
+          <span class="hint">Players get a reminder 15 minutes before. At start time, post the Room ID on your cup page.</span></label>
         <div class="grid-2" style="margin-top:14px">
           <label class="field"><span class="label">Players</span><select class="select" name="max" id="max"></select></label>
-          <label class="field" style="margin-top:0"><span class="label">Hours per round</span><select class="select" name="hours"><option>12</option><option selected>24</option><option>48</option></select></label></div>
+          <label class="field" style="margin-top:0" id="hours-field"><span class="label">Hours per round</span><select class="select" name="hours"><option>12</option><option selected>24</option><option>48</option></select></label></div>
         <div class="field" style="margin-top:14px"><span class="label">Prize pool</span>
           <div class="input-money"><span class="cur">${sym(cur)}</span><input class="input num" name="pool" inputmode="numeric" pattern="[0-9]*" value="${o.minPool / 100}" aria-label="Prize pool"></div>
           <span class="hint">Between ${money(o.minPool, cur)} and ${money(o.maxPool, cur)}</span></div>
@@ -98,7 +104,7 @@ export default async function tournaments(view) {
       onMount(root, close) {
         const f = root.querySelector('#hc');
         const maxSel = root.querySelector('#max');
-        const fillSizes = () => { maxSel.innerHTML = SIZES[format].map((n) => `<option ${n === SIZES[format][1] ? 'selected' : ''}>${n}</option>`).join(''); };
+        const fillSizes = () => { const def = format === 'ffa' ? 8 : SIZES[format][1]; maxSel.innerHTML = SIZES[format].map((n) => `<option ${n === def ? 'selected' : ''}>${n}</option>`).join(''); };
         const drawSplits = () => {
           root.querySelector('#splits').innerHTML = String(html`${SPLITS[format].map(([label], i) => html`<button type="button" class="chip ${i === split ? 'active' : ''}" data-s="${i}">${label}</button>`)}`);
           root.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => { split = +b.dataset.s; drawSplits(); update(); }));
@@ -118,15 +124,26 @@ export default async function tournaments(view) {
             <div class="row between"><span>Taken from your wallet now</span><b class="h3 num">${money(pool + fee, cur)}</b></div>
             <div class="tiny faint" style="margin-top:6px">Your balance: ${money(o.balance, cur)}. Winners from the other country are paid the same value in their currency.</div>`);
         };
-        const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); }));
+        let readSettings = () => null;
+        // Game-dependent parts: Free for All (CODM only), room settings, start time.
+        const shape = () => {
+          const ffaOk = !!gameInfo(game).ffa;
+          root.querySelector('[data-f="ffa"]').hidden = !ffaOk;
+          if (format === 'ffa' && !ffaOk) { format = 'knockout'; split = 0; root.querySelectorAll('[data-f]').forEach((x) => x.classList.toggle('active', x.dataset.f === format)); }
+          root.querySelector('#hours-field').hidden = format === 'ffa';
+          root.querySelector('#starts-field').hidden = format !== 'ffa';
+          root.querySelector('#settings-slot').innerHTML = hasSettings(game) ? String(settingsPicker(game, format === 'ffa' ? 'ffa' : '1v1')) : '';
+          readSettings = bindSettingsPicker(root, game);
+        };
+        const bindG = () => root.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => { game = b.dataset.game; root.querySelector('#g').innerHTML = String(gameChips(game)); bindG(); shape(); fillSizes(); drawSplits(); update(); }));
         bindG();
         root.querySelectorAll('[data-f]').forEach((b) => (b.onclick = () => {
           format = b.dataset.f; split = 0;
           root.querySelectorAll('[data-f]').forEach((x) => x.classList.toggle('active', x === b));
-          fillSizes(); drawSplits(); update();
+          shape(); fillSizes(); drawSplits(); update();
         }));
         f.pool.oninput = update;
-        fillSizes(); drawSplits(); update();
+        shape(); fillSizes(); drawSplits(); update();
         f.onsubmit = (e) => {
           e.preventDefault();
           if (!hasGameProfile(game)) { close(); return gameIdSheet(game, () => hostCupSheet()); }
@@ -137,8 +154,10 @@ export default async function tournaments(view) {
             toast(`You need ${money(total, cur)} in your wallet to host this cup.`, 'info');
             return navigate('/wallet?deposit=' + Math.ceil((total - o.balance) / 100));
           }
+          if (format === 'ffa' && !f.startsAt.value) return toast('Pick the start time', 'err');
           busy(root.querySelector('#go'), async () => {
-            const { tournamentId } = await post('/tournaments/host', { name: f.name.value, game, format, maxPlayers: +maxSel.value, pool, split: SPLITS[format][split][1], roundHours: +f.hours.value, membersOnly: f.membersOnly.checked });
+            const { tournamentId } = await post('/tournaments/host', { name: f.name.value, game, format, maxPlayers: +maxSel.value, pool, split: SPLITS[format][split][1], roundHours: +f.hours.value, membersOnly: f.membersOnly.checked,
+              settings: readSettings(), startsAt: format === 'ffa' ? new Date(f.startsAt.value).toISOString() : undefined });
             close();
             toast('Your cup is live. Share it so it fills up!', 'ok');
             refreshProfile();
