@@ -261,7 +261,7 @@ func SetupPaymentRoutes(api fiber.Router) {
 			// Small withdrawals go out by themselves; admins hear only if it fails.
 			services.Background(func() { services.AutoApproveWithdrawal(context.Background(), id, total, currency) })
 		} else {
-			services.NotifyAdmins(ctx, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
+			services.NotifyAdmins(ctx, services.PermWithdrawals, "Withdrawal request", fmt.Sprintf("Send %s to %s (%s). Waiting for approval.",
 				services.FormatMoney(total-fee, currency), req.AccountName, req.BankName))
 		}
 		return utils.SendSuccess(c, fiber.Map{"withdrawalId": id, "fee": fee, "feeWaived": waived, "payout": total - fee, "total": total})

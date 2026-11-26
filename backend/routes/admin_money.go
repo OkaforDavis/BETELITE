@@ -16,7 +16,7 @@ import (
 func setupAdminMoney(admin fiber.Router) {
 	// What CrestArena owes players in each currency (wallets + pending withdrawals)
 	// next to what came in and went out over the last 30 days.
-	admin.Get("/money", func(c *fiber.Ctx) error {
+	admin.Get("/money", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		type row struct {
 			Currency        string `json:"currency"`
@@ -47,7 +47,7 @@ func setupAdminMoney(admin fiber.Router) {
 	})
 
 	// Live Paystack balances (what transfers are paid from) next to what's waiting.
-	admin.Get("/payout-balances", func(c *fiber.Ctx) error {
+	admin.Get("/payout-balances", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		waiting := map[string]int64{}
 		for _, cur := range []string{"NGN", "GHS"} {
@@ -59,7 +59,7 @@ func setupAdminMoney(admin fiber.Router) {
 	})
 
 	// Move a player's wallet to another country (after a complaint); skips the 30/90-day rules.
-	admin.Post("/users/:id/currency", func(c *fiber.Ctx) error {
+	admin.Post("/users/:id/currency", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		var req struct {
 			Currency string `json:"currency"`
 		}
@@ -70,7 +70,7 @@ func setupAdminMoney(admin fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
-		services.NotifyAdmins(c.Context(), "Wallet country changed", middleware.GetEmail(c)+" moved a player's wallet to "+req.Currency)
+		services.NotifyAdmins(c.Context(), services.PermMoney, "Wallet country changed", middleware.GetEmail(c)+" moved a player's wallet to "+req.Currency)
 		return utils.SendSuccess(c, fiber.Map{"balance": balance})
 	})
 }

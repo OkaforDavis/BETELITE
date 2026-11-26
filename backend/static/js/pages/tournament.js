@@ -1,5 +1,5 @@
 import { get, post, api, upload } from '../api.js';
-import { store, gameInfo, resultScreen } from '../store.js';
+import { store, gameInfo, resultScreen, can } from '../store.js';
 import { html, ic, avatar, money, skeleton, empty, busy, toast, confirmSheet, shareLink, sheet, sheetHead, copyText, timeLeft } from '../ui.js';
 import { matchRow, hasGameProfile, formatBadge, tournamentPrizes, tierBadge } from '../components.js';
 import { gameIdSheet } from '../gameid.js';
@@ -43,7 +43,7 @@ export default async function tournamentPage(view, { id }) {
     const membersUntil = t.membersOnlyUntil && new Date(t.membersOnlyUntil) > new Date() ? new Date(t.membersOnlyUntil) : null;
     const roundLabel = t.totalRounds ? `Round ${t.currentRound} of ${t.totalRounds}` : `Round ${t.currentRound}`;
     const isHost = !!t.hostId && t.hostId === uid;
-    const canEdit = (isHost || store.get().profile.isAdmin) && ['open', 'active'].includes(t.status);
+    const canEdit = (isHost || can('cups')) && ['open', 'active'].includes(t.status);
     const fillBy = t.fillDeadline && t.status === 'open' ? new Date(t.fillDeadline) : null;
 
     view.innerHTML = String(html`<div class="page">
@@ -85,7 +85,7 @@ export default async function tournamentPage(view, { id }) {
 
       ${ffa ? ffaSection(t) : ''}
 
-      ${sponsorCard(sponsor, { isHost: isHost || !!store.get().profile.isAdmin, open: ['open', 'active'].includes(t.status) })}
+      ${sponsorCard(sponsor, { isHost: isHost || can('cups'), open: ['open', 'active'].includes(t.status) })}
 
       ${t.hostId && !isHost ? html`<div class="card row" style="margin-top:12px;gap:12px"><div class="icon-tile">${ic('coins')}</div>
         <div class="grow"><div class="h3">Enjoying ${t.hostName}'s cup?</div><div class="small muted">Send a free tip. The host gets all of it.</div></div>

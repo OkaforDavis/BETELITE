@@ -431,6 +431,30 @@ var migrations = []string{
 		submitted_by TEXT,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);`,
+
+	// 23: admin roles. Each admin has a list of powers (cups, disputes,
+	// withdrawals, support, users, money). The owner (ADMIN_EMAIL) has all of
+	// them and is the only one who can add or remove admins. Existing admins
+	// keep full powers. admin_log records who did what.
+	`CREATE TABLE IF NOT EXISTS admin_roles (
+		user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		perms TEXT[] NOT NULL DEFAULT '{}',
+		added_by TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	INSERT INTO admin_roles (user_id, perms, added_by)
+		SELECT id, ARRAY['cups','disputes','withdrawals','support','users','money'], 'migration' FROM users WHERE is_admin
+		ON CONFLICT DO NOTHING;
+	CREATE TABLE IF NOT EXISTS admin_log (
+		id BIGSERIAL PRIMARY KEY,
+		actor_id TEXT,
+		action TEXT NOT NULL,
+		target TEXT,
+		detail TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS idx_admin_log_time ON admin_log (created_at DESC);`,
 }
 
 // RunMigrations applies any migrations not yet recorded in schema_migrations.

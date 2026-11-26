@@ -1,5 +1,5 @@
 import { get, post, del, upload } from '../api.js';
-import { store, gameName } from '../store.js';
+import { store, gameName, can } from '../store.js';
 import { html, ic, avatar, money, timeAgo, empty, skeleton, sheet, sheetHead, busy, toast, confirmSheet, statusBadge, scoreLine } from '../ui.js';
 import { sk } from '../skeletons.js';
 import { gameChips, loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
@@ -7,17 +7,21 @@ import { adminSponsors } from '../sponsors.js';
 import { gameInfo } from '../store.js';
 import { settingsPicker, bindSettingsPicker, hasSettings } from '../roomsettings.js';
 
-const TABS = [['overview', 'Overview'], ['review', 'Review'], ['withdrawals', 'Withdrawals'], ['tournaments', 'Tournaments'], ['sponsors', 'Sponsors'], ['support', 'Support'], ['money', 'Money'], ['users', 'Users'], ['ocr', 'OCR test']];
+// Each tab needs one admin power ('' = any admin). "admins" is the owner only.
+const TABS = [['overview', 'Overview', ''], ['review', 'Review', 'disputes'], ['withdrawals', 'Withdrawals', 'withdrawals'], ['tournaments', 'Tournaments', 'cups'],
+  ['sponsors', 'Sponsors', 'cups'], ['support', 'Support', 'support'], ['money', 'Money', 'money'], ['users', 'Users', 'users'], ['ocr', 'OCR test', 'disputes'], ['admins', 'Admins', 'admins']];
 
 export default async function admin(view, { query }) {
   if (!store.get().profile?.isAdmin) {
     view.innerHTML = String(html`<div class="page">${empty('lock', 'Admins only', 'You do not have access to this page.')}</div>`);
     return;
   }
-  let tab = query.tab || 'overview';
+  const tabs = TABS.filter(([, , perm]) => !perm || can(perm));
+  let tab = tabs.some(([k]) => k === query.tab) ? query.tab : 'overview';
   view.innerHTML = String(html`<div class="page">
     <div class="h1">Admin</div>
-    <div class="chips" style="margin-top:14px" role="tablist">${TABS.map(([k, l]) => html`<button class="chip" data-tab="${k}" role="tab">${l}</button>`)}</div>
+    ${can('admins') ? '' : html`<p class="small muted row" style="margin-top:4px;gap:6px;align-items:flex-start">${ic('shield')}<span>Your access: ${tabs.slice(1).map(([, l]) => l).join(', ')}. Ask the owner for more.</span></p>`}
+    <div class="chips" style="margin-top:14px" role="tablist">${tabs.map(([k, l]) => html`<button class="chip" data-tab="${k}" role="tab">${l}</button>`)}</div>
     <div id="body" style="margin-top:16px"></div></div>`);
   const body = view.querySelector('#body');
   view.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; draw(); }));
@@ -25,7 +29,7 @@ export default async function admin(view, { query }) {
   async function draw() {
     view.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     body.innerHTML = String(sk.adminRows());
-    try { await ({ overview, review, withdrawals, tournaments, sponsors: adminSponsors, support, money: moneyTab, users, ocr })[tab](body, draw); }
+    try { await ({ overview, review, withdrawals, tournaments, sponsors: adminSponsors, support, money: moneyTab, users, ocr, admins: adminsTab })[tab](body, draw); }
     catch (e) { body.innerHTML = String(empty('alert', 'Could not load', e.message)); }
   }
   await draw();
@@ -38,9 +42,9 @@ async function overview(body) {
     <div class="stat"><div class="v num">${s.activeMatches}</div><div class="k">Active matches</div></div>
     <div class="stat"><div class="v num ${s.needsReview ? 'danger-text' : ''}">${s.needsReview}</div><div class="k">Need review</div></div>
     <div class="stat"><div class="v num ${s.pendingWithdrawals ? 'danger-text' : ''}">${s.pendingWithdrawals}</div><div class="k">Withdrawals pending</div></div>
-    <div class="stat"><div class="v num">${money(s.walletTotal)}</div><div class="k">Wallet balances</div></div>
+    ${s.walletTotal != null ? html`<div class="stat"><div class="v num">${money(s.walletTotal)}</div><div class="k">Wallet balances</div></div>
     <div class="stat"><div class="v num">${money(s.inEscrow)}</div><div class="k">In escrow</div></div>
-    <div class="stat"><div class="v num brand-text">${money(s.feesToday)}</div><div class="k">1v1 fees, 24h</div></div>
+    <div class="stat"><div class="v num brand-text">${money(s.feesToday)}</div><div class="k">1v1 fees, 24h</div></div>` : ''}
   </div>`);
 }
 
@@ -103,7 +107,7 @@ let wdStatus = 'pending';
 const WD_TABS = [['pending', 'Waiting'], ['processing', 'Sending'], ['paid', 'Paid'], ['reversed', 'Returned'], ['failed', 'Failed']];
 
 async function withdrawals(body, redraw) {
-  const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=' + wdStatus), get('/admin/payout-balances').catch(() => null)]);
+  const [{ withdrawals: list }, bal] = await Promise.all([get('/admin/withdrawals?status=' + wdStatus), can('money') ? get('/admin/payout-balances').catch(() => null) : null]);
   const seg = html`<div class="chips" style="margin-bottom:12px">${WD_TABS.map(([k, l]) => html`<button class="chip ${k === wdStatus ? 'active' : ''}" data-wds="${k}">${l}</button>`)}</div>`;
   const bindSeg = () => body.querySelectorAll('[data-wds]').forEach((b) => (b.onclick = () => { wdStatus = b.dataset.wds; redraw(); }));
   if (wdStatus !== 'pending') {
@@ -114,7 +118,7 @@ async function withdrawals(body, redraw) {
       ${w.note ? html`<div class="tiny faint" style="margin-top:6px">${w.note}</div>` : ''}
       ${wdStatus === 'processing' || wdStatus === 'paid' ? html`<div class="grid-2" style="margin-top:12px">
         ${wdStatus === 'processing' ? html`<button class="btn secondary sm" data-manual="${w.id}">Mark paid</button>` : html`<span></span>`}
-        <button class="btn danger sm" data-refund="${w.id}">Refund to wallet</button></div>` : ''}
+        ${can('money') ? html`<button class="btn danger sm" data-refund="${w.id}">Refund to wallet</button>` : html`<span></span>`}</div>` : ''}
     </div>`)}</div>` : html`<div class="card flat">${empty('bank', 'Nothing here', 'Withdrawals with this status appear here.')}</div>`}`);
     bindSeg();
     bindManual(body, list, redraw);
@@ -327,7 +331,7 @@ async function users(body) {
     res.innerHTML = String(list.length ? html`<div class="list">${list.map((u) => html`<div class="list-row">
       ${avatar(u.username, u.avatarUrl, "sm")}
       <div class="grow"><div class="h3">${u.username}${u.isAdmin ? ' (admin)' : ''}</div><div class="small muted ellipsis">${u.email}</div><div class="tiny faint">${u.id}</div></div>
-      <div style="text-align:right"><b class="num">${money(u.balance, u.currency)}</b><br><button class="link-btn small" data-adj="${u.id}" data-cur="${u.currency}">Adjust</button>${u.avatarUrl ? html`<br><button class="link-btn small danger-text" data-unphoto="${u.id}">Remove photo</button>` : ""}</div></div>`)}</div>`
+      <div style="text-align:right"><b class="num">${money(u.balance, u.currency)}</b><br>${can('money') ? html`<button class="link-btn small" data-adj="${u.id}" data-cur="${u.currency}">Adjust</button>` : ''}${u.avatarUrl ? html`<br><button class="link-btn small danger-text" data-unphoto="${u.id}">Remove photo</button>` : ""}</div></div>`)}</div>`
       : html`<div class="card flat">${empty('search', 'No users found', 'Try another search.')}</div>`);
     res.querySelectorAll("[data-unphoto]").forEach((b) => (b.onclick = async () => {
       if (await confirmSheet({ title: "Remove this photo?", message: "The player is notified and can upload a different one.", confirm: "Remove photo", danger: true }))
@@ -450,4 +454,67 @@ async function moneyTab(body) {
       f.reset();
     });
   };
+}
+
+// ── Admins (owner only): who can help run CrestArena, and what they can do ──
+const PERM_INFO = {
+  cups: ['Cups', 'Create, edit and cancel cups, post Room IDs, enter Free-for-All results, sponsors'],
+  disputes: ['Disputes', 'Disputed matches, screenshots and chats; set the score or cancel'],
+  withdrawals: ['Withdrawals', 'Approve, reject and mark paid (up to the limit below)'],
+  support: ['Complaints', 'Read and answer player complaints'],
+  users: ['Players', 'See players and remove offensive photos'],
+  money: ['Money', 'Revenue, wallet changes, refunds and withdrawals of any size'],
+};
+const ACTIONS = { admin_set: 'set admin powers', admin_removed: 'removed admin', withdrawal_approved: 'approved withdrawal', withdrawal_rejected: 'rejected withdrawal',
+  withdrawal_marked_paid: 'marked withdrawal paid', wallet_adjusted: 'adjusted a wallet' };
+
+async function adminsTab(body, redraw) {
+  const { admins, log, perms, withdrawalLimit, ownerId } = await get('/admin/admins');
+  const limit = `${money(withdrawalLimit.NGN, 'NGN')} / ${money(withdrawalLimit.GHS, 'GHS')}`;
+  body.innerHTML = String(html`
+    <button class="btn primary block" id="add-admin">${ic('plus')} Add an admin</button>
+    <div class="list" style="margin-top:14px">${admins.map((a) => html`<div class="list-row" style="align-items:flex-start">
+      <div class="icon-tile ${a.userId === ownerId ? 'brand' : ''}">${ic(a.userId === ownerId ? 'crown' : 'shield')}</div>
+      <div class="grow" style="min-width:0"><div class="h3 ellipsis">${a.username || 'Player'}${a.userId === ownerId ? ' (you, owner)' : ''}</div>
+        <div class="small muted ellipsis">${a.email}</div>
+        <div class="tiny faint" style="margin-top:4px">${a.userId === ownerId ? 'Everything' : a.perms.map((p) => PERM_INFO[p]?.[0] || p).join(' · ')}</div></div>
+      ${a.userId === ownerId ? '' : html`<div style="text-align:right;flex:none"><button class="link-btn small" data-edit="${a.userId}">Edit</button><br>
+        <button class="link-btn small danger-text" data-remove="${a.userId}">Remove</button></div>`}</div>`)}</div>
+    <p class="hint">Admins must verify their email before their powers work. Only you can add or remove admins. Admins without "Money" can approve withdrawals up to ${limit}.</p>
+    <div class="h3" style="margin-top:22px">Recent admin actions</div>
+    <div class="list" style="margin-top:10px">${log.length ? log.map((e) => html`<div class="list-row"><div class="grow" style="min-width:0">
+      <div class="small"><b>${e.actor}</b> ${ACTIONS[e.action] || e.action}</div><div class="tiny faint ellipsis">${e.detail || e.target}</div></div>
+      <span class="tiny faint" style="flex:none">${timeAgo(e.createdAt)}</span></div>`) : html`<div class="list-row muted small">Nothing yet</div>`}</div>`);
+
+  const open = (a) => sheet(String(html`${sheetHead(a ? 'Edit admin' : 'Add an admin', a ? (a.username || a.email) : 'They need a CrestArena account with a verified email')}
+    <form id="adm">
+      ${a ? '' : html`<label class="field"><span class="label">Their email or username</span><input class="input" name="who" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@gmail.com"></label>`}
+      <div class="field"><span class="label">What can they do?</span>
+        <div class="stack" style="gap:10px">${perms.map((p) => html`<label class="check"><input type="checkbox" name="perm" value="${p}" ${(a ? a.perms.includes(p) : p !== 'money') ? 'checked' : ''}>
+          <span><b>${PERM_INFO[p]?.[0] || p}</b><br><span class="small muted">${PERM_INFO[p]?.[1] || ''}</span></span></label>`)}</div></div>
+      <div class="notice warn" style="margin-top:12px">${ic('alert')}<div class="small">Only give <b>Money</b> to someone you'd trust with the company bank account.</div></div>
+      <div class="sheet-actions"><button class="btn primary block" type="submit">${a ? 'Save' : 'Add admin'}</button></div>
+    </form>`), {
+    label: 'Admin',
+    onMount(root, close) {
+      const f = root.querySelector('#adm');
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const chosen = [...f.querySelectorAll('[name=perm]:checked')].map((x) => x.value);
+        busy(f.querySelector('[type=submit]'), async () => {
+          const { admin: added } = await post('/admin/admins', { who: a ? a.userId : f.who.value, perms: chosen });
+          close();
+          toast(a ? 'Saved' : `${added.username || added.email} is now an admin. They'll get a notification.`);
+          redraw();
+        });
+      };
+    },
+  });
+  body.querySelector('#add-admin').onclick = () => open(null);
+  body.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => open(admins.find((x) => x.userId === b.dataset.edit))));
+  body.querySelectorAll('[data-remove]').forEach((b) => (b.onclick = async () => {
+    const a = admins.find((x) => x.userId === b.dataset.remove);
+    if (await confirmSheet({ title: `Remove ${a.username || a.email}?`, message: 'They lose all admin access straight away.', confirm: 'Remove admin', danger: true }))
+      busy(b, async () => { await del('/admin/admins/' + a.userId); toast('Admin removed'); redraw(); });
+  }));
 }

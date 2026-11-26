@@ -181,7 +181,7 @@ func SetSponsor(ctx context.Context, uid string, admin bool, tid, name, link str
 		return err
 	}
 	if !admin {
-		NotifyAdmins(ctx, "Sponsor to review", name+" on cup "+tid+". Check it in Admin → Sponsors.")
+		NotifyAdmins(ctx, PermCups, "Sponsor to review", name+" on cup "+tid+". Check it in Admin → Sponsors.")
 	}
 	return nil
 }

@@ -117,7 +117,7 @@ func AutoApproveWithdrawal(ctx context.Context, id string, amount int64, currenc
 	}
 	if err := ApproveWithdrawal(ctx, id, "auto"); err != nil {
 		log.Printf("[WITHDRAWALS] auto-approve %s: %v", id, err)
-		notifyAdmins(ctx, "Automatic payout failed", fmt.Sprintf("%s is waiting for you. %v", FormatMoney(amount, currency), err), "")
+		notifyAdmins(ctx, PermWithdrawals, "Automatic payout failed", fmt.Sprintf("%s is waiting for you. %v", FormatMoney(amount, currency), err), "")
 		return
 	}
 	log.Printf("[WITHDRAWALS] auto-approved %s (%d %s)", id, amount, currency)
@@ -149,11 +149,6 @@ func ApproveTransferRequest(ctx context.Context, reference string, amount int64,
 		return fmt.Errorf("account does not match")
 	}
 	return nil
-}
-
-// NotifyAdmins sends a notification to every admin.
-func NotifyAdmins(ctx context.Context, title, message string) {
-	notifyAdmins(ctx, title, message, "")
 }
 
 // MarkWithdrawalPaid records a withdrawal the admin paid by hand (e.g. a bank

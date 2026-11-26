@@ -23,6 +23,41 @@ func SetupAdminRoutes(api fiber.Router) {
 	setupAdminSupport(admin)
 	setupAdminMoney(admin)
 
+	// ── Admins (owner only) ─────────────────────────────────────────
+	owner := middleware.RequirePerm(services.PermAdmins)
+	admin.Get("/admins", owner, func(c *fiber.Ctx) error {
+		list, err := services.ListAdmins(c.Context())
+		if err != nil {
+			return fail(c, err)
+		}
+		logs, err := services.RecentAdminLog(c.Context(), 50)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"admins": list, "log": logs, "perms": services.AdminPermList,
+			"withdrawalLimit": services.AdminWithdrawalLimit, "ownerId": middleware.GetUID(c)})
+	})
+	admin.Post("/admins", owner, func(c *fiber.Ctx) error {
+		var req struct {
+			Who   string   `json:"who"` // email or username
+			Perms []string `json:"perms"`
+		}
+		if err := c.BodyParser(&req); err != nil {
+			return utils.SendError(c, 400, "Invalid request")
+		}
+		a, err := services.SetAdmin(c.Context(), middleware.GetUID(c), req.Who, req.Perms)
+		if err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{"admin": a})
+	})
+	admin.Delete("/admins/:uid", owner, func(c *fiber.Ctx) error {
+		if err := services.RemoveAdmin(c.Context(), middleware.GetUID(c), c.Params("uid")); err != nil {
+			return fail(c, err)
+		}
+		return utils.SendSuccess(c, fiber.Map{})
+	})
+
 	admin.Get("/stats", func(c *fiber.Ctx) error {
 		ctx := c.Context()
 		var users, activeMatches, needsReview, pendingWithdrawals int
@@ -33,13 +68,14 @@ func SetupAdminRoutes(api fiber.Router) {
 		db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'").Scan(&pendingWithdrawals)
 		db.Pool.QueryRow(ctx, `SELECT COALESCE(SUM((metadata->>'fee')::bigint),0) FROM transactions
 			WHERE type = 'wager_win' AND created_at > NOW() - INTERVAL '1 day'`).Scan(&feesToday)
-		return utils.SendSuccess(c, fiber.Map{"stats": fiber.Map{
-			"users": users, "walletTotal": wallets, "inEscrow": held, "activeMatches": activeMatches,
-			"needsReview": needsReview, "pendingWithdrawals": pendingWithdrawals, "feesToday": feesToday,
-		}})
+		stats := fiber.Map{"users": users, "activeMatches": activeMatches, "needsReview": needsReview, "pendingWithdrawals": pendingWithdrawals}
+		if middleware.HasPerm(c, services.PermMoney) {
+			stats["walletTotal"], stats["inEscrow"], stats["feesToday"] = wallets, held, feesToday
+		}
+		return utils.SendSuccess(c, fiber.Map{"stats": stats})
 	})
 
-	admin.Get("/transactions", func(c *fiber.Ctx) error {
+	admin.Get("/transactions", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		rows, err := db.Pool.Query(c.Context(), `SELECT t.id, t.user_id, COALESCE(u.username,''), t.type, t.amount, COALESCE(t.ref_id,''), t.created_at
 			FROM transactions t LEFT JOIN users u ON u.id = t.user_id ORDER BY t.created_at DESC LIMIT 100`)
 		if err != nil {
@@ -59,7 +95,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// Find users by email / username (for balance adjustments and support).
-	admin.Get("/users", func(c *fiber.Ctx) error {
+	admin.Get("/users", middleware.RequirePerm(services.PermUsers), func(c *fiber.Ctx) error {
 		q := "%" + strings.ToLower(strings.TrimSpace(c.Query("q"))) + "%"
 		rows, err := db.Pool.Query(c.Context(), `SELECT id, email, username, balance, COALESCE(currency,'NGN'), is_admin, created_at, COALESCE(avatar_url,'') FROM users
 			WHERE deleted_at IS NULL AND (lower(email) LIKE $1 OR lower(username) LIKE $1 OR id = $2) ORDER BY created_at DESC LIMIT 25`, q, c.Query("q"))
@@ -81,7 +117,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// Manual balance correction (always logged with the admin and reason).
-	admin.Post("/balance", func(c *fiber.Ctx) error {
+	admin.Post("/balance", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		var req struct {
 			UserID string `json:"userId"`
 			Amount int64  `json:"amount"`
@@ -107,11 +143,12 @@ func SetupAdminRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		log.Printf("[ADMIN] %s adjusted %s by %d: %s", middleware.GetEmail(c), req.UserID, req.Amount, req.Reason)
+		services.AdminLog(ctx, middleware.GetUID(c), "wallet_adjusted", req.UserID, fmt.Sprintf("%d: %s", req.Amount, req.Reason))
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
 	// Remove an offensive profile photo.
-	admin.Delete("/users/:id/avatar", func(c *fiber.Ctx) error {
+	admin.Delete("/users/:id/avatar", middleware.RequirePerm(services.PermUsers), func(c *fiber.Ctx) error {
 		if err := services.RemoveAvatar(c.Context(), c.Params("id")); err != nil {
 			return fail(c, err)
 		}
@@ -122,7 +159,7 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// ── Disputes & reviews ──────────────────────────────────────────
 
-	admin.Get("/matches/review", func(c *fiber.Ctx) error {
+	admin.Get("/matches/review", middleware.RequirePerm(services.PermDisputes), func(c *fiber.Ctx) error {
 		list, err := services.MatchesNeedingAdmin(c.Context())
 		if err != nil {
 			return fail(c, err)
@@ -131,13 +168,13 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// What the AI read from the submitted screenshot (for the review screen).
-	admin.Get("/matches/:id/ocr", func(c *fiber.Ctx) error {
+	admin.Get("/matches/:id/ocr", middleware.RequirePerm(services.PermDisputes), func(c *fiber.Ctx) error {
 		var raw []byte
 		db.Pool.QueryRow(c.Context(), "SELECT ocr_result FROM matches WHERE id = $1", c.Params("id")).Scan(&raw)
 		return utils.SendSuccess(c, fiber.Map{"ocr": json.RawMessage(nonNullJSON(raw))})
 	})
 
-	admin.Post("/matches/:id/resolve", func(c *fiber.Ctx) error {
+	admin.Post("/matches/:id/resolve", middleware.RequirePerm(services.PermDisputes), func(c *fiber.Ctx) error {
 		var req struct {
 			ScoreHome *int `json:"scoreHome"`
 			ScoreAway *int `json:"scoreAway"`
@@ -154,7 +191,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// Void: 1v1 → refund both; tournament → reset for a replay.
-	admin.Post("/matches/:id/void", func(c *fiber.Ctx) error {
+	admin.Post("/matches/:id/void", middleware.RequirePerm(services.PermDisputes), func(c *fiber.Ctx) error {
 		var req struct {
 			Reason string `json:"reason"`
 		}
@@ -167,7 +204,7 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// ── Withdrawals ─────────────────────────────────────────────────
 
-	admin.Get("/withdrawals", func(c *fiber.Ctx) error {
+	admin.Get("/withdrawals", middleware.RequirePerm(services.PermWithdrawals), func(c *fiber.Ctx) error {
 		status := c.Query("status", "pending")
 		order := "w.created_at" // oldest first: the approval queue
 		if status != "pending" {
@@ -193,15 +230,21 @@ func SetupAdminRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{"withdrawals": list})
 	})
 
-	admin.Post("/withdrawals/:id/approve", func(c *fiber.Ctx) error {
+	admin.Post("/withdrawals/:id/approve", middleware.RequirePerm(services.PermWithdrawals), func(c *fiber.Ctx) error {
+		if !middleware.HasPerm(c, services.PermMoney) {
+			if err := services.CheckWithdrawalLimit(c.Context(), c.Params("id")); err != nil {
+				return fail(c, err)
+			}
+		}
 		if err := services.ApproveWithdrawal(c.Context(), c.Params("id"), middleware.GetUID(c)); err != nil {
 			return fail(c, err)
 		}
+		services.AdminLog(c.Context(), middleware.GetUID(c), "withdrawal_approved", c.Params("id"), "")
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
 	// Record a withdrawal paid by hand (bank transfer) instead of through Paystack.
-	admin.Post("/withdrawals/:id/mark-paid", func(c *fiber.Ctx) error {
+	admin.Post("/withdrawals/:id/mark-paid", middleware.RequirePerm(services.PermWithdrawals), func(c *fiber.Ctx) error {
 		var req struct {
 			Note string `json:"note"`
 		}
@@ -209,6 +252,12 @@ func SetupAdminRoutes(api fiber.Router) {
 		if len(strings.TrimSpace(req.Note)) < 3 {
 			return utils.SendError(c, 400, "Add the bank transfer reference")
 		}
+		if !middleware.HasPerm(c, services.PermMoney) {
+			if err := services.CheckWithdrawalLimit(c.Context(), c.Params("id")); err != nil {
+				return fail(c, err)
+			}
+		}
+		services.AdminLog(c.Context(), middleware.GetUID(c), "withdrawal_marked_paid", c.Params("id"), req.Note)
 		if err := services.MarkWithdrawalPaid(c.Context(), c.Params("id"), middleware.GetUID(c), req.Note); err != nil {
 			return fail(c, err)
 		}
@@ -216,7 +265,7 @@ func SetupAdminRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
-	admin.Post("/withdrawals/:id/reject", func(c *fiber.Ctx) error {
+	admin.Post("/withdrawals/:id/reject", middleware.RequirePerm(services.PermWithdrawals), func(c *fiber.Ctx) error {
 		var req struct {
 			Reason string `json:"reason"`
 		}
@@ -227,12 +276,13 @@ func SetupAdminRoutes(api fiber.Router) {
 		if err := services.RefundWithdrawal(c.Context(), c.Params("id"), req.Reason, "pending"); err != nil {
 			return fail(c, err)
 		}
+		services.AdminLog(c.Context(), middleware.GetUID(c), "withdrawal_rejected", c.Params("id"), req.Reason)
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
 	// Give the money back for a payout that is stuck ("processing") or that the
 	// bank returned after it showed as paid. Never for money that really arrived.
-	admin.Post("/withdrawals/:id/refund", func(c *fiber.Ctx) error {
+	admin.Post("/withdrawals/:id/refund", middleware.RequirePerm(services.PermMoney), func(c *fiber.Ctx) error {
 		var req struct {
 			Reason string `json:"reason"`
 		}
@@ -262,7 +312,7 @@ func SetupAdminRoutes(api fiber.Router) {
 
 	// ── Tournaments ─────────────────────────────────────────────────
 
-	admin.Post("/tournaments", func(c *fiber.Ctx) error {
+	admin.Post("/tournaments", middleware.RequirePerm(services.PermCups), func(c *fiber.Ctx) error {
 		var req struct {
 			Name       string                  `json:"name"`
 			Game       string                  `json:"game"`
@@ -406,7 +456,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// Cancel an open tournament: entries, and a host's pool and fee, are refunded.
-	admin.Delete("/tournaments/:id", func(c *fiber.Ctx) error {
+	admin.Delete("/tournaments/:id", middleware.RequirePerm(services.PermCups), func(c *fiber.Ctx) error {
 		if err := services.CancelTournament(c.Context(), c.Params("id"), middleware.GetUID(c), "Cancelled by an admin."); err != nil {
 			return fail(c, err)
 		}
@@ -414,7 +464,7 @@ func SetupAdminRoutes(api fiber.Router) {
 	})
 
 	// Test the OCR on a screenshot without touching any match.
-	admin.Post("/ocr-test", func(c *fiber.Ctx) error {
+	admin.Post("/ocr-test", middleware.RequirePerm(services.PermDisputes), func(c *fiber.Ctx) error {
 		game := services.GameByID(c.FormValue("game"))
 		if game == nil {
 			return utils.SendError(c, 400, "Choose a game")

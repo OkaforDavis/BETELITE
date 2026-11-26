@@ -48,14 +48,16 @@ func SetupMeRoutes(api fiber.Router) {
 		}
 		verified, _ := c.Locals("emailVerified").(bool)
 		p.EmailVerified = verified
-		if middleware.IsAdminCtx(c) {
-			if !p.IsAdmin {
-				// Persist the flag so admin alerts (disputes, withdrawals) reach this account.
-				db.Pool.Exec(c.Context(), "UPDATE users SET is_admin = TRUE WHERE id = $1", p.ID)
-			}
-			p.IsAdmin = true
+		p.AdminPerms = middleware.AdminPermsCtx(c)
+		p.IsAdmin = len(p.AdminPerms) > 0
+		p.IsOwner = middleware.IsOwner(c)
+		if p.IsOwner {
+			// The owner's account keeps a full role row so admin alerts reach it.
+			services.EnsureOwnerRole(c.Context(), p.ID)
 		} else if strings.EqualFold(middleware.GetEmail(c), config.Cfg.AdminEmail) {
 			p.AdminPending = true
+		} else if !p.IsAdmin && !verified && len(services.AdminPerms(c.Context(), p.ID)) > 0 {
+			p.AdminPending = true // made an admin, but must verify their email first
 		}
 		// Where the player is now (for the "pay in local currency" prompt) and
 		// whether they can move their wallet to that country.

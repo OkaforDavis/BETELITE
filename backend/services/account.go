@@ -36,7 +36,9 @@ type Profile struct {
 	AgeVerified      bool          `json:"ageVerified"`
 	IsAdmin          bool          `json:"isAdmin"`
 	EmailVerified    bool          `json:"emailVerified"`
-	AdminPending     bool          `json:"adminPending"` // admin email, not yet verified
+	AdminPending     bool          `json:"adminPending"`         // admin email, not yet verified
+	AdminPerms       []string      `json:"adminPerms,omitempty"` // admin powers (cups, disputes, ...)
+	IsOwner          bool          `json:"isOwner,omitempty"`
 	GameProfiles     []GameProfile `json:"gameProfiles"`
 	Tier             string        `json:"tier"` // active membership tier ("free" without a plan)
 	CreatedAt        time.Time     `json:"createdAt"`
