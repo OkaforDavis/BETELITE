@@ -90,7 +90,7 @@ func settleDueResults(ctx context.Context) {
 			var ue *UserError
 			if errors.As(err, &ue) {
 				db.Pool.Exec(ctx, "UPDATE matches SET status = 'review', dispute_reason = $2 WHERE id = $1 AND status = 'submitted'", id, ue.Msg)
-				notifyAdmins(ctx, "Match needs review", ue.Msg, id)
+				notifyAdmins(ctx, PermDisputes, "Match needs review", ue.Msg, id)
 			}
 			continue
 		}
@@ -107,7 +107,7 @@ func handleMissedDeadlines(ctx context.Context) {
 	}
 	for _, id := range idsFrom(ctx, `UPDATE matches SET status = 'review', dispute_reason = 'Play deadline passed with no result'
 		WHERE kind = 'tournament' AND status = 'ready' AND play_deadline < NOW() RETURNING id`) {
-		notifyAdmins(ctx, "Tournament match overdue", "A tournament match passed its deadline without a result.", id)
+		notifyAdmins(ctx, PermDisputes, "Tournament match overdue", "A tournament match passed its deadline without a result.", id)
 	}
 }
 

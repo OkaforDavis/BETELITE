@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"slices"
 	"strings"
 
 	firebase "firebase.google.com/go/v4"
@@ -120,22 +121,53 @@ func AuthRequired() fiber.Handler {
 	}
 }
 
-// IsAdminCtx reports whether the authenticated caller is an admin: either the
-// configured ADMIN_EMAIL with a verified address, or flagged is_admin in the DB.
-func IsAdminCtx(c *fiber.Ctx) bool {
+// IsOwner: the configured ADMIN_EMAIL, signed in with a verified address.
+func IsOwner(c *fiber.Ctx) bool {
 	verified, _ := c.Locals("emailVerified").(bool)
 	email := GetEmail(c)
-	if email != "" && verified && strings.EqualFold(email, config.Cfg.AdminEmail) {
-		return true
-	}
-	return services.IsAdmin(c.Context(), GetUID(c))
+	return email != "" && verified && strings.EqualFold(email, config.Cfg.AdminEmail)
 }
+
+// AdminPermsCtx returns the caller's admin powers (cached per request). The
+// owner has all of them plus "admins". Other admins must have a verified email.
+func AdminPermsCtx(c *fiber.Ctx) []string {
+	if p, ok := c.Locals("adminPerms").([]string); ok {
+		return p
+	}
+	var perms []string
+	if IsOwner(c) {
+		perms = append(append([]string{}, services.AdminPermList...), services.PermAdmins)
+	} else if verified, _ := c.Locals("emailVerified").(bool); verified {
+		perms = services.AdminPerms(c.Context(), GetUID(c))
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	c.Locals("adminPerms", perms)
+	return perms
+}
+
+// HasPerm reports whether the caller has one admin power.
+func HasPerm(c *fiber.Ctx, perm string) bool { return slices.Contains(AdminPermsCtx(c), perm) }
+
+// IsAdminCtx reports whether the caller has any admin power.
+func IsAdminCtx(c *fiber.Ctx) bool { return len(AdminPermsCtx(c)) > 0 }
 
 // AdminRequired rejects callers who are not admins. Use after AuthRequired.
 func AdminRequired() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if !IsAdminCtx(c) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Admin access required"})
+		}
+		return c.Next()
+	}
+}
+
+// RequirePerm rejects admins who don't have this power.
+func RequirePerm(perm string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if !HasPerm(c, perm) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "You don't have access to this. Ask the owner."})
 		}
 		return c.Next()
 	}

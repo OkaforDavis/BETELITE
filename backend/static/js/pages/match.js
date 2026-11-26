@@ -1,5 +1,5 @@
 import { get, post, upload } from '../api.js';
-import { store, gameName, gameInfo, resultScreen } from '../store.js';
+import { store, gameName, gameInfo, resultScreen, can } from '../store.js';
 import { html, ic, money, avatar, statusBadge, scoreLine, timeLeft, sheet, sheetHead, busy, toast, skeleton, empty, confirmSheet, copyText } from '../ui.js';
 import { refreshProfile, refreshCurrent } from '../app.js';
 import { loadEvidence, evidenceGallery, bindEvidence } from '../components.js';
@@ -56,7 +56,7 @@ export default async function matchPage(view, { id }) {
       ${mine && m.status === 'ready' && m.awayId ? roomSlot(m) : ''}
       ${showChat(m, mine) ? chatSlot(m) : ''}
       <section class="section" id="action">${mine ? actionArea(m, uid, opp) : spectatorNote(m)}</section>
-      ${(mine || store.get().profile.isAdmin) && m.status !== 'ready' ? html`<section class="section"><div class="section-head"><h2 class="h2">Screenshots</h2></div><div id="evidence">${skeleton(90)}</div></section>` : ''}
+      ${(mine || can('disputes')) && m.status !== 'ready' ? html`<section class="section"><div class="section-head"><h2 class="h2">Screenshots</h2></div><div id="evidence">${skeleton(90)}</div></section>` : ''}
 
       <section class="section">
         <div class="list">
@@ -226,7 +226,7 @@ export default async function matchPage(view, { id }) {
 
   // Players chat while the match is on (and read it after); admins can read it.
   function showChat(m, mine) {
-    return m.awayId && (mine || store.get().profile.isAdmin);
+    return m.awayId && (mine || can('disputes'));
   }
 
   function spectatorNote(m) {

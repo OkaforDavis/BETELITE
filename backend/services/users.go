@@ -40,16 +40,6 @@ func EnsureUser(ctx context.Context, uid, email, name string) error {
 // ForgetUser drops a UID from the cache (after account deletion).
 func ForgetUser(uid string) { knownUsers.Delete(uid) }
 
-// IsAdmin reports whether the user is flagged as admin in the database.
-func IsAdmin(ctx context.Context, uid string) bool {
-	if db.Pool == nil || uid == "" {
-		return false
-	}
-	var admin bool
-	db.Pool.QueryRow(ctx, "SELECT is_admin FROM users WHERE id = $1", uid).Scan(&admin)
-	return admin
-}
-
 // Username returns the display name for a user, or "Player" if unknown.
 func Username(ctx context.Context, uid string) string {
 	var name string

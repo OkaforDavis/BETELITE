@@ -142,14 +142,14 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
-		url, err := services.SaveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), jpg)
+		url, err := services.SaveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups), jpg)
 		if err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"coverUrl": url})
 	})
 	tr.Delete("/:id/cover", func(c *fiber.Ctx) error {
-		if err := services.RemoveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c)); err != nil {
+		if err := services.RemoveCover(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups)); err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{})
@@ -224,7 +224,7 @@ func SetupTournamentRoutes(api fiber.Router) {
 			return utils.SendError(c, 400, "Invalid request")
 		}
 		tid, uid := c.Params("id"), middleware.GetUID(c)
-		changes, err := services.EditTournament(c.Context(), tid, uid, middleware.IsAdminCtx(c), req)
+		changes, err := services.EditTournament(c.Context(), tid, uid, middleware.HasPerm(c, services.PermCups), req)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -252,7 +252,7 @@ func SetupTournamentRoutes(api fiber.Router) {
 			return fail(c, err)
 		}
 		if t.Format == "ffa" {
-			uid, admin := middleware.GetUID(c), middleware.IsAdminCtx(c)
+			uid, admin := middleware.GetUID(c), middleware.HasPerm(c, services.PermCups)
 			t.CanManage = services.CanManageCup(t.HostID, uid, admin)
 			if t.Room, err = services.GetCupRoom(ctx, t.ID, uid, admin); err != nil {
 				return fail(c, err)
@@ -260,7 +260,7 @@ func SetupTournamentRoutes(api fiber.Router) {
 		}
 		var sponsor *services.Sponsor
 		// Host cups and CrestArena's own cups (e.g. the End-of-Month Platter) can both have a sponsor.
-		sponsor = services.GetSponsor(ctx, t.ID, (t.HostID != "" && t.HostID == middleware.GetUID(c)) || middleware.IsAdminCtx(c))
+		sponsor = services.GetSponsor(ctx, t.ID, (t.HostID != "" && t.HostID == middleware.GetUID(c)) || middleware.HasPerm(c, services.PermCups))
 		return utils.SendSuccess(c, fiber.Map{"tournament": t, "standings": table, "matches": matches, "sponsor": sponsor})
 	})
 
@@ -275,7 +275,7 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err := c.BodyParser(&in); err != nil {
 			return utils.SendError(c, 400, "Invalid request")
 		}
-		room, err := services.PostCupRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), in.Code, in.Password, in.Note)
+		room, err := services.PostCupRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups), in.Code, in.Password, in.Note)
 		if err != nil {
 			return fail(c, err)
 		}
@@ -302,13 +302,13 @@ func SetupTournamentRoutes(api fiber.Router) {
 		if err := json.Unmarshal([]byte(c.FormValue("result")), &res); err != nil {
 			return utils.SendError(c, 400, "Invalid result")
 		}
-		if err := services.SubmitCupResult(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c), res, img); err != nil {
+		if err := services.SubmitCupResult(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups), res, img); err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"ok": true})
 	})
 	tr.Get("/:id/result-image", func(c *fiber.Ctx) error {
-		img, err := services.CupResultImage(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		img, err := services.CupResultImage(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups))
 		if err != nil {
 			return fail(c, err)
 		}

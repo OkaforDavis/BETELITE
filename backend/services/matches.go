@@ -450,7 +450,7 @@ func DisputeResult(ctx context.Context, matchID, uid, reason string, evidence []
 	}
 	Notify(m.SubmittedBy, "result_disputed", "Result disputed",
 		"Your opponent disputed the result. An admin will review it and decide.", "/match/"+m.ID, map[string]any{"matchId": m.ID})
-	notifyAdmins(ctx, "Match disputed", fmt.Sprintf("%s vs %s (%s) needs review.", m.HomeTag, m.AwayTag, m.GameName), m.ID)
+	notifyAdmins(ctx, PermDisputes, "Match disputed", fmt.Sprintf("%s vs %s (%s) needs review.", m.HomeTag, m.AwayTag, m.GameName), m.ID)
 	broadcastMatch(m)
 	return m, nil
 }
@@ -739,24 +739,6 @@ func announceResult(m *MatchView) {
 func broadcastMatch(m *MatchView) {
 	if Hub != nil {
 		ws.BroadcastEvent(Hub, "match_update", m)
-	}
-}
-
-func notifyAdmins(ctx context.Context, title, message, matchID string) {
-	rows, err := db.Pool.Query(ctx, "SELECT id FROM users WHERE is_admin")
-	if err != nil {
-		return
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if rows.Scan(&id) == nil {
-			ids = append(ids, id)
-		}
-	}
-	rows.Close()
-	for _, id := range ids {
-		Notify(id, "admin_review", title, message, "/admin", map[string]any{"matchId": matchID})
 	}
 }
 

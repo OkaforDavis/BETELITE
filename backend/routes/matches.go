@@ -52,7 +52,7 @@ func SetupMatchRoutes(api fiber.Router) {
 
 	// The in-game room (code, password or join link): only the two players see it.
 	m.Get("/:id/room", func(c *fiber.Ctx) error {
-		room, err := services.GetRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		room, err := services.GetRoom(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermDisputes))
 		if err != nil {
 			return fail(c, err)
 		}
@@ -72,7 +72,7 @@ func SetupMatchRoutes(api fiber.Router) {
 
 	// Match chat between the two players (admins can read it).
 	m.Get("/:id/chat", func(c *fiber.Ctx) error {
-		chat, err := services.GetChat(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c))
+		chat, err := services.GetChat(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermDisputes))
 		if err != nil {
 			return fail(c, err)
 		}
@@ -197,7 +197,7 @@ func SetupMatchRoutes(api fiber.Router) {
 
 	// Screenshot evidence: visible to the two players and admins for 30 days.
 	m.Get("/:id/screenshots", func(c *fiber.Ctx) error {
-		if !services.CanViewEvidence(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.IsAdminCtx(c)) {
+		if !services.CanViewEvidence(c.Context(), c.Params("id"), middleware.GetUID(c), middleware.HasPerm(c, services.PermDisputes)) {
 			return utils.SendError(c, 403, "Only the players in this match can view its screenshots")
 		}
 		list, err := services.ListEvidence(c.Context(), c.Params("id"))
@@ -216,7 +216,7 @@ func SetupMatchRoutes(api fiber.Router) {
 		if err != nil {
 			return fail(c, err)
 		}
-		if matchID != c.Params("id") || !services.CanViewEvidence(c.Context(), matchID, middleware.GetUID(c), middleware.IsAdminCtx(c)) {
+		if matchID != c.Params("id") || !services.CanViewEvidence(c.Context(), matchID, middleware.GetUID(c), middleware.HasPerm(c, services.PermDisputes)) {
 			return utils.SendError(c, 403, "Only the players in this match can view its screenshots")
 		}
 		c.Set("Cache-Control", "private, max-age=3600")

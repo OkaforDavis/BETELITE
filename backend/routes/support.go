@@ -102,7 +102,7 @@ func SetupSupportRoutes(api fiber.Router) {
 			VALUES ($1,$2,$3,$4,$5,NULLIF($6,''))`, id, uid, req.Category, req.Subject, req.Message, req.RefID); err != nil {
 			return fail(c, err)
 		}
-		services.NotifyAdmins(ctx, "New complaint: "+supportCategories[req.Category],
+		services.NotifyAdmins(ctx, services.PermSupport, "New complaint: "+supportCategories[req.Category],
 			fmt.Sprintf("%s: %s", services.Username(ctx, uid), req.Subject))
 		return utils.SendSuccess(c, fiber.Map{"ticketId": id})
 	})
@@ -110,7 +110,7 @@ func SetupSupportRoutes(api fiber.Router) {
 
 // setupAdminSupport adds the admin side: list complaints and reply.
 func setupAdminSupport(admin fiber.Router) {
-	admin.Get("/support", func(c *fiber.Ctx) error {
+	admin.Get("/support", middleware.RequirePerm(services.PermSupport), func(c *fiber.Ctx) error {
 		status := c.Query("status", "open")
 		rows, err := db.Pool.Query(c.Context(), `SELECT t.id, t.user_id, COALESCE(u.username,''), COALESCE(u.email,''), t.category, t.subject, t.message,
 			COALESCE(t.ref_id,''), t.status, COALESCE(t.admin_reply,''), t.replied_at, t.created_at
@@ -131,7 +131,7 @@ func setupAdminSupport(admin fiber.Router) {
 	})
 
 	// Reply to a complaint; the player is notified. close=true marks it resolved.
-	admin.Post("/support/:id/reply", func(c *fiber.Ctx) error {
+	admin.Post("/support/:id/reply", middleware.RequirePerm(services.PermSupport), func(c *fiber.Ctx) error {
 		var req struct {
 			Reply string `json:"reply"`
 			Close bool   `json:"close"`

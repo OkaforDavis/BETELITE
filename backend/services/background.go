@@ -63,7 +63,7 @@ func alertStuckWithdrawals(ctx context.Context) {
 		if _, seen := stuckAlerted.LoadOrStore(id, true); seen {
 			continue
 		}
-		notifyAdmins(ctx, "Withdrawal needs a check", fmt.Sprintf(
+		notifyAdmins(ctx, PermWithdrawals, "Withdrawal needs a check", fmt.Sprintf(
 			"%s (%s) started sending but we never heard back. Look up the reference on the provider dashboard, then use Mark as paid or Refund.",
 			FormatMoney(amount, currency), id), "")
 	}

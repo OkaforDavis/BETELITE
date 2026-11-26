@@ -57,7 +57,7 @@ func CreditDeposit(ctx context.Context, reference string) (string, error) {
 	}
 	if txn.Currency != payCurrency || txn.Amount < charged {
 		log.Printf("[PAYMENTS] deposit %s mismatch: paid %d %s, expected %d %s", reference, txn.Amount, txn.Currency, charged, payCurrency)
-		NotifyAdmins(ctx, "Deposit needs review", "Deposit "+reference+" was paid with a different amount or currency.")
+		NotifyAdmins(ctx, PermMoney, "Deposit needs review", "Deposit "+reference+" was paid with a different amount or currency.")
 		return "", &UserError{Status: 409, Msg: "Payment amount mismatch. Please contact support."}
 	}
 

@@ -44,7 +44,7 @@ func SetupSponsorRoutes(api fiber.Router) {
 			}
 			video = &services.SponsorUpload{Data: data}
 		}
-		if err := services.SetSponsor(c.Context(), middleware.GetUID(c), middleware.IsAdminCtx(c), c.Params("id"), c.FormValue("name"), c.FormValue("link"), images, video); err != nil {
+		if err := services.SetSponsor(c.Context(), middleware.GetUID(c), middleware.HasPerm(c, services.PermCups), c.Params("id"), c.FormValue("name"), c.FormValue("link"), images, video); err != nil {
 			return fail(c, err)
 		}
 		return utils.SendSuccess(c, fiber.Map{"sponsor": services.GetSponsor(c.Context(), c.Params("id"), true)})
@@ -52,7 +52,7 @@ func SetupSponsorRoutes(api fiber.Router) {
 	host.Delete("/", func(c *fiber.Ctx) error {
 		var hostID string
 		db.Pool.QueryRow(c.Context(), "SELECT COALESCE(host_id,'') FROM tournaments WHERE id = $1", c.Params("id")).Scan(&hostID)
-		if hostID != middleware.GetUID(c) && !middleware.IsAdminCtx(c) {
+		if hostID != middleware.GetUID(c) && !middleware.HasPerm(c, services.PermCups) {
 			return utils.SendError(c, 403, "Only the cup's host can remove the sponsor")
 		}
 		if err := services.RemoveSponsor(c.Context(), c.Params("id")); err != nil {
@@ -61,7 +61,7 @@ func SetupSponsorRoutes(api fiber.Router) {
 		return utils.SendSuccess(c, fiber.Map{})
 	})
 
-	admin := api.Group("/admin/sponsors", middleware.AuthRequired(), middleware.AdminRequired(), dbRequired)
+	admin := api.Group("/admin/sponsors", middleware.AuthRequired(), middleware.RequirePerm(services.PermCups), dbRequired)
 	admin.Get("/", func(c *fiber.Ctx) error {
 		list, err := services.ListSponsors(c.Context())
 		if err != nil {
